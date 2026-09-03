@@ -11,13 +11,13 @@
 | 项目 | 要求 |
 |------|------|
 | 运行环境 | **DSH Desktop**（DeepSeek Harness 桌面版，Windows 10/11） |
+| DSH Desktop 仓库 | [anywhere-labs/dsh-desktop](https://github.com/anywhere-labs/dsh-desktop) |
 | DSH 框架 | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) |
 | DSH 版本 | `>= 0.1.1-rc.1` |
 | Node.js | `^22.11 \|\| >= 24` |
 | 平台 | 仅 `win32` |
 
-> 本插件面向 DSH Desktop 桌面壳（Electron 薄壳 + DSH Host + Web renderer），
-> 基于 `@deepseek-ai/deepseek-harness` 框架开发。
+> 本插件已在 **DSH Desktop**（[anywhere-labs/dsh-desktop](https://github.com/anywhere-labs/dsh-desktop)，Windows 桌面壳，Electron 薄壳 + DSH Host + Web renderer）上实测通过。
 > 若你的 DSH 是自建/Web 版，机制相同（同为 Web 端注入），但以桌面版为准验证。
 
 ---

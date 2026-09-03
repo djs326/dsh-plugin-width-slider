@@ -34,7 +34,13 @@
 
 ## 安装
 
-### 方式一：GitHub 直拉
+### 方式一：npm（推荐）
+
+```bash
+dsh plugin --profile desktop add dsh-plugin-width-slider
+```
+
+### 方式二：GitHub 直拉
 
 在 profile 的 `package.json` `dependencies` 中添加：
 
@@ -48,7 +54,7 @@
 pnpm install
 ```
 
-### 方式二：本地开发（源码目录软链）
+### 方式三：本地开发（源码目录软链）
 
 ```bash
 cd C:\Users\Lanxi\.dsh\profiles\desktop
@@ -57,7 +63,7 @@ pnpm link C:\Users\Lanxi\Desktop\dsh-plugin-width-slider
 
 改完代码 `npm run build` 后重启 DSH 即生效，无需复制文件。
 
-### 方式三：手动复制（临时调试）
+### 方式四：手动复制（临时调试）
 
 将构建产物复制到 profile 的 node_modules：
 

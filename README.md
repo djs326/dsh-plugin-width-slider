@@ -12,7 +12,6 @@
 |------|------|
 | 运行环境 | **DSH Desktop**（DeepSeek Harness 桌面版，Windows 10/11） |
 | DSH Desktop 仓库 | [anywhere-labs/dsh-desktop](https://github.com/anywhere-labs/dsh-desktop) |
-| DSH 框架 | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) |
 | DSH 版本 | `>= 0.1.1-rc.1` |
 | Node.js | `^22.11 \|\| >= 24` |
 | 平台 | 仅 `win32` |

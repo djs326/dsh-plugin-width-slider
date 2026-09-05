@@ -19,6 +19,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const WIDTH_PREF_KEY = 'dsh.conversation.contentWidth'
+const FOLLOW_PREF_KEY = 'dsh.conversation.contentWidthFollow'
 const MIN_WIDTH = 640
 const EDGE_BUDGET = 176
 /**
@@ -43,6 +44,11 @@ function readPreference(): number | null {
     const v = Number(raw)
     return Number.isFinite(v) && v > 0 ? v : null
   } catch { return null }
+}
+
+/** Follow-window mode persisted separately from the numeric width. */
+function readFollowPreference(): boolean {
+  try { return localStorage.getItem(FOLLOW_PREF_KEY) === '1' } catch { return false }
 }
 
 /** Read the current conversation column width from the DOM, or fall back. */
@@ -80,14 +86,18 @@ function persistWidth(px: number): void {
   } catch { /* quota */ }
 }
 
+function persistFollowPreference(follow: boolean): void {
+  try { localStorage.setItem(FOLLOW_PREF_KEY, follow ? '1' : '0') } catch { /* quota */ }
+}
+
 /**
  * Snap the settings overlay layer hidden/visible.
  *
  * We are mounted inside the settings panel, so walk UP from our own DOM
  * subtree (not from the conversation root) to find the settings panel
- * container: any [data-shell-overlay], role=dialog, or a large fixed/
- * absolute overlay that hosts the panel.  Hiding it lets the conversation
- * area show through the preview overlay.
+ * container: shell overlay markers plus the closest role=dialog / aria-modal
+ * or large fixed/absolute ancestor of our own mount point.  Hiding it lets
+ * the conversation area show through the preview overlay.
  *
  * @param origin - any element inside the settings panel (e.g. our section root).
  */
@@ -97,10 +107,18 @@ function hideSettingsOverlay(hide: boolean, origin?: HTMLElement | null): void {
   // 1. Explicit shell overlay layers.
   document.querySelectorAll<HTMLElement>('[data-shell-overlay]').forEach(el => targets.add(el))
 
-  // 2. From our own mount point, walk ancestors to find the panel container.
+  // 2. From our own mount point, walk ancestors to find the panel container:
+  //    the closest role=dialog / aria-modal host, or a large fixed/absolute
+  //    overlay that hosts the panel.  Only containers on OUR ancestor chain
+  //    are touched — unrelated dialogs elsewhere in the document stay visible.
   if (origin) {
     let parent: HTMLElement | null = origin
     while (parent && parent !== document.body) {
+      if (parent.getAttribute('role') === 'dialog' ||
+          parent.getAttribute('aria-modal') === 'true') {
+        targets.add(parent)
+        break
+      }
       const cs = getComputedStyle(parent)
       if (cs.position === 'fixed' || cs.position === 'absolute') {
         // Large overlay hosting the settings panel.
@@ -113,11 +131,6 @@ function hideSettingsOverlay(hide: boolean, origin?: HTMLElement | null): void {
       parent = parent.parentElement
     }
   }
-
-  // 3. Dialog / modal containers anywhere in the settings subtree.
-  document.querySelectorAll<HTMLElement>('[role="dialog"],[aria-modal="true"]').forEach(el => {
-    targets.add(el)
-  })
 
   targets.forEach(el => {
     el.style.setProperty('opacity', hide ? '0' : '')
@@ -139,6 +152,8 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
     return defaultWidth(column)
   })
   const [preview, setPreview] = useState(false)
+  /** Follow-window mode: content width == conversation column, live. */
+  const [follow, setFollow] = useState<boolean>(readFollowPreference)
 
   // ── refs ──
   const panelTrackRef = useRef<HTMLDivElement>(null)
@@ -149,9 +164,11 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
     startX: number; startValue: number; trackWidth: number; maxValue: number
   } | null>(null)
   const previewRef = useRef(false)
+  const followRef = useRef(follow)
 
   // Keep preview ref in sync for use in the rAF / pointer closures.
   previewRef.current = preview
+  followRef.current = follow
 
   /** Track the latest applied width so pointerup can flush the final value. */
   const latestRef = useRef(value)
@@ -174,7 +191,8 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
 
   // ── pointer handlers ──
 
-  /** rAF-throttled width update: write to root elements + localStorage. */
+  /** rAF-throttled width update: live layout feedback only. localStorage is
+      persisted once at gesture end (pointerup / Escape), not every frame. */
   const applyWidth = useCallback((px: number) => {
     const clamped = Math.round(Math.max(MIN_WIDTH, px))
     // De-duplicate via rAF (native code also uses rAF for drag feedback)
@@ -182,12 +200,13 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
     rAFRef.current = requestAnimationFrame(() => {
       rAFRef.current = null
       publishChatWidth(clamped)
-      persistWidth(clamped)
       setValue(clamped)
     })
   }, [])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Follow mode owns the width — manual drag / preview is disabled.
+    if (followRef.current) return
     e.preventDefault()
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)
@@ -235,6 +254,9 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
       }
       publishChatWidth(latestRef.current)
       persistWidth(latestRef.current)
+      // Sync React state with the flushed value: a fast move+release may have
+      // cancelled the last pending rAF, so the visible slider would lag.
+      setValue(latestRef.current)
       dragRef.current = null
       target.removeEventListener('pointermove', onMove)
       target.removeEventListener('pointerup', onUp)
@@ -253,7 +275,18 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
     if (!preview) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        hideSettingsOverlay(false)
+        // Exit preview AND stop the drag: drop the drag anchor (further
+        // pointermove is ignored until pointerup cleans up), cancel any
+        // pending rAF, then flush so the last previewed width sticks.
+        if (rAFRef.current !== null) {
+          cancelAnimationFrame(rAFRef.current)
+          rAFRef.current = null
+        }
+        dragRef.current = null
+        hideSettingsOverlay(false, panelTrackRef.current)
+        publishChatWidth(latestRef.current)
+        persistWidth(latestRef.current)
+        setValue(latestRef.current)
         setPreview(false)
       }
     }
@@ -261,12 +294,79 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
     return () => document.removeEventListener('keydown', onKey)
   }, [preview])
 
-  // Cleanup on unmount
+  // Cleanup on unmount: cancel any pending rAF, then restore overlay visibility.
   useEffect(() => {
     return () => {
-      if (previewRef.current) hideSettingsOverlay(false)
+      if (rAFRef.current !== null) {
+        cancelAnimationFrame(rAFRef.current)
+        rAFRef.current = null
+      }
+      if (previewRef.current) hideSettingsOverlay(false, panelTrackRef.current)
     }
   }, [])
+
+  // ── follow-window mode ──
+
+  /** Toggle follow mode: on = width tracks the conversation column live;
+      off = restore the last manual slider value (DOM + localStorage stay
+      consistent). */
+  const onToggleFollow = useCallback(() => {
+    const next = !followRef.current
+    followRef.current = next
+    persistFollowPreference(next)
+    if (next) {
+      const w = Math.round(Math.max(MIN_WIDTH, readColumnWidth()))
+      setColumn(w)
+      publishChatWidth(w)
+    } else {
+      // Restore the last manual width, clamped to the current column limits
+      // so value / DOM / localStorage stay consistent even if the column
+      // shrank while follow mode was on.
+      const col = readColumnWidth()
+      const restored = Math.round(Math.max(MIN_WIDTH, Math.min(latestRef.current, col - EDGE_BUDGET)))
+      latestRef.current = restored
+      setColumn(col)
+      setValue(restored)
+      publishChatWidth(restored)
+      persistWidth(restored)
+    }
+    setFollow(next)
+  }, [])
+
+  // While follow mode is on, keep the content width pinned to the current
+  // conversation column. React to window resizes AND layout changes that
+  // resize the conversation root (sidebar collapse, details panel, splits):
+  // observe every [data-phase] element and republish on any change.
+  useEffect(() => {
+    if (!follow) return
+    const apply = () => {
+      const w = Math.round(Math.max(MIN_WIDTH, readColumnWidth()))
+      setColumn(w)
+      publishChatWidth(w)
+      // Observe any conversation root that appears later too (observe() is
+      // idempotent for already-observed elements).
+      document.querySelectorAll<HTMLElement>('[data-phase]').forEach(el => ro.observe(el))
+    }
+    const ro = new ResizeObserver(apply)
+    apply()
+    window.addEventListener('resize', apply)
+    // Fallback when no conversation root exists yet (e.g. follow enabled from
+    // an empty state): republish once a [data-phase] element appears.
+    let knownRoots = document.querySelectorAll('[data-phase]').length
+    const mo = new MutationObserver(() => {
+      const roots = document.querySelectorAll('[data-phase]').length
+      if (roots !== knownRoots) {
+        knownRoots = roots
+        apply()
+      }
+    })
+    mo.observe(document.body, { childList: true, subtree: true })
+    return () => {
+      ro.disconnect()
+      mo.disconnect()
+      window.removeEventListener('resize', apply)
+    }
+  }, [follow])
 
   // ── render: in-panel slider ──
 
@@ -352,8 +452,6 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
 
   const previewOverlay = preview && createPortal(
     <div
-      ref={overlayTrackRef}
-      onPointerDown={onPointerDown}
       style={{
         position: 'fixed',
         inset: 0,
@@ -477,8 +575,64 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
 
   return (
     <div style={{ padding: '4px 0' }}>
-      {sliderContent}
-      {preview && previewOverlay}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 10,
+          fontSize: 13,
+          lineHeight: '20px',
+          color: 'var(--dsw-alias-label-primary, #e0e0e0)',
+        }}
+      >
+        <input
+          id="dsh-plugin-width-slider-follow"
+          type="checkbox"
+          checked={follow}
+          onChange={onToggleFollow}
+          style={{
+            margin: 0,
+            width: 15,
+            height: 15,
+            accentColor: 'var(--dsw-alias-state-business-primary, #4f9eff)',
+            cursor: 'pointer',
+          }}
+        />
+        <label
+          htmlFor="dsh-plugin-width-slider-follow"
+          style={{ cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}
+        >
+          {t('followLabel')}
+        </label>
+        {follow && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontVariantNumeric: 'tabular-nums',
+              color: 'var(--dsw-alias-label-caption, #999)',
+            }}
+          >
+            {Math.round(column)}{t('unit')}
+          </span>
+        )}
+      </div>
+      {follow ? (
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: '18px',
+            color: 'var(--dsw-alias-label-caption, #888)',
+          }}
+        >
+          {t('followInfo')}
+        </div>
+      ) : (
+        <>
+          {sliderContent}
+          {preview && previewOverlay}
+        </>
+      )}
       {preview && (
         <style>{`body{overflow:hidden!important}`}</style>
       )}

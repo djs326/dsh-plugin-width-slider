@@ -2,7 +2,7 @@
   "name": "dsh-plugin-width-slider",
   "displayName": "Width Slider · 对话宽度滑块",
   "description": "Settings-panel slider that replaces the native width handles: long-press the slider to preview the conversation at full width (transparent overlay keeps only the slider visible), then drag to resize the chat column. Writes dsh.conversation.contentWidth + --dsh-chat-user-width.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.mjs",
@@ -37,7 +37,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && tsc -p tsconfig.json && node scripts/fix-dts-imports.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

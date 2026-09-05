@@ -45,7 +45,9 @@ export default defineConfig([
     target: 'es2024',
     dts: false,
     clean: false,
-    external: HOST_EXTERNALS,
+    deps: {
+      neverBundle: HOST_EXTERNALS,
+    },
   },
   // Client half: CJS bundle wrapped in the ModuleLoader factory handshake.
   {
@@ -57,13 +59,15 @@ export default defineConfig([
     dts: false,
     sourcemap: true,
     clean: false,
-    external: [...CLIENT_EXTERNALS],
+    deps: {
+      neverBundle: [...CLIENT_EXTERNALS],
+      alwaysBundle: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
+    },
     define: {
       'process.env.NODE_ENV': NODE_ENV,
       'import.meta.env.MODE': NODE_ENV,
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
-    noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
     outputOptions: {
       entryFileNames: 'client.js',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,

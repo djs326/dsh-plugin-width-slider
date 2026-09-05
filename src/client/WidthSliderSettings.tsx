@@ -254,6 +254,9 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
       }
       publishChatWidth(latestRef.current)
       persistWidth(latestRef.current)
+      // Sync React state with the flushed value: a fast move+release may have
+      // cancelled the last pending rAF, so the visible slider would lag.
+      setValue(latestRef.current)
       dragRef.current = null
       target.removeEventListener('pointermove', onMove)
       target.removeEventListener('pointerup', onUp)
@@ -283,6 +286,7 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
         hideSettingsOverlay(false, panelTrackRef.current)
         publishChatWidth(latestRef.current)
         persistWidth(latestRef.current)
+        setValue(latestRef.current)
         setPreview(false)
       }
     }
@@ -315,7 +319,16 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
       setColumn(w)
       publishChatWidth(w)
     } else {
-      publishChatWidth(latestRef.current)
+      // Restore the last manual width, clamped to the current column limits
+      // so value / DOM / localStorage stay consistent even if the column
+      // shrank while follow mode was on.
+      const col = readColumnWidth()
+      const restored = Math.round(Math.max(MIN_WIDTH, Math.min(latestRef.current, col - EDGE_BUDGET)))
+      latestRef.current = restored
+      setColumn(col)
+      setValue(restored)
+      publishChatWidth(restored)
+      persistWidth(restored)
     }
     setFollow(next)
   }, [])
@@ -337,8 +350,20 @@ export function WidthSliderSettings({ t }: WidthSliderSettingsProps): JSX.Elemen
     const ro = new ResizeObserver(apply)
     apply()
     window.addEventListener('resize', apply)
+    // Fallback when no conversation root exists yet (e.g. follow enabled from
+    // an empty state): republish once a [data-phase] element appears.
+    let knownRoots = document.querySelectorAll('[data-phase]').length
+    const mo = new MutationObserver(() => {
+      const roots = document.querySelectorAll('[data-phase]').length
+      if (roots !== knownRoots) {
+        knownRoots = roots
+        apply()
+      }
+    })
+    mo.observe(document.body, { childList: true, subtree: true })
     return () => {
       ro.disconnect()
+      mo.disconnect()
       window.removeEventListener('resize', apply)
     }
   }, [follow])

@@ -28,6 +28,11 @@ export interface WidthSliderKey {
   enableNavScroll: string
   enableNavScrollInfo: string
   disabledHint: string
+  // ── v0.4.0 Open With（收编 dsh-plugin-open-with）──
+  owTooltip: string
+  owPickerAria: string
+  owMenuAria: string
+  owTargetCode: string
 }
 
 const zh: Record<keyof WidthSliderKey, string> = {
@@ -59,6 +64,10 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableNavScroll: '设置左侧 tab 栏超高滚动',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
+  owTooltip: '用其他应用打开当前目录',
+  owPickerAria: '选择打开方式',
+  owMenuAria: '打开方式菜单',
+  owTargetCode: 'VS Code',
 }
 
 const en: Record<keyof WidthSliderKey, string> = {
@@ -90,6 +99,10 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableNavScroll: 'Scrollable settings nav when tabs overflow',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
+  owTooltip: 'Open current folder with another app',
+  owPickerAria: 'Choose how to open',
+  owMenuAria: 'Open-with menu',
+  owTargetCode: 'VS Code',
 }
 
 export { zh, en }

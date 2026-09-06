@@ -15,6 +15,7 @@
  */
 
 import { memo, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { pickText } from '../lang.ts'
 
 // ── 思考块与 assistant 容器样式（DSH 语义 token，随激活注入）──────────
 // 视觉基线：与官方 ReasoningRow 一致（头部 DisclosureRow 结构：leading
@@ -108,14 +109,31 @@ function stripControlTags(text: string): string {
   return text.replace(CONTROL_TAG_RE, '')
 }
 
+/**
+ * 思考通道 Markdown URL 净化：模型输出（可能受提示注入诱导）在推理里写
+ * 链接/图片，只允许 http/https/锚点/相对目标；javascript: 等危险 scheme
+ * 整块移除（图片）或退化为纯文本（链接）。正式回复文本不经此通道。
+ */
+function sanitizeMarkdownUrls(text: string): string {
+  return text.replace(/!?\[([^\]]*)\]\(([^)]*)\)/g, (whole: string, label: string, url: string) => {
+    const u = String(url).trim()
+    const schemeMatch = u.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:/)
+    if (schemeMatch && !/^https?:$/i.test(schemeMatch[0].slice(0, -1))) {
+      return whole.startsWith('!') ? '' : String(label || '')
+    }
+    return whole
+  })
+}
+
 // ── 文本渲染（Markdown 或降级纯文本）────────────────────────────────
 // memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
 // MarkdownView 重解析，减少每帧全量工作。
-const TextRenderer = memo(function TextRenderer({ text }: { text: string }) {
+const TextRenderer = memo(function TextRenderer({ text, sanitizeUrls = false }: { text: string; sanitizeUrls?: boolean }) {
   const cleanText = stripControlTags(text)
+  const finalText = sanitizeUrls ? sanitizeMarkdownUrls(cleanText) : cleanText
   const MarkdownView = resolveMarkdownView()
-  if (MarkdownView !== null) return <MarkdownView text={cleanText} />
-  return <div className="dsh-ws-plain">{cleanText}</div>
+  if (MarkdownView !== null) return <MarkdownView text={finalText} />
+  return <div className="dsh-ws-plain">{finalText}</div>
 })
 
 // ── 思考块：默认「思考完收起」行为 ──────────────────────────────────
@@ -177,7 +195,7 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
             </>
           )}
         </span>
-        <span className="dsh-ws-think-title">思考</span>
+        <span className="dsh-ws-think-title">{pickText('思考', 'Thinking')}</span>
         {!open && (
           <>
             <span className="dsh-ws-think-separator" aria-hidden="true" />
@@ -187,7 +205,8 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
       </div>
       {open && (
         <div className="dsh-ws-think-body">
-          <TextRenderer text={cleanText} />
+          {/* 思考通道做 URL scheme 净化（正式回复文本块不走这里）。 */}
+          <TextRenderer text={cleanText} sanitizeUrls />
         </div>
       )}
     </div>
@@ -285,7 +304,7 @@ export function AssistantStepView({ node, renderMessageImages, collapseAfterRun 
   const interrupted = data.status === 'interrupted'
   const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun)
   if (interrupted) {
-    rendered.push(<span key="stopped" className="dsh-ws-stopped">已停止</span>)
+    rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)
   }
   return (
     <div className="dsh-ws-assistant" data-streaming={streaming || undefined}>

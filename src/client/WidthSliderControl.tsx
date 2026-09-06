@@ -359,17 +359,25 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     // Fallback when no conversation root exists yet (e.g. follow enabled from
     // an empty state): republish once a [data-phase] element appears.
     let knownRoots = document.querySelectorAll('[data-phase]').length
-    const mo = new MutationObserver(() => {
+    // 只需感知"根元素出现/消失"：rAF 节流计数，避免流式输出每 token 都做
+    // 全文档扫描（宽度跟随本身由 ResizeObserver 负责）。
+    let rafId = 0
+    const checkRoots = () => {
+      rafId = 0
       const roots = document.querySelectorAll('[data-phase]').length
       if (roots !== knownRoots) {
         knownRoots = roots
         apply()
       }
+    }
+    const mo = new MutationObserver(() => {
+      if (rafId === 0) rafId = requestAnimationFrame(checkRoots)
     })
     mo.observe(document.body, { childList: true, subtree: true })
     return () => {
       ro.disconnect()
       mo.disconnect()
+      if (rafId !== 0) cancelAnimationFrame(rafId)
       window.removeEventListener('resize', apply)
     }
   }, [follow])

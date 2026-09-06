@@ -52,6 +52,13 @@ export interface WidthSliderKey {
   'settings.delete': string
   'settings.cancel': string
   'settings.save': string
+  'settings.form.nameRequired': string
+  'settings.form.pathRequired': string
+  'settings.form.exeOnly': string
+  owEmptyMenu: string
+  owNoCwdTip: string
+  resetAllLabel: string
+  resetAllInfo: string
 }
 
 const zh: Record<keyof WidthSliderKey, string> = {
@@ -78,8 +85,8 @@ const zh: Record<keyof WidthSliderKey, string> = {
   groupUi: '界面',
   enableLocalize: '界面英文中文化',
   enableLocalizeInfo: '把官方界面残留的硬编码英文标签替换为中文（如 Tool Call→工具调用、Thinking→思考）。',
-  enableResize: '设置弹窗可拖拽调宽',
-  enableResizeInfo: '给官方设置面板弹窗加右侧拖柄：拖动调整宽度（双击拖柄恢复默认 800px），宽度会被记住。',
+  enableResize: '设置弹窗可拖拽（窗口化）',
+  enableResizeInfo: '官方设置弹窗变普通窗口：右下角把手拖宽高、顶部空白拖动移动，双击把手复位 800×800 居中；尺寸与位置会被记住。',
   enableNavScroll: '设置左侧 tab 栏超高滚动',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
@@ -106,6 +113,13 @@ const zh: Record<keyof WidthSliderKey, string> = {
   'settings.delete': '删除',
   'settings.cancel': '取消',
   'settings.save': '保存',
+  'settings.form.nameRequired': '请输入应用名称',
+  'settings.form.pathRequired': '请输入可执行文件路径',
+  'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（直接启动，不经 cmd）',
+  owEmptyMenu: '没有可见的打开项（全部已隐藏），可到设置中调整',
+  owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
+  resetAllLabel: '恢复默认设置',
+  resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
 }
 
 const en: Record<keyof WidthSliderKey, string> = {
@@ -132,8 +146,8 @@ const en: Record<keyof WidthSliderKey, string> = {
   groupUi: 'Interface',
   enableLocalize: 'Localize interface labels to Chinese',
   enableLocalizeInfo: 'Replaces leftover hard-coded English UI labels with Chinese (Tool Call to 工具调用, Thinking to 思考, etc.).',
-  enableResize: 'Resizable settings dialog',
-  enableResizeInfo: 'Adds a right-edge drag handle to the official settings dialog (double-click to restore the default 800px); the width is remembered.',
+  enableResize: 'Draggable settings dialog',
+  enableResizeInfo: 'Turns the official settings dialog into a window: drag the bottom-right grip to resize, drag the header to move, double-click the grip to reset to 800x800 centered; size and position are remembered.',
   enableNavScroll: 'Scrollable settings nav when tabs overflow',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
@@ -160,6 +174,13 @@ const en: Record<keyof WidthSliderKey, string> = {
   'settings.delete': 'Delete',
   'settings.cancel': 'Cancel',
   'settings.save': 'Save',
+  'settings.form.nameRequired': 'Please enter an app name',
+  'settings.form.pathRequired': 'Please enter an executable path',
+  'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched directly, not through cmd)',
+  owEmptyMenu: 'No visible open targets (all hidden); adjust in settings',
+  owNoCwdTip: 'No folder in this session (cannot open here)',
+  resetAllLabel: 'Reset all settings',
+  resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
 }
 
 export { zh, en }

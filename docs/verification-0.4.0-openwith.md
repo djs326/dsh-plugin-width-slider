@@ -1,5 +1,9 @@
 # dsh-plugin-width-slider v0.4.0 Open With 验证清单
 
+> 状态：0.4.0 主流程已由作者在真机整体验证（2026-09-06）；本清单逐项勾选
+> 以最终核对为准，发布前请至少确认 E1/E2/E7/E8/E11/E12。
+> 回归约定：v0.4.0 发布前须同步重跑 v0.3.0 清单 A-D 组（宽度滑块/思考块/
+> 面板补丁）确认无回归。
 > 前置：重启 DSH Desktop 后（host /open-with RPC 与 client 均生效）；
 > 停用官方 dsh-plugin-open-with（本插件已收编，双份会双按钮/双设置）；
 > dsh-md-render / dsh-think-zh-expand 处理同 v0.3.0 清单。

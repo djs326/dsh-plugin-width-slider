@@ -14,15 +14,18 @@
  * primitives IconChevronDownOutline14）。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isSafePngIcon } from '../icons.ts'
 
 /** 默认图标（DSH logo 风格），用于图标提取完成前的回退。 */
 const fallbackIcon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAKDSURBVFhH7ZZJyI1xFMZ/yJQpMmRhDkkplCglWSAiUaadDSVDlI2FhZAyFAsbCSkiYqGQDBEbU4ayMC1E5qnMUw/nvY7j3O/e78PuPnW63TM9533P//zPCzXU8H/QEhgXlQ1FE6At0ML+K/kMYB9wF7gCdAoxc4A7Ftsg9Ac2AteA98AX4DPwBHgFfHMyJgYD28y2C+gajYbewLSoVMVrjcyT1CUjYxJgj7O/AcaavjMwHJgF3Ad2+yCR708IKsljYKJPBKwOPjeB9cCnoF/ug1YmyasVtWixyzUs8YmiGLX6BwYAHxOn+shXYJkrYnvi42WD8y0dmr8VFbHAcjYHdiQ+asMaPyFN3cl+av16lgRWKypihRGMcPpbwDygx6/n/onB5nAKaGw6/fa1vl5PSCKh7oJY9AXgiPt/OPCWMMUczkSDQcXo4nmQkEtuA4PssqprirbExAWmm8NDoFE0OnQEjieJP9iB0+2ndp5NfCRzY8IC451Tz2gMaAYcSJLr7Swyn35lJmpgyFWCZrFwWhiNCbQTziUE6rnekt7CxWBTm8pCPS4O0NUKbSjQDXieFPEWeJHoNRV1YqdznhyNZTA7IcrkdbIt/4AWShGgeW0VHRLoTR1KCKMsjYHl4GdWW6q4EwpofS4B2jldF5ueSFrI0fp8E/QJu36rHagCQ0wvQt+mUTaKkfwG0N75VYVJYWWeBno5+wnT6/bbbGMpzExW7TFgdJWH+jcomX+id8BBu8leBpLzwFAjmVBmAi4B3SNJJehQ3kuSlZNHtjP0CbbOCtM3oRbbXqBDJKgGbYBVyVNnogLmJwf3n6C1LSO14CRw2W46Tc0mYKr7Yq6hhnrjO8xVal7nQeXKAAAAAElFTkSuQmCC'
 
 /** Renders a data-URL PNG icon at a given size. */
 function PngIcon({ src, size = 14 }: { src: string; size?: number }) {
+  // icon 前缀白名单：非 base64 PNG data URL 一律回退默认图标
+  const safeSrc = isSafePngIcon(src) ? src : ''
   return (
     <img
-      src={src || fallbackIcon}
+      src={safeSrc || fallbackIcon}
       alt=""
       aria-hidden="true"
       width={size}
@@ -111,6 +114,11 @@ export function OpenWithButton({
   const [open, setOpen] = useState(false)
   const [hiddenIds, setHiddenIds] = useState<string[]>([])
   const [capsuleItems, setCapsuleItems] = useState<CapsuleItem[]>([])
+  // 当前会话无工作目录（归档/空白会话）时按钮降级为禁用提示态。
+  const [noCwd, setNoCwd] = useState<boolean>(() => {
+    const cwd = getCwd(sessionId)
+    return cwd === undefined || cwd.length === 0
+  })
   const rootRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLButtonElement>(null)
 
@@ -146,9 +154,15 @@ export function OpenWithButton({
 
   const { run } = useLaunchFlow(target, sessionId, launch, getCwd, log)
 
+  // 会话切换（sessionId 变化）后重算目录可用性。
+  useEffect(() => {
+    const cwd = getCwd(sessionId)
+    setNoCwd(cwd === undefined || cwd.length === 0)
+  }, [sessionId, getCwd])
+
   const currentItem = capsuleItems.find((it) => it.id === target)
   const label = currentItem?.name ?? t('owTargetCode')
-  const title = t('owTooltip')
+  const title = noCwd ? t('owNoCwdTip') : t('owTooltip')
   const visibleItems = capsuleItems.filter((it) => !hiddenIds.includes(it.id))
 
   const hoverVar = 'var(--dsw-hover, rgba(0,0,0,0.05))'
@@ -223,6 +237,7 @@ export function OpenWithButton({
         type="button"
         onClick={onActionClick}
         title={title}
+        disabled={noCwd}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -232,7 +247,8 @@ export function OpenWithButton({
           border: 'none',
           background: 'transparent',
           color: 'inherit',
-          cursor: 'pointer',
+          cursor: noCwd ? 'not-allowed' : 'pointer',
+          opacity: noCwd ? 0.45 : 1,
           borderRadius: '6px 0 0 6px',
           transition: 'background 0.15s',
         }}
@@ -301,6 +317,19 @@ export function OpenWithButton({
             zIndex: 100,
           }}
         >
+          {visibleItems.length === 0 && (
+            <div
+              style={{
+                padding: '8px 10px',
+                fontSize: '12px',
+                lineHeight: '18px',
+                color: 'var(--dsw-alias-label-caption, #999)',
+                textAlign: 'center',
+              }}
+            >
+              {t('owEmptyMenu')}
+            </div>
+          )}
           {visibleItems.map((item) => (
             <button
               key={item.id}

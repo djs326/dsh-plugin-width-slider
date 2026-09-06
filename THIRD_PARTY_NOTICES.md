@@ -12,7 +12,9 @@
   思考块增强渲染（assistant-step 渲染器替换）、界面硬编码英文中文化。
 - 本地转写文件（非逐字拷贝；类名/注册名/默认行为/降级逻辑有改动）：
   - src/client/think/thinkView.tsx —— 对应上游 lib/parts/assistant.part.js
-    与 apply.part.js（样式与装配）
+    （渲染器/思考块；THINK_STYLES 样式常量迁移于此）
+  - src/client/index.ts —— 对应上游 lib/parts/apply.part.js（装配：样式注入/
+    assistant-step 渲染器注册）
   - src/client/think/uiLocalize.ts —— 对应上游 lib/parts/zh-tables.part.js
     与 zh-localize.part.js
   - src/index.ts —— 对应上游 lib/index.js（PROMPT_TEXT 与注入方式）
@@ -57,6 +59,10 @@ SOFTWARE.
   - src/client/openWith/OpenWithButton.tsx —— 对应上游 OpenVscodeButton
   - src/client/openWith/OpenWithPanel.tsx —— 对应上游 OpenWithSettings
   - src/client/locales.ts 中 ow*/settings.* 词条 —— 对应上游 locales
+    （词条键并入本插件 widthSlider 词典：label/tooltip/picker.aria/menu.aria/
+    target.* 等映射为 owTooltip/owPickerAria/owMenuAria/owTargetCode；
+    settings.* 点分键原样保留；launching/opened/failed/setActive/extracting/
+    invalidPath/target.cmd 等 8 个未用键删除）
 - 设置数据沿用 $DSH_HOME/storages/dsh-open-with/settings.json（与官方及
   用户本地版本共用同一文件，停用官方插件后配置无缝保留）。
 - 上游许可全文（原文）:

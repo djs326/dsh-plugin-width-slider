@@ -3,7 +3,7 @@
  *
  * 卡片分组（每个功能带独立开关，默认全开、热生效）：
  * 1. 对话宽度滑块  —— 开关 + 滑块（WidthSliderControl，关闭时隐藏并提示）
- * 2. 思考块        —— 增强渲染开关 + 显示方式（自动收起 / 始终展开）
+ * 2. 思考块        —— 增强渲染开关 + Markdown 渲染子开关（让位其它渲染插件）+ 显示方式（自动收起 / 始终展开）
  * 3. 输出语言      —— 思考/回复强制中文开关（host 端 systemPrompt 注入）
  * 4. 界面          —— 英文中文化 + 弹窗调宽 + tab 滚动开关
  *
@@ -240,27 +240,43 @@ export function WidthSliderSettings({
           onChange={(checked) => persist({ thinkRender: checked })}
         />
         {settings.thinkRender && (
-          <div style={{ margin: '2px 0 6px' }}>
-            <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, #bbb)', marginBottom: 8 }}>
-              {t('thinkModeLabel')}
+          <>
+            <SwitchRow
+              id={id('enable-think-markdown')}
+              label={t('thinkMarkdownLabel')}
+              info={t('thinkMarkdownInfo')}
+              checked={settings.thinkMarkdown}
+              onChange={(checked) => persist({ thinkMarkdown: checked })}
+            />
+            <div style={{ margin: '2px 0 6px' }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  lineHeight: '18px',
+                  color: 'var(--dsw-alias-label-secondary, #bbb)',
+                  marginBottom: 8,
+                }}
+              >
+                {t('thinkModeLabel')}
+              </div>
+              <RadioRow
+                id={id('think-mode-auto')}
+                name="width-slider-think-mode"
+                label={t('thinkModeAuto')}
+                info={t('thinkModeAutoInfo')}
+                checked={settings.thinkMode === 'auto-collapse'}
+                onChange={() => persist({ thinkMode: 'auto-collapse' })}
+              />
+              <RadioRow
+                id={id('think-mode-keep')}
+                name="width-slider-think-mode"
+                label={t('thinkModeKeep')}
+                info={t('thinkModeKeepInfo')}
+                checked={settings.thinkMode === 'keep-expanded'}
+                onChange={() => persist({ thinkMode: 'keep-expanded' })}
+              />
             </div>
-            <RadioRow
-              id={id('think-mode-auto')}
-              name="width-slider-think-mode"
-              label={t('thinkModeAuto')}
-              info={t('thinkModeAutoInfo')}
-              checked={settings.thinkMode === 'auto-collapse'}
-              onChange={() => persist({ thinkMode: 'auto-collapse' })}
-            />
-            <RadioRow
-              id={id('think-mode-keep')}
-              name="width-slider-think-mode"
-              label={t('thinkModeKeep')}
-              info={t('thinkModeKeepInfo')}
-              checked={settings.thinkMode === 'keep-expanded'}
-              onChange={() => persist({ thinkMode: 'keep-expanded' })}
-            />
-          </div>
+          </>
         )}
       </Card>
 

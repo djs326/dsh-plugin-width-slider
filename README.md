@@ -3,7 +3,7 @@
 **DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
-- **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染；
+- **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染（Markdown 渲染可独立关闭，避免与其它渲染插件叠加）；
 - **Open With**（整合自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
 - **界面中文化**：官方界面残留硬编码英文标签自动替换为中文；
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
@@ -35,7 +35,8 @@
 |---|---|---|
 | 宽度滑块 | 滑块调节对话内容宽度：按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"模式；重启 DSH 后启动即应用上次设置（无需打开设置页）；关闭后恢复原生拖拽手柄 | 开 |
 | 强制中文 | host 注入最高优先级语言规则：思考过程与回复均使用简体中文 | 开 |
-| 思考块增强 | 思考块展开/收起交互（思考内容走 Markdown 渲染），替换官方单行折叠 | 开 |
+| 思考块增强 | 思考块展开/收起交互，替换官方单行折叠（总开关；子项 Markdown 渲染、显示方式见下） | 开 |
+| Markdown 渲染（思考块增强的子项，随总开关隐藏） | 思考块正文与回复文本用 Markdown 渲染（代码块/表格/公式，依赖 dsh-md-render）；装了其它 Markdown 渲染插件时可关闭，避免两套渲染叠加冲突，关闭后纯文本显示 | 开 |
 | 思考块模式 | 二选一：思考完自动收起（默认）/ 始终展开 | 自动收起 |
 | 界面中文化 | 官方残留硬编码英文标签（Tool Call、Thinking 等）替换为中文 | 开 |
 | 弹窗窗口化 | 官方设置弹窗变可拖拽窗口：右下角把手调宽高、顶部拖动移动、双击复位 800×800 居中（记忆） | 开 |
@@ -51,7 +52,7 @@
 - **宽度持久化**：宽度值写入 `localStorage` 键 `dsh.conversation.contentWidth`，重启 DSH 后保留（启动即应用）。
 - **跟随窗口宽度**：勾选后内容宽度实时等于对话列宽（窗口缩放/侧栏折叠/分栏切换均跟随，重启后同样保持）；偏好存 `dsh.conversation.contentWidthFollow`。
 - **隐藏原生手柄**：插件入口注入全局样式 `[data-width-handle]{display:none!important}`，用稳定属性选择器隐藏原生左右拖拽手柄——不像改官方 `client.js` 那样会被升级覆盖。
-- **思考块**：生成中强制展开、结束后按所选模式显示；思考内容与回复文本统一走 MarkdownView（依赖 dsh-md-render），代码块/表格/公式正常渲染。
+- **思考块**：生成中强制展开、结束后按所选模式显示；思考内容与回复文本统一走 MarkdownView（依赖 dsh-md-render），代码块/表格/公式正常渲染。总控页可关闭 "Markdown 渲染"（thinkMarkdown）：本插件不再调用 MarkdownView、内容以纯文本显示，避免与其它 Markdown 渲染插件两套渲染叠加。
 - **中英双语**：内置 zh / en 两套界面文案，跟随 DSH 界面语言自动切换。
 - **滑块几何**：轨道高度 = 圆形手柄直径（面板 20px / 预览 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出；宽轨道便于鼠标点击。
 
@@ -63,7 +64,9 @@
 它**。若之前装过，请将其移除或停用，避免两个插件同时接管同一块界面。
 
 思考块的 Markdown 渲染依赖 `dsh-md-render`，请保持其已安装（缺失时本
-插件自动降级为纯文本显示）。
+插件自动降级为纯文本显示）。若你另外接入更好的 Markdown 渲染插件，
+可在总控页关闭"Markdown 渲染"开关——本插件不再调用 dsh-md-render，
+思考块与回复文本以纯文本呈现，不与其它渲染插件叠加。
 
 ## 与 dsh-plugin-open-with 的关系
 
@@ -123,7 +126,7 @@ dsh-plugin-width-slider/
 1. 打开 DSH Desktop 的 **设置** 面板。
 2. 侧边栏找到 **Width Slider · 对话宽度** 条目进入 —— 这里是功能总控页：
    - **对话宽度滑块**：宽度开关 + 滑块调节（按下即全屏预览、拖动实时调宽、松开/Esc 返回）+ "跟随窗口宽度"（内容宽度实时等于对话列宽，窗口缩放/侧栏折叠均跟随）；
-   - **思考块**：增强渲染开关 + 显示方式（思考完自动收起 / 始终展开）；
+   - **思考块**：增强渲染开关 + Markdown 渲染子开关（装了其它 Markdown 渲染插件时关闭，避免冲突）+ 显示方式（思考完自动收起 / 始终展开）；
    - **输出语言**：思考/回复强制中文开关；
    - **界面**：英文中文化开关、设置弹窗调宽开关、设置 tab 滚动开关；
    - **打开方式（Open With）**：头部按钮开关 + 打开项管理（预设/自定义、拖拽排序、设为当前、隐藏、添加/编辑/删除；图标自动提取）；
@@ -147,7 +150,7 @@ dsh-plugin-width-slider/
 | 会话删除 | ⋯ 菜单注入（克隆官方 menuitem，目标会话 id 从会话行 React fiber 直读，规避按标题反查误删）；host `/width-slider` `sessionDelete` 执行删除链：停 agent（cancel+15s）→ flush/detach 内存 → 删磁盘日志目录（两拼写、多轮重扫）→ 清投影缓存 → workspace 记账（顺序防"未分组"残留）；失败中止并留痕 |
 | 预览模式 | `createPortal` 到 `document.body`，`position: fixed; inset: 0; z-index: 100000`；同时把 `[data-shell-overlay]` 等设置面板覆盖层设为 `opacity: 0` |
 | 隐藏手柄 | 入口注入 `<style>[data-width-handle]{display:none!important}</style>` |
-| 思考块渲染 | slots 覆盖 `conversation.chat.node` 的 `assistant-step`（priority -1）；思考块默认收起、running 强制展开、结束自动收起；MarkdownView 经运行时 `require('dsh-md-render')` 解析（`dsh.client.external` 声明） |
+| 思考块渲染 | slots 覆盖 `conversation.chat.node` 的 `assistant-step`（priority -1）；思考块默认收起、running 强制展开、结束自动收起；MarkdownView 经运行时 `require('dsh-md-render')` 解析（`dsh.client.external` 声明）；`thinkMarkdown=false` 时跳过 MarkdownView，正文纯文本 |
 | 强制中文 | host `systemPrompt.section`（order -90），开关热注销/注册 |
 | 界面中文化 | MutationObserver 精准替换「完全等于」词表的叶子文本节点（排除代码/输入区） |
 | 面板补丁 | body 观察器探测 `[role=dialog][aria-modal]` + `> nav` 语义锚点（不依赖 hash 类名），失效自动跳过 |

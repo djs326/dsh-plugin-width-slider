@@ -7,7 +7,9 @@
  * 2. 类名前缀 dsh-ws-（与上游 dsh-think-zh-expand- 互不干扰）；
  * 3. 行为默认「思考中展开、思考完自动收起」（上游为始终默认展开）；
  * 4. MarkdownView 经运行时 require('dsh-md-render') 解析（dsh.client.external
- *    声明保证其先加载），缺失时降级纯文本 pre-wrap，不抛错。
+ *    声明保证其先加载），缺失时降级纯文本 pre-wrap，不抛错；
+ * 5. 总控页「Markdown 渲染」开关（thinkMarkdown）可关掉 MarkdownView 调用，
+ *    让用户接入的其它渲染插件渲染，避免两套 Markdown 渲染叠加冲突。
  *
  * 渲染契约：替换官方 conversation.chat.node 的 assistant-step 渲染器——
  * text 块与 reasoning 块统一走 MarkdownView；image 块相邻分组复用宿主
@@ -125,12 +127,20 @@ function sanitizeMarkdownUrls(text: string): string {
   })
 }
 
-// ── 文本渲染（Markdown 或降级纯文本）────────────────────────────────
+// ── 文本渲染（Markdown 或纯文本）────────────────────────────────────
 // memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
 // MarkdownView 重解析，减少每帧全量工作。
-const TextRenderer = memo(function TextRenderer({ text, sanitizeUrls = false }: { text: string; sanitizeUrls?: boolean }) {
+// markdown=false（总控页「Markdown 渲染」开关关闭）：不调用 MarkdownView，
+// 内容以纯文本显示——把 Markdown 渲染完全让给用户接入的其它渲染插件，
+// 避免两套渲染叠加冲突（与 dsh-md-render 缺失时的既有降级路径一致）。
+const TextRenderer = memo(function TextRenderer({
+  text,
+  sanitizeUrls = false,
+  markdown = true,
+}: { text: string; sanitizeUrls?: boolean; markdown?: boolean }) {
   const cleanText = stripControlTags(text)
   const finalText = sanitizeUrls ? sanitizeMarkdownUrls(cleanText) : cleanText
+  if (!markdown) return <div className="dsh-ws-plain">{finalText}</div>
   const MarkdownView = resolveMarkdownView()
   if (MarkdownView !== null) return <MarkdownView text={finalText} />
   return <div className="dsh-ws-plain">{finalText}</div>
@@ -148,9 +158,11 @@ export interface ThinkBlockProps {
   running: boolean
   /** true=思考完自动收起（默认）；false=上游语义（默认展开、可手动收起）。 */
   collapseAfterRun?: boolean
+  /** true=正文走 Markdown 渲染（默认）；false=纯文本（总控页 Markdown 渲染开关关闭）。 */
+  markdown?: boolean
 }
 
-export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBlockProps) {
+export function ThinkBlock({ text, running, collapseAfterRun = true, markdown = true }: ThinkBlockProps) {
   const cleanText = stripControlTags(text)
   // 初始态与模式对齐：auto-collapse（默认）初始收起——历史/非生成中的
   // 思考块以折叠摘要呈现，生成中由 open=expanded||running 强制展开、结束
@@ -206,7 +218,7 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
       {open && (
         <div className="dsh-ws-think-body">
           {/* 思考通道做 URL scheme 净化（正式回复文本块不走这里）。 */}
-          <TextRenderer text={cleanText} sanitizeUrls />
+          <TextRenderer text={cleanText} sanitizeUrls markdown={markdown} />
         </div>
       )}
     </div>
@@ -245,11 +257,12 @@ function renderBlock(
   last: number,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
+  markdown?: boolean,
 ): ReactNode {
   const block = blocks[i] as { kind?: string; text?: unknown } | null | undefined
   if (!block) return null
   if (block.kind === 'text' && typeof block.text === 'string') {
-    return <TextRenderer key={'t' + i} text={block.text} />
+    return <TextRenderer key={'t' + i} text={block.text} markdown={markdown} />
   }
   if (block.kind === 'reasoning' && typeof block.text === 'string') {
     return (
@@ -258,6 +271,7 @@ function renderBlock(
         text={block.text}
         running={streaming && i === last}
         collapseAfterRun={collapseAfterRun}
+        markdown={markdown}
       />
     )
   }
@@ -275,13 +289,14 @@ function renderBlocks(
   streaming: boolean,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
+  markdown?: boolean,
 ): ReactNode[] {
   const last = blocks.length - 1
   const rendered: ReactNode[] = []
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i] as { kind?: string } | null | undefined
     if (!block) continue
-    const el = renderBlock(blocks, i, streaming, last, renderMessageImages, collapseAfterRun)
+    const el = renderBlock(blocks, i, streaming, last, renderMessageImages, collapseAfterRun, markdown)
     if (el === null || el === undefined) continue
     if (block.kind === 'image') i = imageGroupEnd(blocks, i)
     rendered.push(el)
@@ -295,14 +310,16 @@ export interface AssistantStepViewProps {
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode
   /** true=思考完自动收起（默认）；false=始终展开（上游语义）。 */
   collapseAfterRun?: boolean
+  /** true=文本/思考正文走 Markdown 渲染（默认）；false=纯文本（Markdown 渲染开关）。 */
+  markdown?: boolean
 }
 
-export function AssistantStepView({ node, renderMessageImages, collapseAfterRun = true }: AssistantStepViewProps) {
+export function AssistantStepView({ node, renderMessageImages, collapseAfterRun = true, markdown = true }: AssistantStepViewProps) {
   const data = node && node.data ? node.data : null
   if (!data || !Array.isArray(data.blocks)) return null
   const streaming = data.status === 'running'
   const interrupted = data.status === 'interrupted'
-  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun)
+  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun, markdown)
   if (interrupted) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)
   }

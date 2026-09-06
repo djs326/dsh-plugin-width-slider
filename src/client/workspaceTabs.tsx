@@ -569,7 +569,7 @@ function TabStrip(props: {
     // 点菜单自身不关；点外部 / Esc 才关（否则菜单项 click 永远被吞）。
     const closeOnOutside = (e: Event) => {
       const t = e.target
-      if (t instanceof Node && t.closest && t.closest('[data-dsh-ws-ctx-menu]')) return
+      if (t instanceof Element && t.closest && t.closest('[data-dsh-ws-ctx-menu]')) return
       setCtx(null)
     }
     const onKey = (e: KeyboardEvent) => {

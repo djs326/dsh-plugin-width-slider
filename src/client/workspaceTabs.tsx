@@ -329,6 +329,8 @@ async function loadGroups(): Promise<void> {
         } else {
           groups = remote
           groupLoadFailed = false
+          // dirty 但 host 内容与本地一致 = 上次写已成功/已收敛，清掉脏标志。
+          clearDirty()
         }
       } else {
         // host 返回空：旧 host 无写入端点或文件缺失 —— 本地缓存兜底并尝试写回。
@@ -726,18 +728,25 @@ function TabStrip(props: {
     const g = isDefault ? undefined : groupOf(id)
     const count = g ? g.workspaceIds.length : 0
     // roving tabindex：仅激活页签可聚焦，方向键在页签间移动并激活（键盘可达性）。
+    const focusTab = (targetId: string): void => {
+      requestAnimationFrame(() => {
+        try {
+          const host = document.querySelector('[data-dsh-ws-tabs-bar]')
+          const el = host && host.querySelector('[data-dsh-ws-tab][data-dsh-ws-id="' + targetId + '"]')
+          ;(el as HTMLElement | null)?.focus?.()
+        } catch { /* 忽略 */ }
+      })
+    }
     const moveTo = (dir: -1 | 1) => {
       const idx = tabOrder.indexOf(id)
       if (idx < 0) return
       const next = tabOrder[(idx + dir + tabOrder.length) % tabOrder.length]
       onPick(next)
-      requestAnimationFrame(() => {
-        try {
-          const host = document.querySelector('[data-dsh-ws-tabs-bar]')
-          const el = host && host.querySelector('[data-dsh-ws-tab][data-dsh-ws-id="' + next + '"]')
-          ;(el as HTMLElement | null)?.focus?.()
-        } catch { /* 忽略 */ }
-      })
+      focusTab(next)
+    }
+    const jumpTo = (targetId: string): void => {
+      onPick(targetId)
+      focusTab(targetId)
     }
     return h(
       'span',
@@ -762,11 +771,14 @@ function TabStrip(props: {
             moveTo(1)
           } else if (e.key === 'Home') {
             e.preventDefault()
-            onPick(DEFAULT_TAB)
+            jumpTo(DEFAULT_TAB)
           } else if (e.key === 'End') {
             e.preventDefault()
             const last = tabOrder[tabOrder.length - 1]
-            if (last !== undefined) onPick(last)
+            if (last !== undefined) jumpTo(last)
+          } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onPick(id)
           }
         },
         onContextMenu: (e: { preventDefault: () => void; stopPropagation: () => void; clientX: number; clientY: number }) => {
@@ -854,6 +866,7 @@ function TabStrip(props: {
               {
                 key: 'ctx-menu',
                 role: 'menu',
+                'aria-label': groupOf(ctx.id)?.name || ctx.id,
                 'data-dsh-ws-ctx-menu': '',
                 onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
                 style: {
@@ -1190,13 +1203,14 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   }, [itemsAll, effectiveActive, membership, scopeWsIds, listState])
 
   // 孤儿清理（官方删了工作区则从分组中剔除）。
-  // 门控：非 ready 快照不清理（清空重载的中间态会把整组误判为孤儿）；空列表而
-  // 分组有内容时同样跳过（真·清空重载的兜底保险），数据恢复优先于即时清理。
+  // 门控：非 ready 快照不清理（清空重载的中间态会把整组误判为孤儿）；仅当从未
+  // 见过任何工作区（knownRef 为空 = 纯启动恢复场景）且列表为空时才跳过清理，
+  // 已见过工作区的真实清空（用户删光全部工作区）仍照常清理，避免孤儿永久滞留。
   const knownRef = useRef('')
   useEffect(() => {
     if (!wsPhaseReady) return
     const known = new Set(itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v))
-    if (known.size === 0 && groupList.some((g) => g.workspaceIds.length > 0)) return
+    if (known.size === 0 && knownRef.current === '' && groupList.some((g) => g.workspaceIds.length > 0)) return
     const key = [...known].sort().join('|')
     if (key === knownRef.current) return
     knownRef.current = key

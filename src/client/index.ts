@@ -1,9 +1,9 @@
 /**
- * Client-side plugin entry（v0.3.0 收编后）。
+ * Client-side plugin entry（v0.3.0 起整合上游能力）。
  *
  * 职责（全部挂独立开关，默认开、热生效，见 config.ts FeatureSettings）：
  * 1. 对话宽度滑块设置区块 —— 总控页（WidthSliderSettings）；
- * 2. 思考块增强渲染（assistant-step 覆盖，收编 dsh-think-zh-expand）；
+ * 2. 思考块增强渲染（assistant-step 覆盖，整合自 dsh-think-zh-expand）；
  * 3. 界面硬编码英文中文化；
  * 4. 隐藏官方原生宽度拖拽手柄（跟随「宽度滑块」开关联动）。
  *
@@ -21,6 +21,7 @@ import { WidthSliderSettings } from './WidthSliderSettings.tsx'
 import { en, zh, type WidthSliderKey } from './locales.ts'
 import { AssistantStepView, THINK_STYLES } from './think/thinkView.tsx'
 import { installUiLocalize } from './think/uiLocalize.ts'
+import { applySavedWidth } from './widthPrefs.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { installSessionDelete } from './sessionDelete.ts'
 import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
@@ -46,20 +47,31 @@ const HANDLE_HIDE_CSS = `
 
 /**
  * 宽度滑块功能安装器（开关=开时）：
+ * - 启动即恢复上次宽度偏好（applySavedWidth：follow 起全局跟随 watcher；
+ *   fixed 值等对话根出现后发布一次）——修复"重启后偏好不生效、打开插件页
+ *   才生效"（应用曾只挂在 WidthSliderControl 组件生命周期内）；
  * - 注入隐藏原生手柄的样式；
- * - 卸载时（开关关闭）除移除样式外，清除插件写在各对话根上的内联
- *   --dsh-chat-user-width——让对话宽度立即回到官方默认/其自身持久值，
- *   无需等对话切换重渲染才恢复。
+ * - 卸载时（开关关闭）：停全局 watcher/发布、移除样式、清除插件写在各
+ *   对话根上的内联 --dsh-chat-user-width——立即回到官方默认/其自身持久值。
  */
 function installWidthFeature(): Disposer {
+  const disposers: Disposer[] = []
+  try {
+    disposers.push(applySavedWidth())
+  } catch { /* 偏好缺失/环境异常时不阻塞开关安装 */ }
   const style = document.createElement('style')
   style.id = 'dsh-plugin-width-slider-hide-handles'
   style.textContent = HANDLE_HIDE_CSS
   // 幂等：热重载/重复实例时先清掉旧同 id 样式，避免开关只移除自己那份。
   document.getElementById(style.id)?.remove()
   document.head.appendChild(style)
+  disposers.push(() => { style.remove() })
   return () => {
-    style.remove()
+    for (const dispose of disposers) {
+      try {
+        dispose()
+      } catch { /* 清理异常忽略 */ }
+    }
     try {
       document.querySelectorAll<HTMLElement>('[data-phase]').forEach((el) => {
         el.style.removeProperty('--dsh-chat-user-width')
@@ -115,7 +127,7 @@ function installLocalize(): Disposer {
   return installUiLocalize()
 }
 
-// ── Open With 头部胶囊按钮（收编 dsh-plugin-open-with；openWithButton=开时）──
+// ── Open With 头部胶囊按钮（整合 dsh-plugin-open-with；openWithButton=开时）──
 
 type OpenWithRpcContext = RpcClientContext & {
   sessions?: {
@@ -222,7 +234,7 @@ function warnIfUpstreamPresent(): void {
     if (hit) {
       console.warn(
         '[width-slider] 检测到上游 dsh-think-zh-expand 仍启用：其 assistant-step 渲染器' +
-        '与本插件同 key 注册会互相覆盖。请卸载 dsh-think-zh-expand（本插件已收编其全部能力）。',
+        '与本插件同 key 注册会互相覆盖。请卸载 dsh-think-zh-expand（本插件已整合其全部能力）。',
       )
     }
   } catch { /* 忽略 */ }

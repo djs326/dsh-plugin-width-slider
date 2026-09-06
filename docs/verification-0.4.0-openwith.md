@@ -5,7 +5,7 @@
 > 回归约定：v0.4.0 发布前须同步重跑 v0.3.0 清单 A-D 组（宽度滑块/思考块/
 > 面板补丁）确认无回归。
 > 前置：重启 DSH Desktop 后（host /open-with RPC 与 client 均生效）；
-> 停用官方 dsh-plugin-open-with（本插件已收编，双份会双按钮/双设置）；
+> 停用官方 dsh-plugin-open-with（本插件已整合，双份会双按钮/双设置）；
 > dsh-md-render / dsh-think-zh-expand 处理同 v0.3.0 清单。
 
 ## E. Open With（v0.4.0 新增）

@@ -21,7 +21,7 @@ import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
 
 export interface WidthSliderSettingsInjected {
   writeSettings: (settings: unknown) => Promise<void>
-  /** Open With（收编 dsh-plugin-open-with）host 能力桥，经 /open-with RPC。 */
+  /** Open With（整合自 dsh-plugin-open-with）host 能力桥，经 /open-with RPC。 */
   owReadSettings: () => Promise<unknown>
   owWriteSettings: (settings: unknown) => Promise<void>
   owExtractIcon: (exePath: string) => Promise<string>
@@ -307,7 +307,7 @@ export function WidthSliderSettings({
         />
       </Card>
 
-      {/* 5. 打开方式（Open With，收编 dsh-plugin-open-with） */}
+      {/* 5. 打开方式（Open With，整合自 dsh-plugin-open-with） */}
       <Card title={t('owGroupTitle')}>
         <SwitchRow
           id={id('enable-ow-settings')}

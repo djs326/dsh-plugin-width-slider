@@ -1,5 +1,5 @@
 /**
- * uiLocalize.ts — 界面硬编码英文中文化（收编自 dsh-think-zh-expand，MIT）。
+ * uiLocalize.ts — 界面硬编码英文中文化（整合自 dsh-think-zh-expand，MIT）。
  *
  * 来源：baosfeng/my-dsh-plugins → plugins/dsh-think-zh-expand/lib/parts/
  * zh-tables.part.js + zh-localize.part.js（上游 v0.4.7）。转写差异：

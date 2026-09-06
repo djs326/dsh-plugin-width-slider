@@ -1,12 +1,13 @@
 # dsh-plugin-width-slider
 
-**DSH 个人多功能插件**（v0.3.0 起收编 dsh-think-zh-expand、v0.4.0 起收编 dsh-plugin-open-with；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
+**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
-- **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化；
-- **思考块增强**（收编自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染；
-- **Open With**（收编自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
+- **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
+- **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染；
+- **Open With**（整合自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
 - **界面中文化**：官方界面残留硬编码英文标签自动替换为中文；
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
+- **会话删除**（v0.5.0）：官方不支持删除会话，本插件在会话行 ⋯ 菜单补"删除会话"——二次确认后 host 执行完整删除链（停止任务/清内存/删磁盘/清投影缓存与工作区记账），不留半删残留。
 
 安装 dsh-plugin-width-slider 后即可替代 dsh-think-zh-expand 与 dsh-plugin-open-with（无需再单独安装，见下方"与上游插件的关系"）。
 
@@ -22,9 +23,11 @@
 | Node.js | `^22.11 \|\| >= 24` |
 | 平台 | 仅 `win32` |
 
-> 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 收编）由作者在真机验证主要流程
-> （逐项清单见 [docs/verification-0.4.0-openwith.md](./docs/verification-0.4.0-openwith.md)）。若你的 DSH 是自建/Web 版，
-> 机制相同（同为 Web 端注入），但以桌面版为准验证。
+> 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 整合）主要流程已由作者真机验证；
+> 会话删除（v0.5.0）与近期修复（宽度启动恢复、Open With 即时同步）由作者验收中。逐项清单见
+> [verification-0.4.0-openwith.md](./docs/verification-0.4.0-openwith.md) 与
+> [verification-0.5.0-session-delete.md](./docs/verification-0.5.0-session-delete.md)。
+> 若你的 DSH 是自建/Web 版，机制相同（同为 Web 端注入），但以桌面版为准验证。
 
 ---
 
@@ -32,7 +35,7 @@
 
 | 开关 | 功能 | 默认 |
 |---|---|---|
-| 宽度滑块 | 滑块调节对话内容宽度：按下即全屏预览、实时调宽、宽度持久化；关闭后恢复原生拖拽手柄 | 开 |
+| 宽度滑块 | 滑块调节对话内容宽度：按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"模式；重启 DSH 后启动即应用上次设置（无需打开设置页）；关闭后恢复原生拖拽手柄 | 开 |
 | 强制中文 | host 注入最高优先级语言规则：思考过程与回复均使用简体中文 | 开 |
 | 思考块增强 | 思考块展开/收起交互（思考内容走 Markdown 渲染），替换官方单行折叠 | 开 |
 | 思考块模式 | 二选一：思考完自动收起（默认）/ 始终展开 | 自动收起 |
@@ -40,14 +43,15 @@
 | 弹窗窗口化 | 官方设置弹窗变可拖拽窗口：右下角把手调宽高、顶部拖动移动、双击复位 800×800 居中（记忆） | 开 |
 | tab 滚动 | 官方设置左侧 tab 列表超高时显示滚动条 | 开 |
 | Open With 按钮 | 对话头部胶囊按钮（主按钮启动当前项 / 右侧箭头展开菜单切换），在当前会话目录启动 | 开 |
-| Open With 设置 | 总控页管理打开项：预设/自定义、组内拖拽排序、设为当前、隐藏、添加/编辑/删除 | 开 |
+| Open With 设置 | 总控页管理打开项：预设/自定义、组内拖拽排序、设为当前、隐藏、添加/编辑/删除；改动即时同步到已挂载的头部按钮（含其它窗口） | 开 |
 | 会话删除 | 会话行 ⋯ 菜单新增"删除会话"项：二次确认后永久删除会话及数据（官方不支持删除，由本插件补全） | 开 |
 
 开关在 DSH 设置 → **对话宽度（Width Slider）** 区块内的功能总控页操作，改动即时生效、重启保留。
 
 - **按下即预览**：鼠标按下滑块瞬间进入全屏预览模式——官方设置面板被临时隐藏，只留下居中的滑块、当前宽度数值与提示，对话区域完全露出，所见即所得。
 - **实时调宽**：拖动滑块，对话内容区宽度即时变化（写 conversation root 元素内联 CSS 变量 `--dsh-chat-user-width`，与原生拖拽同一生效路径，无需切换会话）。
-- **宽度持久化**：宽度值写入 `localStorage` 键 `dsh.conversation.contentWidth`，重启 DSH 后保留。
+- **宽度持久化**：宽度值写入 `localStorage` 键 `dsh.conversation.contentWidth`，重启 DSH 后保留（启动即应用）。
+- **跟随窗口宽度**：勾选后内容宽度实时等于对话列宽（窗口缩放/侧栏折叠/分栏切换均跟随，重启后同样保持）；偏好存 `dsh.conversation.contentWidthFollow`。
 - **隐藏原生手柄**：插件入口注入全局样式 `[data-width-handle]{display:none!important}`，用稳定属性选择器隐藏原生左右拖拽手柄——不像改官方 `client.js` 那样会被升级覆盖。
 - **思考块**：生成中强制展开、结束后按所选模式显示；思考内容与回复文本统一走 MarkdownView（依赖 dsh-md-render），代码块/表格/公式正常渲染。
 - **中英双语**：内置 zh / en 两套界面文案，跟随 DSH 界面语言自动切换。
@@ -120,12 +124,13 @@ dsh-plugin-width-slider/
 
 1. 打开 DSH Desktop 的 **设置** 面板。
 2. 侧边栏找到 **Width Slider · 对话宽度** 条目进入 —— 这里是功能总控页：
-   - **对话宽度滑块**：宽度开关 + 滑块调节（按下即全屏预览、拖动实时调宽、松开/Esc 返回）；
+   - **对话宽度滑块**：宽度开关 + 滑块调节（按下即全屏预览、拖动实时调宽、松开/Esc 返回）+ "跟随窗口宽度"（内容宽度实时等于对话列宽，窗口缩放/侧栏折叠均跟随）；
    - **思考块**：增强渲染开关 + 显示方式（思考完自动收起 / 始终展开）；
    - **输出语言**：思考/回复强制中文开关；
    - **界面**：英文中文化开关、设置弹窗调宽开关、设置 tab 滚动开关；
-   - **打开方式（Open With）**：头部按钮开关 + 打开项管理（预设/自定义、拖拽排序、设为当前、隐藏、添加/编辑/删除；图标自动提取）。
-3. 对话头部胶囊按钮：左侧主按钮直接在当前会话目录启动当前打开项；右侧箭头展开菜单选择其它项（选择即启动并设为当前）。
+   - **打开方式（Open With）**：头部按钮开关 + 打开项管理（预设/自定义、拖拽排序、设为当前、隐藏、添加/编辑/删除；图标自动提取）；
+   - **会话删除**：⋯ 菜单"删除会话"项开关（详见第 6 条）。
+3. 对话头部胶囊按钮：左侧主按钮直接在当前会话目录启动当前打开项；右侧箭头展开菜单选择其它项（选择即启动并设为当前）。按钮跟随设置即时同步——在设置面板点"设为当前"、增删改项、隐藏/显示，所有已打开会话的头部按钮（含其它窗口）立即刷新，无需切换会话或重启。
 4. 调节范围（宽度滑块）：最小值 640px，最大值 = 对话列宽 − 176px（与原生拖拽一致）。
 5. 设置弹窗补丁：弹窗窗口化——右下角把手拖动可同时调整宽度与高度，顶部标题区空白拖动可移动弹窗位置，双击把手复位 800×800 居中；尺寸与位置会被记住。
 6. 删除会话：点击会话条目右侧"⋯"打开操作菜单，菜单末尾会出现红色的"删除会话"（与官方 重命名/分叉会话/归档会话 同级、样式一致，垃圾桶图标，无分隔线）；点击后二次确认，确认即永久删除该会话及全部数据，不可恢复。
@@ -136,16 +141,19 @@ dsh-plugin-width-slider/
 
 | 机制 | 说明 |
 |------|------|
-| Slot 注入 | 通过 `settings.section` slot 注册自定义设置区块（id: `width-slider`，order 600） |
+| Slot 注入 | `settings.section`（总控页，id `width-slider`）、`conversation.session.header.actions`（Open With 按钮）、`shell.overlay`（会话删除确认框）、`conversation.chat.node`（思考块渲染器） |
 | 宽度应用 | 对每个 `[data-phase]` 的 conversation root 元素写内联 `--dsh-chat-user-width`（与原生 `onHandleDrag` 同路径） |
-| 持久化 | `localStorage["dsh.conversation.contentWidth"]` |
+| 宽度启动恢复 | client 启动即应用持久偏好：follow=1 起全局 ResizeObserver 跟随 watcher（观察对话根尺寸/窗口/根增减）；fixed 值等对话根出现后发布一次——应用不只在设置页组件内（修复"重启不生效、打开插件页才生效"） |
+| 持久化 | `localStorage["dsh.conversation.contentWidth"]`（固定宽度）、`["dsh.conversation.contentWidthFollow"]`（跟随模式） |
+| Open With 同步 | 头部按钮订阅数据变更广播（同窗口事件总线 + BroadcastChannel 跨窗口）；设置面板/按钮写盘成功后广播，各按钮重拉 host 真源刷新 |
+| 会话删除 | ⋯ 菜单注入（克隆官方 menuitem，目标会话 id 从会话行 React fiber 直读，规避按标题反查误删）；host `/width-slider` `sessionDelete` 执行删除链：停 agent（cancel+15s）→ flush/detach 内存 → 删磁盘日志目录（两拼写、多轮重扫）→ 清投影缓存 → workspace 记账（顺序防"未分组"残留）；失败中止并留痕 |
 | 预览模式 | `createPortal` 到 `document.body`，`position: fixed; inset: 0; z-index: 100000`；同时把 `[data-shell-overlay]` 等设置面板覆盖层设为 `opacity: 0` |
 | 隐藏手柄 | 入口注入 `<style>[data-width-handle]{display:none!important}</style>` |
 | 思考块渲染 | slots 覆盖 `conversation.chat.node` 的 `assistant-step`（priority -1）；思考块默认收起、running 强制展开、结束自动收起；MarkdownView 经运行时 `require('dsh-md-render')` 解析（`dsh.client.external` 声明） |
 | 强制中文 | host `systemPrompt.section`（order -90），开关热注销/注册 |
 | 界面中文化 | MutationObserver 精准替换「完全等于」词表的叶子文本节点（排除代码/输入区） |
 | 面板补丁 | body 观察器探测 `[role=dialog][aria-modal]` + `> nav` 语义锚点（不依赖 hash 类名），失效自动跳过 |
-| 配置 | 开关经 `/width-slider` RPC（loopback 围栏）读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；client 端 config store 热切换 |
+| 配置 | 功能开关经 `/width-slider` RPC（loopback 围栏）读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；Open With 数据经 `/open-with` RPC 存 `$DSH_HOME/storages/dsh-open-with/settings.json`（与官方/本地修改版共用，停用即无缝保留）；client 端 config store 热切换 |
 | 性能 | 列宽在 `pointerdown` 时快照；宽度更新 rAF 节流，拖动不卡顿 |
 
 ---
@@ -177,24 +185,28 @@ lib/
 ```
 dsh-plugin-width-slider/
 ├── src/
-│   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider + /open-with RPC + storages 配置
+│   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider（readSettings/writeSettings/sessionDelete）+ /open-with RPC + storages 配置
 │   ├── host/
-│   │   └── openWithService.ts       # Open With host 服务（收编：launch/图标提取/路径解析/设置文件）
+│   │   ├── openWithService.ts       # Open With host 服务（整合上游：launch/图标提取/路径解析/设置文件）
+│   │   └── sessionDeleteService.ts  # 会话删除 host 删除链（v0.5.0：停 agent/删目录/投影缓存/workspace 记账）
 │   ├── shared/
 │   │   ├── settings.ts              # 功能开关契约唯一真源（host/client 共用）
 │   │   └── dshHome.ts               # $DSH_HOME 解析
 │   └── client/
-│       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载）
+│       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载 + 宽度启动恢复）
 │       ├── config.ts                # FeatureSettings 契约 + client 配置 store（热切换源）
 │       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页（分组开关）
 │       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览 / rAF 拖动 / 宽度持久化）
 │       ├── settingsPanelPatch.ts    # 官方面板补丁：弹窗拖宽 + 左侧 tab 滚动（语义锚点探测）
+│       ├── widthPrefs.ts            # 宽度偏好读写/发布 + 启动恢复（follow 全局 watcher / fixed 恢复）
+│       ├── sessionDelete.ts         # ⋯ 菜单"删除会话"项 + 官方 Modal 确认框（fiber 行级 id，防误删）
 │       ├── openWith/
-│       │   ├── OpenWithButton.tsx   # 头部胶囊按钮（收编，actions 同槽注入）
-│       │   └── OpenWithPanel.tsx    # 打开项管理面板（并入总控页，收编）
+│       │   ├── OpenWithButton.tsx   # 头部胶囊按钮（整合上游，actions 同槽注入）
+│       │   ├── OpenWithPanel.tsx    # 打开项管理面板（并入总控页，整合上游）
+│       │   └── sync.ts              # Open With 数据变更广播（同窗口总线 + BroadcastChannel）
 │       ├── think/
-│       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（收编，dsh-ws- 前缀）
-│       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（收编）
+│       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（整合上游，dsh-ws- 前缀）
+│       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（整合上游）
 │       ├── lang.ts                  # 界面语言判定（中文化门控/双语文本）
 │       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案
@@ -207,10 +219,12 @@ dsh-plugin-width-slider/
 
 ## 致谢
 
-本插件的思考增强与打开方式能力分别整合自两个优秀的 MIT 开源项目，感谢两位开发者及其生态：
+本插件的思考增强、打开方式与会话删除能力分别整合/参考自以下 MIT 开源项目，感谢各位开发者：
 
-- [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins)（baosfeng 的 my-dsh-plugins 仓库）
-- [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with)
+- [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins)（baosfeng 的 my-dsh-plugins 仓库）—— 能力整合（v0.3.0）
+- [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with) —— 能力整合（v0.4.0）
+- [dsh-plugin-session-delete](https://github.com/lsz-asd/dsh-plugin-session-delete) —— 会话删除链参考（v0.5.0；client 端修正其按标题反查会删错会话的风险，改为行级 id）
+- [dsh-archived-chats](https://github.com/Ultronen/dsh-archived-chats) —— 归档会话删除链/记账清理参考（v0.5.0）
 
 也感谢 DSH 插件社区（dsh-md-render 等）提供的渲染与运行基础设施。许可归属明细见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 

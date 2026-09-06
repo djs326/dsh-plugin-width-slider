@@ -1,5 +1,5 @@
 /**
- * thinkView.tsx — assistant-step 渲染器（收编自 dsh-think-zh-expand，MIT）。
+ * thinkView.tsx — assistant-step 渲染器（整合自 dsh-think-zh-expand，MIT）。
  *
  * 来源：baosfeng/my-dsh-plugins → plugins/dsh-think-zh-expand/lib/parts/
  * assistant.part.js（上游 v0.4.7）。转写差异：

@@ -48,12 +48,15 @@
 - **中英双语**：内置 zh / en 两套界面文案，跟随 DSH 界面语言自动切换。
 - **滑块几何**：轨道高度 = 圆形手柄直径（面板 20px / 预览 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出；宽轨道便于鼠标点击。
 
-## 与上游 dsh-think-zh-expand 的关系
+## 与 dsh-think-zh-expand 的关系
 
-v0.3.0 已将 dsh-think-zh-expand（中文提示 / 思考块渲染 / 界面中文化）全部收编。
-**请卸载或停用 dsh-think-zh-expand 后使用本插件**：两者会注册同一个
-`assistant-step` 渲染器，同时启用会互相覆盖。dsh-md-render 需保持安装
-（思考块的 Markdown 渲染依赖它；缺失时本插件自动降级为纯文本并提示）。
+从 v0.3.0 开始，dsh-think-zh-expand 的全部能力（中文提示 / 思考块渲染 /
+界面中文化）已并入本插件（该插件以 MIT 许可发布，版权归属声明见
+[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)），**不需要再单独安装
+它**。若之前装过，请将其移除或停用，避免两个插件同时接管同一块界面。
+
+思考块的 Markdown 渲染依赖 `dsh-md-render`，请保持其已安装（缺失时本
+插件自动降级为纯文本显示）。
 
 ---
 

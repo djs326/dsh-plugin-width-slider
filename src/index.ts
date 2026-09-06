@@ -12,6 +12,10 @@
  * 功能开关契约唯一真源：src/shared/settings.ts（host 与 client 共用）。
  * section 名用 dsh-width-slider-think-zh（避免与上游 dsh-think-zh-expand
  * 的 dsh-think-zh 同名重复注册抛错——收编后用户仍可能忘记卸载上游）。
+ *
+ * 中文提示注入的提示文本与注入方式源自 dsh-think-zh-expand（MIT，
+ * Copyright (c) 2026 bsfeng，v0.4.7，上游 https://github.com/baosfeng/
+ * my-dsh-plugins）；完整归属声明见仓库根 THIRD_PARTY_NOTICES.md。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'

@@ -16,18 +16,22 @@
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import {
+  EDGE_BUDGET,
+  MIN_WIDTH,
+  defaultWidth,
+  persistFollowPreference,
+  persistWidth,
+  publishChatWidth,
+  readColumnWidth,
+  readFollowPreference,
+  readPreference,
+  setFollowEnabled,
+} from './widthPrefs.ts'
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const WIDTH_PREF_KEY = 'dsh.conversation.contentWidth'
-const FOLLOW_PREF_KEY = 'dsh.conversation.contentWidthFollow'
-const MIN_WIDTH = 640
-const EDGE_BUDGET = 176
-/**
- * Panel slider geometry. The knob diameter equals the track height so the
- * knob fully hides the fill bar's rounded end — no flat edge ever shows
- * through the round knob.  Radius in px (20px knob / 2).
- */
+// ── Panel slider geometry ────────────────────────────────────────────────────
+// The knob diameter equals the track height so the knob fully hides the fill
+// bar's rounded end — no flat edge ever shows through the round knob.
 const PANEL_THUMB_R = 10
 /** Track height equals the knob diameter (2 * radius). */
 const PANEL_TRACK_H = PANEL_THUMB_R * 2
@@ -36,60 +40,7 @@ const OVERLAY_THUMB_R = 14
 /** Overlay track height equals the knob diameter. */
 const OVERLAY_TRACK_H = OVERLAY_THUMB_R * 2
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function readPreference(): number | null {
-  try {
-    const raw = localStorage.getItem(WIDTH_PREF_KEY)
-    if (raw === null) return null
-    const v = Number(raw)
-    return Number.isFinite(v) && v > 0 ? v : null
-  } catch { return null }
-}
-
-/** Follow-window mode persisted separately from the numeric width. */
-function readFollowPreference(): boolean {
-  try { return localStorage.getItem(FOLLOW_PREF_KEY) === '1' } catch { return false }
-}
-
-/** Read the current conversation column width from the DOM, or fall back. */
-function readColumnWidth(): number {
-  // Conversation root element has data-phase attribute and carries
-  // --dsh-conversation-column-width as inline style set by native code.
-  for (const el of document.querySelectorAll<HTMLElement>('[data-phase]')) {
-    const col = Number.parseFloat(el.style.getPropertyValue('--dsh-conversation-column-width'))
-    if (Number.isFinite(col) && col > 0) return col
-    return el.offsetWidth
-  }
-  return window.innerWidth - 240
-}
-
-/** Compute the default adaptive width for a given column. */
-function defaultWidth(column: number): number {
-  return Math.max(680, Math.min(column * 0.64, 920))
-}
-
-/**
- * Write --dsh-chat-user-width to every conversation root element inline,
- * same as native onHandleDrag.  This is the ONLY way to get real-time layout
- * feedback — documentElement is shadowed by the root's own inline style.
- */
-function publishChatWidth(px: number): void {
-  const clamped = Math.round(Math.max(MIN_WIDTH, px))
-  for (const el of document.querySelectorAll<HTMLElement>('[data-phase]')) {
-    el.style.setProperty('--dsh-chat-user-width', `${clamped}px`)
-  }
-}
-
-function persistWidth(px: number): void {
-  try {
-    localStorage.setItem(WIDTH_PREF_KEY, String(Math.round(Math.max(MIN_WIDTH, px))))
-  } catch { /* quota */ }
-}
-
-function persistFollowPreference(follow: boolean): void {
-  try { localStorage.setItem(FOLLOW_PREF_KEY, follow ? '1' : '0') } catch { /* quota */ }
-}
+// 宽度偏好读写与发布统一见 ./widthPrefs.ts（组件与启动恢复共用）。
 
 /**
  * Snap the settings overlay layer hidden/visible.
@@ -320,6 +271,10 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     const next = !followRef.current
     followRef.current = next
     persistFollowPreference(next)
+    // 与全局跟随 watcher 同步：面板开着时组件 effect 即时发布；面板关闭
+    // （组件卸载）后由全局 watcher 按此开关继续/停止（重启恢复的兜底，
+    // 修复"重启后不生效、要打开插件页才生效"）。
+    setFollowEnabled(next)
     if (next) {
       const w = Math.round(Math.max(MIN_WIDTH, readColumnWidth()))
       setColumn(w)

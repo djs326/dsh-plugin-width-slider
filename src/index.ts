@@ -23,7 +23,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from './shared/dshHome.ts'
 import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
 import { registerOpenWithRpc, type OpenWithCtx } from './host/openWithService.ts'
-import { deleteSessionById, listSessionCandidates, type SessionDeleteCtx } from './host/sessionDeleteService.ts'
+import { deleteSessionById, type SessionDeleteCtx } from './host/sessionDeleteService.ts'
 
 // ── $DSH_HOME 下本插件的功能开关存储（dshHome 见 src/shared/dshHome.ts）──
 
@@ -162,20 +162,6 @@ export function apply(baseCtx: Context): void {
             current = next
             syncChinesePrompt(next)
             return { ok: true, value: {} }
-          }
-          if (endpoint === 'sessionListCandidates') {
-            // v0.5.0 会话删除：按标题列候选（官方会话树无 DOM id，用标题定位）。
-            const title = body.title
-            if (typeof title !== 'string' || title.length === 0) {
-              return { ok: false, error: { code: 'invalid-title', message: 'title is required' } }
-            }
-            try {
-              const candidates = await listSessionCandidates(baseCtx as unknown as SessionDeleteCtx, title)
-              return { ok: true, value: { candidates } }
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err)
-              return { ok: false, error: { code: 'list-failed', message } }
-            }
           }
           if (endpoint === 'sessionDelete') {
             // v0.5.0 会话删除：永久删除（破坏性；client 端已完成二次确认）。

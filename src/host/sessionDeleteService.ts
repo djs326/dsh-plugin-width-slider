@@ -1,208 +1,258 @@
 /**
- * sessionDeleteService.ts — 会话删除 host 服务（v0.5.0）。
+ * sessionDeleteService.ts — 会话删除 host 服务（v0.5.0，集成参考实现）。
  *
- * 参考蓝本：dsh-archived-chats（Ultronen，MIT，仓库 archived-chats-ref/）
- * 的 deleteSession / disposeLiveSession —— 官方 DSH 不提供面向用户的删除
- * 会话接口，删除（含数据目录）需走官方内部服务：
- *   - workspace registry：ctx.get('workspaceRegistry') / 'workspace'
- *   - 会话持久化：ctx.get('sessionPersistence')（list/locate）
- *   - sessions / agents / attachments 运行时 store（ctx.get）
- * 本实现为"永久删除"精简版（不做归档插件的回收站/快照/元数据层）。
- * 所有步骤沿用蓝本的防御性做法：feature-detect、目录 basename 校验
- * （防误删整个会话根目录）、Windows 删除重试、失败回滚为取消。
- *
- * 导出两个函数供 /width-slider RPC 使用：
- *   listSessionCandidates(ctx, title) — 按标题列出可删会话候选
- *   deleteSessionById(ctx, id)        — 永久删除（先处置活动会话）
+ * 集成自：lsz-asd/dsh-plugin-session-delete（@huanlin/dsh-plugin-session-delete
+ * v0.3.1，MIT，仓库 session-delete-ref/）的 deleteSessionCore 删除链：
+ *   1. 停止运行中的 agent（cancel + 15s 静默等待）；
+ *   2. flush 活动会话；detach 内存 store 条目（两种 id 拼写）；
+ *   3. 删除磁盘日志目录 ~/.dsh/sessions/<slug>/<id>（两种拼写扫描，多次
+ *      重扫防 dispose 中途重建）；
+ *   4. 删除 projection 缓存行（storageDomain session_projcache.sessions）；
+ *   5. 目录确认删除后才清 workspace 记账（sessionIds + global
+ *      archivedSessionIds）——顺序保证会话不会半删掉进"未分组"。
+ * 全部步骤失败时抛"session not found"语义，绝不静默。
+ * 上层以 /width-slider RPC sessionDelete{id} 调用（client 侧行级 id 直达）。
  */
-import { lstat, rm } from 'node:fs/promises'
-import { basename, dirname } from 'node:path'
-
-/** 官方服务 key（与蓝本一致的候选顺序）。 */
-const WORKSPACE_KEYS = ['workspaceRegistry', 'workspace']
-const PERSISTENCE_KEYS = ['sessionPersistence']
-
-/** Windows 下目录可能被句柄占用（索引/杀软），删除带重试。 */
-const RM_RETRY = { maxRetries: 5, retryDelay: 50 }
-
-// ── 类型（宽松契约，运行时由 DSH 注入）──────────────────────────────
+import { readdirSync, rmSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 
 export interface SessionDeleteCtx {
   logger?: { info?: (m: string, e?: unknown) => void; warn?: (m: string, e?: unknown) => void; error?: (m: string, e?: unknown) => void }
   get: <T = unknown>(name: string) => T | undefined
 }
 
-type AnyRecord = Record<string, any>
+const SESSION_ID_RE = /^(session-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function registryOf(ctx: SessionDeleteCtx): AnyRecord | undefined {
-  for (const key of WORKSPACE_KEYS) {
-    const svc = ctx.get<AnyRecord>(key)
-    if (svc !== undefined) return svc
+class DeleteError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
   }
-  return undefined
 }
 
-function persistenceOf(ctx: SessionDeleteCtx): AnyRecord | undefined {
-  return ctx.get<AnyRecord>(PERSISTENCE_KEYS[0])
+function dshHome(): string {
+  return process.env.DSH_HOME || join(homedir(), '.dsh')
 }
 
-// ── 会话列表（候选）──────────────────────────────────────────────────
+function sessionsRoot(): string {
+  return join(dshHome(), 'sessions')
+}
 
-/** 从持久化 headers 列出标题匹配的活动会话候选（id/title/updatedAt）。 */
-export async function listSessionCandidates(ctx: SessionDeleteCtx, title: string): Promise<unknown[]> {
-  const persistence = persistenceOf(ctx)
-  if (!persistence || typeof persistence.list !== 'function') return []
+/** 会话 id 两种拼写（raw uuid 与 session- 前缀）。 */
+function sessionIdVariants(sessionId: string): string[] {
+  const variants = new Set<string>([sessionId])
+  if (sessionId.startsWith('session-')) {
+    variants.add(sessionId.slice('session-'.length))
+  } else if (SESSION_ID_RE.test(sessionId)) {
+    variants.add('session-' + sessionId)
+  }
+  return [...variants]
+}
+
+/** 扫描 ~/.dsh/sessions/<slug>/<id> 目录（含两拼写）。 */
+function findSessionDirs(sessionId: string): string[] {
+  const root = sessionsRoot()
+  const variants = sessionIdVariants(sessionId)
+  type DirEntry = { name: string; isDirectory(): boolean }
+  let entries: DirEntry[] = []
   try {
-    const headers = (await persistence.list()) as unknown[]
-    const wanted = String(title ?? '').trim().toLowerCase()
-    if (wanted === '') return []
-    const out: Array<{ id: string; title: string | null; updatedAt: number | null }> = []
-    for (const h of headers) {
-      const header = h as { id?: unknown; title?: unknown; updatedAt?: unknown }
-      if (header.title === undefined || typeof header.title !== 'string') continue
-      if (header.title.trim().toLowerCase() !== wanted) continue
-      if (typeof header.id !== 'string') continue
-      out.push({
-        id: header.id,
-        title: header.title,
-        updatedAt: typeof header.updatedAt === 'number' ? header.updatedAt : null,
-      })
-    }
-    return out
-  } catch (err) {
-    ctx.logger?.warn?.('session candidates list failed', err)
+    entries = readdirSync(root, { withFileTypes: true }) as unknown as DirEntry[]
+  } catch {
     return []
   }
+  const found: string[] = []
+  for (const e of entries) {
+    if (!e.isDirectory()) continue
+    for (const variant of variants) {
+      const candidate = join(root, e.name, variant)
+      try {
+        if (statSync(candidate).isDirectory() && !found.includes(candidate)) found.push(candidate)
+      } catch { /* keep scanning */ }
+    }
+  }
+  return found
 }
 
-// ── 删除 ─────────────────────────────────────────────────────────────
+function removeSessionDirs(sessionId: string): boolean {
+  const dirs = findSessionDirs(sessionId)
+  for (const dir of dirs) {
+    rmSync(dir, { recursive: true, force: true })
+  }
+  return dirs.length > 0
+}
 
-/** 处置活动会话（照蓝本 disposeLiveSession 精简：cancel → flush → detach）。 */
-async function disposeLiveSession(ctx: SessionDeleteCtx, id: string): Promise<boolean> {
-  const sessions = ctx.get<AnyRecord>('sessions')
-  const agents = ctx.get<AnyRecord>('agents')
-  // 无 sessions 服务或查不到该会话 = 冷会话，无需处置。
-  if (sessions === undefined || typeof sessions.get !== 'function') return true
-  const session = sessions.get(id)
-  if (session === undefined) return true
-  const agent = agents !== undefined && typeof agents.get === 'function' ? agents.get(id) : undefined
-  if (agent !== undefined) {
+/** 清 projection 与 workspace 记账（storageDomain KvTable/global）。 */
+async function stripStorageDomains(
+  ctx: SessionDeleteCtx,
+  sessionId: string,
+  opts: { workspace: boolean },
+): Promise<{ projRemoved: boolean; workspaceRemoved: boolean }> {
+  const sd = ctx.get<{
+    get: (name: string) => {
+      table?: (name: string) => {
+        get: (k: string) => unknown
+        put: (k: string, v: unknown) => Promise<unknown>
+        delete: (k: string) => Promise<unknown>
+        entries: () => Iterable<[string, unknown]>
+      }
+      global?: { get: () => unknown; set: (v: unknown) => Promise<unknown> }
+    } | undefined
+  }>('storageDomain')
+  if (!sd) return { projRemoved: false, workspaceRemoved: false }
+  const variants = sessionIdVariants(sessionId)
+  let projRemoved = false
+  let workspaceRemoved = false
+
+  const proj = sd.get('session_projcache')
+  if (proj && typeof proj.table === 'function') {
     try {
-      agent.cancel?.({ kind: 'disposed' })
-      await Promise.race([
-        Promise.resolve(agent.whenIdle?.()),
-        new Promise((resolve) => setTimeout(resolve, 20000)),
-      ])
-    } catch (err) {
-      ctx.logger?.warn?.(('[width-slider] dispose session: parking did not converge: ') + String(err))
+      const sessions = proj.table('sessions')
+      for (const variant of variants) {
+        if (sessions.get(variant) !== undefined) {
+          await sessions.delete(variant)
+          projRemoved = true
+        }
+      }
+    } catch { /* unit closed or table absent */ }
+  }
+
+  if (opts.workspace) {
+    const ws = sd.get('workspace')
+    if (ws && typeof ws.table === 'function') {
+      try {
+        const workspaces = ws.table('workspaces')
+        for (const [wid, rec] of workspaces.entries()) {
+          const r = rec as { sessionIds?: unknown } | null
+          if (r && Array.isArray(r.sessionIds) && variants.some((v) => (r.sessionIds as string[]).includes(v))) {
+            await workspaces.put(wid, {
+              ...r,
+              sessionIds: (r.sessionIds as string[]).filter((x) => !variants.includes(x)),
+            })
+            workspaceRemoved = true
+          }
+        }
+      } catch { /* unit closed */ }
+      try {
+        const g = ws.global
+        if (g && typeof g.get === 'function' && typeof g.set === 'function') {
+          const state = g.get() as { archivedSessionIds?: unknown } | null
+          if (state && Array.isArray(state.archivedSessionIds) && variants.some((v) => (state.archivedSessionIds as string[]).includes(v))) {
+            await g.set({
+              ...state,
+              archivedSessionIds: (state.archivedSessionIds as string[]).filter((x) => !variants.includes(x)),
+            })
+            workspaceRemoved = true
+          }
+        }
+      } catch { /* no global slot */ }
     }
   }
-  if (typeof sessions.flush === 'function') {
+  return { projRemoved, workspaceRemoved }
+}
+
+// ── live 会话处置 ────────────────────────────────────────────────────
+
+async function stopAgentIfRunning(ctx: SessionDeleteCtx, sessionId: string): Promise<boolean> {
+  const agents = ctx.get<{ get: (id: string) => { cancel?: (o: unknown) => void; whenIdle?: () => Promise<unknown> } | undefined }>('agents')
+  if (!agents || typeof agents.get !== 'function') return false
+  const agent = agents.get(sessionId)
+  if (!agent) return false
+  if (typeof agent.cancel === 'function') {
     try {
-      await sessions.flush(session)
-    } catch (err) {
-      ctx.logger?.warn?.('[width-slider] session flush failed', err)
-    }
+      agent.cancel({ kind: 'user' })
+    } catch { /* already settling */ }
   }
-  const sessionEntry = sessions.store instanceof Map ? sessions.store.get(id) : undefined
-  const agentEntry = agents?.store instanceof Map ? agents.store.get(id) : undefined
-  if (typeof sessionEntry?.detach !== 'function') return false
-  if (agent !== undefined && (agentEntry === undefined
-    || typeof agents?.detachEntered !== 'function'
-    || agentEntry.announcing === true)) return false
-  try {
-    await agent?.scope?.dispose?.()
-  } catch (err) {
-    ctx.logger?.warn?.('[width-slider] agent fiber teardown failed', err)
+  if (typeof agent.whenIdle === 'function') {
+    try {
+      await Promise.race([agent.whenIdle(), new Promise((resolve) => setTimeout(resolve, 15000))])
+    } catch { /* proceed */ }
   }
-  try {
-    if (agentEntry !== undefined) agents?.detachEntered?.(agentEntry)
-  } catch (err) {
-    ctx.logger?.warn?.('[width-slider] agent detach failed', err)
-  }
-  try {
-    sessionEntry.detach()
-  } catch (err) {
-    ctx.logger?.warn?.('[width-slider] session detach failed', err)
-    return false
-  }
-  if (sessions.get?.(id) !== undefined) return false
-  await new Promise((resolve) => setTimeout(resolve, 250))
   return true
 }
 
-/** 永久删除一个会话（活动会话先处置；数据目录经 basename 校验后删除）。 */
-export async function deleteSessionById(ctx: SessionDeleteCtx, id: string): Promise<{ ok: boolean; code?: string; message?: string }> {
-  if (typeof id !== 'string' || id.length === 0) return { ok: false, code: 'invalid-id', message: 'id is required' }
-  const sessions = ctx.get<AnyRecord>('sessions')
-  const live = sessions?.get?.(id) !== undefined
-  if (live) {
-    const disposed = await disposeLiveSession(ctx, id)
-    if (!disposed) {
-      return { ok: false, code: 'dispose-failed', message: '会话仍在运行且无法安全停止，已取消删除' }
-    }
-  }
-  // 数据目录：persistence.locate(header) → dirname(path) 且 basename === id。
-  const persistence = persistenceOf(ctx)
-  const registry = registryOf(ctx)
-  let header: { id?: unknown } | undefined
-  try {
-    if (persistence && typeof persistence.list === 'function') {
-      const headers = (await persistence.list()) as Array<{ id?: unknown }>
-      header = headers.find((h) => String(h.id) === String(id))
-    }
-  } catch (err) {
-    ctx.logger?.warn?.('[width-slider] header list failed', err)
-  }
-  const commit = async (): Promise<{ ok: boolean; code?: string; message?: string }> => {
-    if (header !== undefined && persistence && typeof persistence.locate === 'function') {
+async function flushSessionIfLive(ctx: SessionDeleteCtx, sessionId: string): Promise<boolean> {
+  const sessions = ctx.get<{ get: (id: string) => unknown; flush?: (s: unknown) => Promise<unknown> }>('sessions')
+  if (!sessions || typeof sessions.get !== 'function') return false
+  let flushed = false
+  for (const variant of sessionIdVariants(sessionId)) {
+    const session = sessions.get(variant)
+    if (!session) continue
+    if (typeof sessions.flush === 'function') {
       try {
-        const location = await persistence.locate(header)
-        if (typeof location?.path !== 'string') {
-          return { ok: false, code: 'locate-failed', message: '无法定位会话数据目录' }
-        }
-        const sessionDirectory = dirname(location.path)
-        // 关键校验：目录名必须等于会话 id，防布局变化时误删整个根目录。
-        if (basename(sessionDirectory) !== String(id)) {
-          return { ok: false, code: 'unsafe-path', message: '会话目录结构异常，已取消删除' }
-        }
-        await rm(sessionDirectory, { recursive: true, force: true, ...RM_RETRY })
-        try {
-          await lstat(sessionDirectory)
-          return { ok: false, code: 'delete-unconfirmed', message: '会话目录删除未确认' }
-        } catch (err) {
-          if ((err as { code?: string })?.code !== 'ENOENT') throw err
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        ctx.logger?.warn?.('[width-slider] session data removal failed', err)
-        return { ok: false, code: 'remove-failed', message }
-      }
+        await sessions.flush(session)
+        flushed = true
+      } catch { /* deletion proceeds */ }
     }
-    // 从 workspace registry detach + 清理内存索引。
-    try {
-      if (registry) {
-        const workspaces = typeof registry.list === 'function' ? await registry.list() : []
-        const wsList = Array.isArray(workspaces) ? workspaces : []
-        for (const workspace of wsList as AnyRecord[]) {
-          const sessionIds = Array.isArray(workspace?.sessionIds)
-            ? workspace.sessionIds.map(String)
-            : []
-          if (sessionIds.includes(String(id)) && typeof workspace.detachSession === 'function') {
-            await workspace.detachSession(String(id))
-          }
-        }
-        for (const key of ['headers', 'sessionPaths', 'invalidSessionPaths']) {
-          const map = registry[key]
-          if (map instanceof Map) map.delete(String(id))
-        }
-      }
-    } catch (err) {
-      ctx.logger?.warn?.('[width-slider] workspace detach failed', err)
-      return { ok: false, code: 'detach-failed', message: '会话数据已删除，但工作区索引清理失败（刷新后可自愈）' }
-    }
-    ctx.logger?.info?.('[width-slider] session deleted', { id })
-    return { ok: true }
   }
-  return commit()
+  return flushed
+}
+
+function detachLiveSession(ctx: SessionDeleteCtx, sessionId: string): boolean {
+  const sessions = ctx.get<{
+    store?: { get?: (k: string) => unknown; delete?: (k: string) => void }
+    detachEntered?: (entry: unknown) => void
+    attachments?: { delete?: (k: unknown) => void }
+  }>('sessions')
+  if (!sessions) return false
+  let detached = false
+  try {
+    const store = sessions.store
+    for (const variant of sessionIdVariants(sessionId)) {
+      const entry = store && typeof store.get === 'function' ? store.get(variant) : undefined
+      if (entry === undefined) continue
+      if (typeof sessions.detachEntered === 'function') {
+        sessions.detachEntered(entry)
+        detached = true
+      } else if (store && typeof store.delete === 'function') {
+        store.delete(variant)
+        const s = entry as { session?: unknown } | null
+        if (sessions.attachments && s?.session && typeof sessions.attachments.delete === 'function') {
+          sessions.attachments.delete(s.session)
+        }
+        detached = true
+      }
+    }
+  } catch { /* ignore */ }
+  return detached
+}
+
+// ── 删除核心（顺序：目录 → projection → workspace 记账）──────────────
+
+export async function deleteSessionById(ctx: SessionDeleteCtx, id: string): Promise<{ ok: boolean; code?: string; message?: string }> {
+  const sessionId = String(id ?? '').trim()
+  if (!SESSION_ID_RE.test(sessionId)) {
+    return { ok: false, code: 'invalid-id', message: 'invalid session id: ' + sessionId }
+  }
+  try {
+    await stopAgentIfRunning(ctx, sessionId)
+    await flushSessionIfLive(ctx, sessionId)
+    detachLiveSession(ctx, sessionId)
+
+    const firstDirRemoved = removeSessionDirs(sessionId)
+    const projStorage = await stripStorageDomains(ctx, sessionId, { workspace: false })
+    const secondDirRemoved = removeSessionDirs(sessionId)
+    await new Promise((resolve) => setImmediate(resolve))
+    const thirdDirRemoved = removeSessionDirs(sessionId)
+
+    const remainingDirs = findSessionDirs(sessionId)
+    if (remainingDirs.length > 0) {
+      return { ok: false, code: 'remove-failed', message: 'session files could not be fully removed: ' + remainingDirs.join(', ') }
+    }
+
+    const workspaceStorage = await stripStorageDomains(ctx, sessionId, { workspace: true })
+    const dirRemoved = firstDirRemoved || secondDirRemoved || thirdDirRemoved
+    const projRemoved = projStorage.projRemoved || workspaceStorage.projRemoved
+    const workspaceRemoved = workspaceStorage.workspaceRemoved
+    if (!dirRemoved && !projRemoved && !workspaceRemoved) {
+      return { ok: false, code: 'not-found', message: 'session not found: ' + sessionId }
+    }
+    ctx.logger?.info?.('[width-slider] session deleted', { sessionId, dirRemoved, projRemoved, workspaceRemoved })
+    return { ok: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    ctx.logger?.warn?.('[width-slider] delete failed', err)
+    return { ok: false, code: 'delete-failed', message }
+  }
 }

@@ -38,6 +38,8 @@ import { isZhInterface } from './lang.ts'
 export const WS_TABS_MARK = '__widthSliderWsTabs'
 const DEFAULT_TAB = '__default__'
 const ACTIVE_KEY = 'dsh-plugin-width-slider.wsTab'
+/** 分组本地缓存（host 文件之外的兜底：开关/重启后标签不丢）。 */
+const GROUPS_CACHE_KEY = 'dsh-plugin-width-slider.wsg.cache'
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
 const TABS_CSS = `
@@ -197,21 +199,43 @@ function subscribeGroups(cb: () => void): () => void {
   }
 }
 
+function cacheWrite(): void {
+  try {
+    window.localStorage.setItem(GROUPS_CACHE_KEY, JSON.stringify({ version: 1, groups }))
+  } catch { /* 忽略 */ }
+}
+function cacheRead(): WsGroup[] {
+  try {
+    const raw = window.localStorage.getItem(GROUPS_CACHE_KEY)
+    if (!raw) return []
+    return sanitize(JSON.parse(raw))
+  } catch {
+    return []
+  }
+}
+
 function persistGroups(): void {
   if (!rpcCall) return
   rpcCall('wsGroupsWrite', { groups })
+    .then((res) => {
+      const r = res as { ok?: boolean } | null
+      if (!r || r.ok !== true) console.warn('[width-slider] wsGroupsWrite rejected by host')
+    })
     .catch((err: unknown) => console.warn('[width-slider] wsGroupsWrite failed', err))
 }
 
 function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
   groups = mutate(groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] })))
   groupReady = true
+  cacheWrite()
   emitGroups()
   persistGroups()
 }
 
 async function loadGroups(): Promise<void> {
   if (!rpcCall) {
+    const cached = cacheRead()
+    if (cached.length > 0) groups = cached
     groupReady = true
     emitGroups()
     return
@@ -219,14 +243,26 @@ async function loadGroups(): Promise<void> {
   try {
     const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
     if (result && result.ok === true) {
-      groups = sanitize(result.value)
-      groupLoadFailed = false
+      const remote = sanitize(result.value)
+      if (remote.length > 0) {
+        groups = remote
+        groupLoadFailed = false
+      } else {
+        // host 返回空：旧 host 无写入端点或文件缺失 —— 本地缓存兜底并尝试写回。
+        const cached = cacheRead()
+        groups = cached
+        groupLoadFailed = false
+        if (cached.length > 0) persistGroups()
+      }
     } else {
+      groups = cacheRead()
       groupLoadFailed = true
     }
   } catch {
+    groups = cacheRead()
     groupLoadFailed = true
   }
+  cacheWrite()
   groupReady = true
   emitGroups()
 }
@@ -1197,6 +1233,21 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   let synced = false
   let timer = 0
 
+  // 替换官方槽组件后主动刷新工作区基线，让官方树立即以新组件重渲染
+  // （否则要等官方下一次自发刷新，开关后就出现几秒延迟）。
+  const kickRender = (): void => {
+    try {
+      const w = ctx.get?.<{ refresh?: () => unknown }>('workspaces')
+      if (w && typeof w.refresh === 'function') {
+        queueMicrotask(() => {
+          try {
+            w.refresh?.()
+          } catch { /* 忽略 */ }
+        })
+      }
+    } catch { /* 忽略 */ }
+  }
+
   const unwrap = (): void => {
     if (wrappedEntry && originalComp && wrappedEntry.component) {
       try {
@@ -1206,6 +1257,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     wrappedEntry = null
     originalComp = null
     synced = false
+    kickRender()
   }
 
   const sync = (): void => {
@@ -1233,6 +1285,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
       entry.component = Wrapper
       wrappedEntry = entry
       synced = true
+      kickRender()
     } catch (err) {
       console.warn('[width-slider] workspace tabs wrap failed', err)
     }

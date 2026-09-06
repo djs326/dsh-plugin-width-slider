@@ -1,30 +1,32 @@
 /**
- * workspaceTabs.tsx — 工作区分页页签栏（v0.6.0）。
+ * workspaceTabs.tsx — 工作区分组文件夹页签栏（v0.6.0，模型经用户确认重构）。
  *
- * 把官方侧栏「工作区 / 会话」标题原位替换为一条分页页签：
- *   [工作区] [工作区A] [工作区B] …   （「工作区」= 官方原样完整列表）
- * 页签切换不改动官方树渲染——只对传给官方组件的 useSessions / useWorkspaces
- * 数据做过滤，因此官方树的会话行菜单、搜索、分组方式、拖拽排序全部原样保留。
+ * 模型（与用户对齐后的最终语义）：
+ * - 「默认」= 根页签：显示还没有被分配进任何分组文件夹的直属工作区
+ *   （官方整棵树的过滤视图），以及官方“未分组”会话（不属于任何工作区的会话）；
+ * - 用户自建分组文件夹（可自定义命名、可增删），一个文件夹对应一个页签，
+ *   文件夹里放“被分配”过来的工作区；
+ * - 工作区唯一归属：它同一时间只属于一个位置（默认或某个文件夹）。把工作区
+ *   勾进某文件夹 = 自动从原位置移过来；删除文件夹 = 其中工作区自动回到默认；
+ * - 会话级「分配工作区」（把会话移进另一官方工作区）在 assignSession.ts，
+ *   与本页签功能相互独立、互不影响。
  *
- * 结构说明（宿主版本 0.1.2-rc.1，@deepseek-ai/dsh-client-ui-workspace）：
- * - 官方 WorkspaceBrowser 注册在 `sidebar.workspaces` 单占用槽；标题「工作区」
- *   是它 header 行最左侧一个纯文本 span（搜索展开时隐藏）。这里通过
- *   React Portal 把页签栏放进官方 header 行首（标题原位），并把该标题文本
- *   span 隐藏——官方重渲染只 patch 子树，header 行节点稳定，Portal 不会丢。
- * - 右键页签 = 官方同款「重命名 / 删除工作区」。删除走官方语义（@deepseek-ai
- *   官方 WorkspaceBrowser 同款文案）：文件夹与会话记录保留，会话落入默认
- *   容器「未分组」，即我们与用户确认的“默认固定容器”，无需手工迁移。
- * - 新建工作区沿用官方 header 上的「添加工作区」按钮，不重复造入口。
- *
- * 本文件只做“数据过滤 + 标题占位替换”，不对官方 UI 加自定义视觉。
+ * 实现要点：
+ * - 不移动官方数据：分组只是“显示作用域”。官方树经过滤后的
+ *   useSessions / useWorkspaces 只包含当前页签作用域内的工作区与会话，
+ *   官方树渲染、行菜单、搜索、分组方式全部原样保留；
+ * - 标题行处理同 v0.6.0 首版：官方「工作区/会话」标题原位隐藏，页签栏以
+ *   React Portal 放进官方 header 行首（标题位置）；
+ * - 分组持久化在 host（workspace-groups.json，/width-slider wsGroupsRead/Write），
+ *   本模块维护小组 store（useSyncExternalStore），任何增删改即时落盘。
  */
 import {
   createElement as h,
-  isValidElement,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from 'react'
@@ -33,17 +35,23 @@ import { isZhInterface } from './lang.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
-const ALL_TAB = '__all__'
+const DEFAULT_TAB = '__default__'
 const ACTIVE_KEY = 'dsh-plugin-width-slider.wsTab'
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
-// 页签栏样式（只此一处最小样式；颜色全部走官方 alias token，无自定义色板）。
 const TABS_CSS = `
 [data-dsh-ws-tabs-bar]{display:flex;align-items:center;gap:2px;flex:1;min-width:0;height:100%;overflow:hidden;padding-left:2px}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0 10px;font:inherit;font-size:13px;line-height:36px;height:36px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;position:relative;overflow:hidden;text-overflow:ellipsis}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0 6px 0 10px;font:inherit;font-size:13px;line-height:36px;height:36px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:3px;flex:none}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover{color:var(--dsw-alias-label-primary,#e6edf3)}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]{color:var(--dsw-alias-label-primary,#e6edf3);font-weight:600}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:2px 2px 0 0;background:currentColor}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]::after{content:"";position:absolute;left:8px;right:6px;bottom:0;height:2px;border-radius:2px 2px 0 0;background:currentColor}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab] [data-dsh-ws-op]{display:none;appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);padding:0 2px;margin:0;cursor:pointer;border-radius:4px;line-height:0}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover [data-dsh-ws-op]{display:inline-flex}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab] [data-dsh-ws-op]:hover{color:var(--dsw-alias-label-primary,#e6edf3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab] [data-dsh-ws-op] svg{display:block}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-add]{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;padding:2px;margin-left:auto;flex:none;border-radius:6px;line-height:0}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-add]:hover{color:var(--dsw-alias-label-primary,#e6edf3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-add] svg{display:block}
 `
 
 interface WorkspaceLike {
@@ -67,36 +75,52 @@ interface WsListState {
   [key: string]: unknown
 }
 
-interface WorkspaceServiceLike {
-  rename: (workspaceId: string, title: string) => Promise<unknown>
-  delete: (workspaceId: string) => Promise<unknown>
+export interface WsGroup {
+  id: string
+  name: string
+  workspaceIds: string[]
 }
 
 export interface WsTabsCtx {
   get?: <T = unknown>(name: string) => T | undefined
+  connection?: {
+    rpc: {
+      call: (path: string, method: string, payload?: Record<string, unknown>) => Promise<unknown>
+    }
+  }
   slots?: {
     entries?: (key: string) => Array<{ component?: unknown }>
     subscribe?: (key: string, listener: () => void) => () => void
   }
 }
 
-/** 中文/英文界面文案（与 sessionDelete 同款运行时取值）。 */
+// ── 文案 ────────────────────────────────────────────────────────────────
 const T: Record<string, [string, string]> = {
-  'tab.all': ['工作区', 'Workspaces'],
-  'tab.title': ['查看「{name}」的会话', 'View sessions of {name}'],
+  'tab.default': ['默认', 'Default'],
+  'tab.groupTitle': ['{name}（{n} 个工作区）', '{name} ({n} workspaces)'],
   'ctx.rename': ['重命名', 'Rename'],
-  'ctx.delete': ['删除工作区', 'Delete workspace'],
-  'rename.title': ['重命名工作区', 'Rename workspace'],
-  'rename.field': ['工作区名称', 'Workspace name'],
-  'rename.placeholder': ['给工作区起个自定义名字', 'Give the workspace a custom name'],
+  'ctx.members': ['管理工作区', 'Manage workspaces'],
+  'ctx.delete': ['删除', 'Delete'],
+  'rename.title': ['重命名页签', 'Rename tab'],
+  'rename.placeholder': ['给文件夹起个名字', 'Name this folder'],
   'rename.save': ['保存', 'Save'],
   'rename.saving': ['保存中…', 'Saving…'],
-  'rename.dup': ['已存在同名工作区。', 'A workspace with this name already exists.'],
-  'delete.title': ['删除工作区', 'Delete workspace'],
-  'delete.desc': ['将把「{name}」从工作区列表中移除。文件夹与会话记录会保留，其会话将显示在「未分组」下。', 'This removes "{name}" from the workspace list. The folder and session logs are kept; its sessions will appear under Ungrouped.'],
-  'delete.ok': ['删除工作区', 'Delete workspace'],
+  'rename.dup': ['已存在同名页签。', 'A tab with this name already exists.'],
+  'members.title': ['管理页签「{name}」', 'Manage tab "{name}"'],
+  'members.desc': ['勾选 = 放进此页签。工作区同一时间只属于一个位置（默认或某个页签），勾选会把它从原位置移过来。', 'Check to include. A workspace belongs to one place at a time (Default or one tab); checking moves it here.'],
+  'members.at': ['位于：{name}', 'In: {name}'],
+  'members.atDefault': ['位于：默认', 'In: Default'],
+  'members.empty': ['还没有工作区。', 'No workspaces yet.'],
+  'delete.title': ['删除页签', 'Delete tab'],
+  'delete.desc': ['删除「{name}」后，其中的 {n} 个工作区会自动移回默认页签。', 'Deleting "{name}" moves its {n} workspace(s) back to the Default tab.'],
+  'delete.ok': ['删除', 'Delete'],
   'delete.busy': ['删除中…', 'Deleting…'],
   'cancel': ['取消', 'Cancel'],
+  'new.name': ['未命名', 'Untitled'],
+  'warn.noRpc': ['工作区分组服务不可用', 'Workspace groups service unavailable'],
+  'defaultHint': ['默认页签 = 直属工作区与未分组会话', 'Default tab shows direct workspaces and ungrouped sessions'],
+  'add.tab': ['新建页签', 'New tab'],
+  'done': ['完成', 'Done'],
 }
 function tt(key: string, vars?: Record<string, string>): string {
   const pair = T[key]
@@ -120,16 +144,101 @@ function primitives(): { Modal: any } {
   return _primitives as { Modal: any }
 }
 
-function el(Modal: any, props: Record<string, unknown>, children: ReactNode): ReactNode {
-  return h(Modal, props, children)
+// ── 分组 store（模块级 + useSyncExternalStore；host 落盘）───────────────
+let groupReady = false
+let groupLoadFailed = false
+let groups: WsGroup[] = []
+const groupSubs = new Set<() => void>()
+let rpcCall: ((method: string, payload?: Record<string, unknown>) => Promise<unknown>) | null = null
+
+function sanitize(raw: unknown): WsGroup[] {
+  const list = raw && typeof raw === 'object' && Array.isArray((raw as { groups?: unknown }).groups)
+    ? ((raw as { groups?: unknown }).groups as unknown[])
+    : []
+  const out: WsGroup[] = []
+  const seen = new Set<string>()
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue
+    const it = item as Record<string, unknown>
+    if (typeof it.id !== 'string' || it.id === '' || seen.has(it.id)) continue
+    const name = typeof it.name === 'string' && it.name.trim() !== '' ? it.name.trim() : tt('new.name')
+    const workspaceIds = Array.isArray(it.workspaceIds)
+      ? it.workspaceIds.filter((v): v is string => typeof v === 'string' && v !== '')
+      : []
+    seen.add(it.id)
+    out.push({ id: it.id, name, workspaceIds })
+  }
+  return out
 }
 
-/** 会话数据过滤：只保留允许集合内的条目（官方按 id 顺序渲染）。 */
+function emitGroups(): void {
+  for (const fn of groupSubs) {
+    try {
+      fn()
+    } catch { /* 忽略 */ }
+  }
+}
+
+function getGroupSnapshot(): { ready: boolean; failed: boolean; groups: readonly WsGroup[] } {
+  return { ready: groupReady, failed: groupLoadFailed, groups }
+}
+
+function subscribeGroups(cb: () => void): () => void {
+  groupSubs.add(cb)
+  return () => {
+    groupSubs.delete(cb)
+  }
+}
+
+function persistGroups(): void {
+  if (!rpcCall) return
+  rpcCall('wsGroupsWrite', { groups })
+    .catch((err: unknown) => console.warn('[width-slider] wsGroupsWrite failed', err))
+}
+
+function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
+  groups = mutate(groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] })))
+  groupReady = true
+  emitGroups()
+  persistGroups()
+}
+
+async function loadGroups(): Promise<void> {
+  if (!rpcCall) {
+    groupReady = true
+    emitGroups()
+    return
+  }
+  try {
+    const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
+    if (result && result.ok === true) {
+      groups = sanitize(result.value)
+      groupLoadFailed = false
+    } else {
+      groupLoadFailed = true
+    }
+  } catch {
+    groupLoadFailed = true
+  }
+  groupReady = true
+  emitGroups()
+}
+
+function useGroups(): { ready: boolean; failed: boolean; groups: readonly WsGroup[] } {
+  return useSyncExternalStore(subscribeGroups, getGroupSnapshot, getGroupSnapshot)
+}
+
+function groupOf(id: string): WsGroup | undefined {
+  return groups.find((g) => g.id === id)
+}
+
+// ── 数据过滤 ────────────────────────────────────────────────────────────
 function filterSessions(state: SessionListState, allowed: string[]): SessionListState {
   const src = state || {}
   const byId: Record<string, unknown> = {}
   const ids: string[] = []
-  for (const id of allowed) {
+  const allow = new Set(allowed)
+  for (const id of allow) {
     const s = (src.byId || {})[id]
     if (s === undefined) continue
     byId[id] = s
@@ -138,11 +247,22 @@ function filterSessions(state: SessionListState, allowed: string[]): SessionList
   return { ...src, ids, byId }
 }
 
-/** 工作区数据过滤：只剩目标工作区（用于单页签下官方树只渲染该组）。 */
-function filterWorkspaces(state: WsListState, workspaceId: string): WsListState {
+function filterWorkspaces(state: WsListState, workspaceIds: string[]): WsListState {
   const src = state || {}
-  const items = (src.items || []).filter((w) => w.workspaceId === workspaceId)
+  const keep = new Set(workspaceIds)
+  const items = (src.items || []).filter((w) => w.workspaceId !== undefined && keep.has(w.workspaceId as string))
   return { ...src, items }
+}
+
+/** 官方“未分组”会话（不属于任何官方工作区 sessionIds 的会话）。 */
+function unownedSessionIds(list: SessionListState, items: WorkspaceLike[]): string[] {
+  const accounted = new Set<string>()
+  for (const w of items) for (const id of w.sessionIds || []) accounted.add(id)
+  const out: string[] = []
+  for (const id of list.ids || []) {
+    if (!accounted.has(id) && list.byId && list.byId[id] !== undefined) out.push(id)
+  }
+  return out
 }
 
 // ── 官方标题行定位与隐藏 ────────────────────────────────────────────────
@@ -154,10 +274,6 @@ function isLabelNode(el: Element): boolean {
   return LABEL_WORDS.some((w) => text === w) && el.children.length === 0
 }
 
-/**
- * 在官方宿主树内定位“标题行 + 标题 span”。
- * 先按搜索输入框向上找 header 行（标题行的可靠锚点），兜底扫描标题文本。
- */
 function locateHeader(host: Element): { row: HTMLElement; label: HTMLElement } | null {
   const inputs = Array.from(host.querySelectorAll('input[type="text"]'))
   for (const input of inputs) {
@@ -190,16 +306,26 @@ function locateHeader(host: Element): { row: HTMLElement; label: HTMLElement } |
   return null
 }
 
-// ── 页签栏组件（Portal 进官方 header 行）────────────────────────────────
+// ── 图标 ────────────────────────────────────────────────────────────────
+const I = {
+  pen: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  x: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+}
+
+// ── 页签栏（Portal 进官方 header 行）───────────────────────────────────
 function TabStrip(props: {
-  items: WorkspaceLike[]
+  groups: readonly WsGroup[]
   active: string
-  onSelect: (id: string) => void
-  onRename: (wsId: string) => void
-  onDelete: (wsId: string) => void
+  ready: boolean
+  onPick: (id: string) => void
+  onRename: (id: string) => void
+  onMembers: (id: string) => void
+  onDelete: (id: string) => void
+  onAdd: () => void
 }): ReactNode {
-  const { items, active, onSelect, onRename, onDelete } = props
-  const [ctx, setCtx] = useState<{ x: number; y: number; wsId: string } | null>(null)
+  const { groups, active, ready, onPick, onRename, onMembers, onDelete, onAdd } = props
+  const [ctx, setCtx] = useState<{ x: number; y: number; id: string } | null>(null)
 
   useEffect(() => {
     if (!ctx) return
@@ -215,16 +341,70 @@ function TabStrip(props: {
     }
   }, [ctx])
 
-  const menuBtn = (label: string, danger: boolean, onPick: () => void): ReactNode =>
+  const opBtn = (id: string, kind: 'rename' | 'members' | 'delete', title: string, icon: string): ReactNode =>
     h(
       'button',
       {
-        key: label,
+        type: 'button',
+        'data-dsh-ws-op': '',
+        title,
+        'aria-label': title,
+        onClick: (e: { stopPropagation: () => void }) => {
+          e.stopPropagation()
+          if (kind === 'rename') onRename(id)
+          else if (kind === 'members') onMembers(id)
+          else onDelete(id)
+        },
+      },
+      h('span', { dangerouslySetInnerHTML: { __html: icon } }),
+    )
+
+  const tabOf = (id: string): ReactNode => {
+    const isDefault = id === DEFAULT_TAB
+    const name = isDefault ? tt('tab.default') : (groupOf(id)?.name || '')
+    const g = isDefault ? undefined : groupOf(id)
+    const count = g ? g.workspaceIds.length : 0
+    return h(
+      'span',
+      {
+        key: id,
+        role: 'tab',
+        'aria-selected': active === id,
+        'data-dsh-ws-tab': '',
+        'data-dsh-ws-id': id,
+        title: isDefault ? tt('defaultHint') : tt('tab.groupTitle', { name, n: String(count) }),
+        onClick: (e: { stopPropagation: () => void }) => {
+          e.stopPropagation()
+          onPick(id)
+        },
+        onContextMenu: (e: { preventDefault: () => void; stopPropagation: () => void; clientX: number; clientY: number }) => {
+          if (isDefault) return
+          e.preventDefault()
+          e.stopPropagation()
+          setCtx({ x: e.clientX, y: e.clientY, id })
+        },
+      },
+      [
+        name,
+        !isDefault
+          ? [
+              opBtn(id, 'members', tt('ctx.members'), I.pen),
+              opBtn(id, 'delete', tt('ctx.delete'), I.x),
+            ]
+          : null,
+      ],
+    )
+  }
+
+  const menuBtn = (label: string, danger: boolean, onPickAction: () => void): ReactNode =>
+    h(
+      'button',
+      {
         type: 'button',
         onClick: (e: { stopPropagation: () => void }) => {
           e.stopPropagation()
           setCtx(null)
-          onPick()
+          onPickAction()
         },
         style: {
           display: 'flex',
@@ -233,9 +413,7 @@ function TabStrip(props: {
           width: '100%',
           border: 0,
           background: 'transparent',
-          color: danger
-            ? 'var(--dsw-alias-state-error-primary,#e5484d)'
-            : 'var(--dsw-alias-label-primary,#e6edf3)',
+          color: danger ? 'var(--dsw-alias-state-error-primary,#e5484d)' : 'var(--dsw-alias-label-primary,#e6edf3)',
           padding: '7px 10px',
           borderRadius: 7,
           font: 'inherit',
@@ -247,89 +425,66 @@ function TabStrip(props: {
       label,
     )
 
+  const addLabel = tt('add.tab')
   return h(
     'div',
     {
       'data-dsh-ws-tabs-bar': '',
       role: 'tablist',
-      'aria-label': tt('tab.all'),
+      'aria-label': tt('tab.default'),
       onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
-      onContextMenu: (e: { preventDefault: () => void; stopPropagation: () => void; target: EventTarget }) => {
-        e.preventDefault()
-        e.stopPropagation()
-        const tab = (e.target as HTMLElement).closest('[data-dsh-ws-tab]')
-        const id = (tab && tab.getAttribute('data-dsh-ws-id')) || ''
-        if (!id || id === ALL_TAB) return
-        setCtx({ x: (e as unknown as MouseEvent).clientX, y: (e as unknown as MouseEvent).clientY, wsId: id })
-      },
     },
     [
+      tabOf(DEFAULT_TAB),
+      ...groups.map((g) => tabOf(g.id)),
       h(
         'button',
         {
-          key: ALL_TAB,
+          key: '__add',
           type: 'button',
-          role: 'tab',
-          'aria-selected': active === ALL_TAB,
-          'data-dsh-ws-tab': '',
-          'data-dsh-ws-id': ALL_TAB,
-          onClick: () => onSelect(ALL_TAB),
-        },
-        tt('tab.all'),
-      ),
-      ...items.map((w) => {
-        const id = w.workspaceId || ''
-        const name = w.title || w.path || id
-        return h(
-          'button',
-          {
-            key: id,
-            type: 'button',
-            role: 'tab',
-            'aria-selected': active === id,
-            title: tt('tab.title', { name }),
-            'data-dsh-ws-tab': '',
-            'data-dsh-ws-id': id,
-            onClick: () => onSelect(id),
+          'data-dsh-ws-add': '',
+          title: addLabel,
+          'aria-label': addLabel,
+          onClick: (e: { stopPropagation: () => void }) => {
+            e.stopPropagation()
+            onAdd()
           },
-          name,
-        )
-      }),
-      ctx
-        ? h(
-            'div',
-            {
-              key: 'ctx-menu',
-              onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
-              style: {
-                position: 'fixed',
-                left: Math.max(8, Math.min(ctx.x, (window.innerWidth || 400) - 220)),
-                top: Math.max(8, ctx.y),
-                zIndex: 4100,
-                minWidth: 180,
-                padding: 6,
-                border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.4))',
-                borderRadius: 10,
-                background: 'var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2, #202124))',
-                boxShadow: '0 12px 32px rgba(0,0,0,.28)',
+        },
+        h('span', { dangerouslySetInnerHTML: { __html: I.plus } }),
+      ),
+      ctx && !ready
+        ? null
+        : ctx
+          ? h(
+              'div',
+              {
+                key: 'ctx-menu',
+                onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+                style: {
+                  position: 'fixed',
+                  left: Math.max(8, Math.min(ctx.x, (window.innerWidth || 900) - 220)),
+                  top: Math.max(8, ctx.y),
+                  zIndex: 4100,
+                  minWidth: 180,
+                  padding: 6,
+                  border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.4))',
+                  borderRadius: 10,
+                  background: 'var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2, #202124))',
+                  boxShadow: '0 12px 32px rgba(0,0,0,.28)',
+                },
               },
-            },
-            [
-              menuBtn(tt('ctx.rename'), false, () => onRename(ctx.wsId)),
-              menuBtn(tt('ctx.delete'), true, () => onDelete(ctx.wsId)),
-            ],
-          )
-        : null,
+              [
+                menuBtn(tt('ctx.rename'), false, () => onRename(ctx.id)),
+                menuBtn(tt('ctx.members'), false, () => onMembers(ctx.id)),
+                menuBtn(tt('ctx.delete'), true, () => onDelete(ctx.id)),
+              ],
+            )
+          : null,
     ],
   )
 }
 
-// ── 重命名 / 删除工作区对话框（官方 Modal 同款）──────────────────────────
-let knownWorkspaceTitles: string[] = []
-function hasKnownTitle(title: string): boolean {
-  return knownWorkspaceTitles.includes(title)
-}
-
+// ── 对话框（重命名 / 管理工作区 / 删除）──────────────────────────────────
 function btnStyle(opts: { primary?: boolean; danger?: boolean; disabled?: boolean }, busy: boolean): CSSProperties {
   const base: CSSProperties = {
     padding: '6px 14px',
@@ -355,156 +510,201 @@ function btnStyle(opts: { primary?: boolean; danger?: boolean; disabled?: boolea
   return base
 }
 
-function DialogHost(props: {
-  dialog: { kind: 'rename' | 'delete'; wsId: string } | null
-  ws: WorkspaceLike | undefined
-  workspaceService: WorkspaceServiceLike | null
-  onDone: () => void
-}): ReactNode {
-  const { dialog, ws, workspaceService, onDone } = props
-  const [draft, setDraft] = useState('')
+function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode {
+  const g = groupOf(props.groupId)
+  const [draft, setDraft] = useState(g?.name || '')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (dialog) {
-      setDraft(ws?.title || '')
-      setError(null)
-      setBusy(false)
-    }
-  }, [dialog, ws])
-
-  if (!dialog || !ws || !workspaceService) return null
+  if (!g) return null
   const Modal = primitives().Modal
   if (!Modal) return null
 
+  const trimmed = draft.trim()
+  const duplicate = trimmed !== '' && trimmed !== g.name && groups.some((x) => x.id !== g.id && x.name === trimmed)
+  const blocked = busy || trimmed === '' || duplicate
+  const save = () => {
+    if (blocked) return
+    setBusy(true)
+    commitGroups((cur) => cur.map((x) => (x.id === g.id ? { ...x, name: trimmed } : x)))
+    setBusy(false)
+    props.onDone()
+  }
   const close = () => {
-    if (busy) return
-    onDone()
+    if (!busy) props.onDone()
   }
-  const name = ws.title || ws.path || ws.workspaceId || ''
+  return h(
+    Modal,
+    {
+      open: true,
+      onClose: close,
+      title: tt('rename.title'),
+      closeLabel: tt('cancel'),
+      footer: [
+        h('button', { key: 'cancel', type: 'button', onClick: close, style: btnStyle({}, busy) }, tt('cancel')),
+        h('button', {
+          key: 'save',
+          type: 'button',
+          disabled: busy || blocked,
+          onClick: save,
+          style: btnStyle({ primary: true, disabled: blocked }, busy),
+        }, busy ? tt('rename.saving') : tt('rename.save')),
+      ],
+    },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }, [
+      h('input', {
+        key: 'inp',
+        type: 'text',
+        autoFocus: true,
+        value: draft,
+        maxLength: 40,
+        placeholder: tt('rename.placeholder'),
+        onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
+        onKeyDown: (e: { key: string }) => {
+          if (e.key === 'Enter') save()
+        },
+        style: {
+          boxSizing: 'border-box',
+          width: '100%',
+          minHeight: 36,
+          padding: '0 10px',
+          border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.4))',
+          borderRadius: 8,
+          background: 'var(--dsw-alias-bg-layer-2, rgba(255,255,255,.04))',
+          color: 'var(--dsw-alias-label-primary, inherit)',
+          fontSize: 13,
+          outline: 'none',
+        },
+      }),
+      duplicate
+        ? h('div', { key: 'dup', style: { fontSize: 12, color: 'var(--dsw-alias-state-error-primary,#e5484d)' } }, tt('rename.dup'))
+        : null,
+    ]),
+  )
+}
 
-  if (dialog.kind === 'rename') {
-    const trimmed = draft.trim()
-    const duplicate = trimmed !== '' && trimmed !== name && hasKnownTitle(trimmed)
-    const blocked = busy || trimmed === '' || trimmed === name || duplicate
-    const confirm = () => {
-      if (blocked) return
-      setBusy(true)
-      setError(null)
-      workspaceService
-        .rename(ws.workspaceId || '', trimmed)
-        .then(() => {
-          setBusy(false)
-          onDone()
-        })
-        .catch((reason: unknown) => {
-          setBusy(false)
-          setError(reason instanceof Error ? reason.message : String(reason))
-        })
-    }
-    return el(
-      Modal,
-      {
-        open: true,
-        onClose: close,
-        title: tt('rename.title'),
-        closeLabel: tt('cancel'),
-        footer: [
-          h('button', {
-            key: 'cancel',
-            type: 'button',
-            onClick: close,
-            style: btnStyle({}, busy),
-          }, tt('cancel')),
-          h('button', {
-            key: 'save',
-            type: 'button',
-            disabled: busy || blocked,
-            onClick: confirm,
-            style: btnStyle({ primary: true, disabled: blocked }, busy),
-          }, busy ? tt('rename.saving') : tt('rename.save')),
-        ],
-      },
-      h('div', null, [
-        h('div', { key: 'field', style: { display: 'flex', flexDirection: 'column', gap: 8 } }, [
-          h('label', { key: 'lbl', style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary,#a8abb3)' } }, tt('rename.field')),
-          h('input', {
-            key: 'inp',
-            type: 'text',
-            autoFocus: true,
-            value: draft,
-            maxLength: 80,
-            placeholder: tt('rename.placeholder'),
-            onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
-            onKeyDown: (e: { key: string }) => {
-              if (e.key === 'Enter') confirm()
-            },
-            style: {
-              boxSizing: 'border-box',
-              width: '100%',
-              minHeight: 36,
-              padding: '0 10px',
-              border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.4))',
-              borderRadius: 8,
-              background: 'var(--dsw-alias-bg-layer-2, rgba(255,255,255,.04))',
-              color: 'var(--dsw-alias-label-primary, inherit)',
-              fontSize: 13,
-              outline: 'none',
-            },
-          }),
-        ]),
-        error
-          ? h('div', { key: 'err', role: 'alert', style: { marginTop: 10, color: 'var(--dsw-alias-state-error-primary,#e5484d)', fontSize: 12 } }, error)
-          : null,
-        duplicate
-          ? h('div', { key: 'dup', style: { marginTop: 10, color: 'var(--dsw-alias-state-error-primary,#e5484d)', fontSize: 12 } }, tt('rename.dup'))
-          : null,
-      ]),
-    )
+function MembersDialog(props: {
+  groupId: string
+  items: WorkspaceLike[]
+  membership: Map<string, string>
+  onDone: () => void
+}): ReactNode {
+  const g = groupOf(props.groupId)
+  const { items, membership, onDone } = props
+  if (!g) return null
+  const Modal = primitives().Modal
+  if (!Modal) return null
+  const included = new Set(g.workspaceIds)
+
+  const toggle = (wsId: string, on: boolean): void => {
+    commitGroups((cur) => {
+      const moved = cur.map((x) =>
+        x.id === g.id
+          ? x
+          : { ...x, workspaceIds: x.workspaceIds.filter((id) => id !== wsId) },
+      )
+      return moved.map((x) => {
+        if (x.id !== g.id) return x
+        const has = x.workspaceIds.includes(wsId)
+        if (on && !has) return { ...x, workspaceIds: [...x.workspaceIds, wsId] }
+        if (!on && has) return { ...x, workspaceIds: x.workspaceIds.filter((id) => id !== wsId) }
+        return x
+      })
+    })
   }
 
+  return h(
+    Modal,
+    {
+      open: true,
+      onClose: onDone,
+      title: tt('members.title', { name: g.name }),
+      closeLabel: tt('cancel'),
+      footer: [h('button', { key: 'ok', type: 'button', onClick: onDone, style: btnStyle({ primary: true }, false) }, tt('done'))],
+    },
+    h('div', null, [
+      h('div', { key: 'desc', style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary,#a8abb3)', marginBottom: 10 } }, tt('members.desc')),
+      items.length === 0
+        ? h('div', { key: 'empty', style: { padding: '18px 4px', textAlign: 'center', fontSize: 13, color: 'var(--dsw-alias-label-secondary,#a8abb3)' } }, tt('members.empty'))
+        : h(
+            'div',
+            { key: 'list', style: { display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 260, overflowY: 'auto' } },
+            items.map((w) => {
+              const wsId = w.workspaceId || ''
+              const name = w.title || w.path || wsId
+              const inGroup = included.has(wsId)
+              const owner = membership.get(wsId)
+              return h(
+                'label',
+                {
+                  key: wsId,
+                  style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '7px 10px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  },
+                  onMouseEnter: (e: { currentTarget: HTMLElement }) => {
+                    e.currentTarget.style.background = 'var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.12))'
+                  },
+                  onMouseLeave: (e: { currentTarget: HTMLElement }) => {
+                    e.currentTarget.style.background = 'transparent'
+                  },
+                },
+                [
+                  h('input', {
+                    key: 'ck',
+                    type: 'checkbox',
+                    checked: inGroup,
+                    onChange: (e: { target: { checked: boolean } }) => toggle(wsId, e.target.checked),
+                    style: { margin: 0, width: 15, height: 15, flex: 'none', accentColor: 'var(--dsw-alias-state-business-primary,#4f9eff)' },
+                  }),
+                  h('span', { key: 'n', style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+                  h('span', { key: 'o', style: { flex: 'none', fontSize: 11, color: 'var(--dsw-alias-label-caption,#8a8e96)' } }, owner ? tt('members.at', { name: groupOf(owner)?.name || owner }) : tt('members.atDefault')),
+                ],
+              )
+            }),
+          ),
+    ]),
+  )
+}
+
+function DeleteDialog(props: { groupId: string; onDone: () => void }): ReactNode {
+  const g = groupOf(props.groupId)
+  const [busy, setBusy] = useState(false)
+  if (!g) return null
+  const Modal = primitives().Modal
+  if (!Modal) return null
+  const count = g.workspaceIds.length
+  const close = () => {
+    if (!busy) props.onDone()
+  }
   const confirm = () => {
     if (busy) return
     setBusy(true)
-    setError(null)
-    workspaceService
-      .delete(ws.workspaceId || '')
-      .then(() => {
-        setBusy(false)
-        onDone()
-      })
-      .catch((reason: unknown) => {
-        setBusy(false)
-        setError(reason instanceof Error ? reason.message : String(reason))
-      })
+    commitGroups((cur) => cur.filter((x) => x.id !== g.id))
+    setBusy(false)
+    props.onDone()
   }
-  return el(
+  return h(
     Modal,
     {
       open: true,
       onClose: close,
       title: tt('delete.title'),
       closeLabel: tt('cancel'),
-      description: tt('delete.desc', { name }),
+      description: tt('delete.desc', { name: g.name, n: String(count) }),
       footer: [
         h('button', { key: 'cancel', type: 'button', onClick: close, style: btnStyle({}, busy) }, tt('cancel')),
-        h('button', {
-          key: 'del',
-          type: 'button',
-          disabled: busy,
-          onClick: confirm,
-          style: btnStyle({ danger: true }, busy),
-        }, busy ? tt('delete.busy') : tt('delete.ok')),
+        h('button', { key: 'del', type: 'button', disabled: busy, onClick: confirm, style: btnStyle({ danger: true }, busy) }, busy ? tt('delete.busy') : tt('delete.ok')),
       ],
     },
-    error
-      ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary,#e5484d)', fontSize: 12 } }, error)
-      : null,
+    null,
   )
 }
 
-// ── 官方槽包裹壳：过滤数据 + 原位页签栏 ─────────────────────────────────
+// ── 官方槽包裹壳 ────────────────────────────────────────────────────────
 interface ShellProps {
   OfficialComp: unknown
   wide?: boolean
@@ -516,50 +716,83 @@ interface ShellProps {
 
 function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const { OfficialComp, wide = true, useSessions, useWorkspaces } = innerProps
+  const gs = useGroups()
+  const groupList = gs.groups
   const [active, setActive] = useState<string>(() => {
     try {
       const saved = window.localStorage.getItem(ACTIVE_KEY)
-      return saved === null ? ALL_TAB : saved
+      return saved === null ? DEFAULT_TAB : saved
     } catch {
-      return ALL_TAB
+      return DEFAULT_TAB
     }
   })
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
-  const [dialog, setDialog] = useState<{ kind: 'rename' | 'delete'; wsId: string } | null>(null)
+  const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string } | null>(null)
 
-  const wsState = (useWorkspaces ? useWorkspaces((s: unknown) => s) : null) as WsListState | null
-  const items: WorkspaceLike[] = Array.isArray(wsState?.items) ? wsState.items : []
-  const activeWs = items.find((w) => w.workspaceId === active)
+  // 全量官方数据（只读用途：计算作用域）。
+  const listState = (useSessions ? useSessions((s: unknown) => s) : null) as SessionListState | null
+  const wsState = useWorkspaces ? (useWorkspaces((s: unknown) => s) as WsListState | null) : null
+  const itemsAll: WorkspaceLike[] = (wsState && Array.isArray(wsState.items) ? wsState.items : []) as WorkspaceLike[]
 
-  // 工作区被删除 / 尚未就绪：回退到总览页签；对话框目标消失时关闭。
+  // 归属：workspaceId -> groupId | null（null = 默认）。
+  const membership = new Map<string, string>()
+  for (const g of groupList) for (const id of g.workspaceIds) if (!membership.has(id)) membership.set(id, g.id)
+
+  // 当前页签作用域的工作区 id。
+  const scopeWsIds: string[] = (() => {
+    if (active === DEFAULT_TAB) {
+      return itemsAll
+        .map((w) => w.workspaceId)
+        .filter((id): id is string => !!id && !membership.has(id))
+    }
+    const g = groupList.find((x) => x.id === active)
+    if (!g) return []
+    const known = new Set(itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v))
+    return g.workspaceIds.filter((id) => known.has(id))
+  })()
+
+  // 当前页签作用域的会话 id。
+  const scopeSessionIds: string[] = (() => {
+    const inScope = (wid: string): boolean =>
+      active === DEFAULT_TAB ? !membership.has(wid) : scopeWsIds.includes(wid)
+    const ids: string[] = []
+    for (const w of itemsAll) {
+      if (!w.workspaceId || !inScope(w.workspaceId)) continue
+      for (const s of w.sessionIds || []) ids.push(s)
+    }
+    if (active === DEFAULT_TAB && listState) {
+      for (const id of unownedSessionIds(listState, itemsAll)) ids.push(id)
+    }
+    return Array.from(new Set(ids))
+  })()
+
+  // 孤儿清理（官方删了工作区则从分组中剔除）。
+  const knownRef = useRef('')
   useEffect(() => {
-    if (active !== ALL_TAB && !activeWs && items.length > 0) setActive(ALL_TAB)
-    if (dialog && !items.some((w) => w.workspaceId === dialog.wsId)) setDialog(null)
-  }, [active, activeWs, items, dialog])
+    const known = new Set(itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v))
+    const key = [...known].sort().join('|')
+    if (key === knownRef.current) return
+    knownRef.current = key
+    let changed = false
+    for (const g of groupList) {
+      if (g.workspaceIds.some((id) => !known.has(id))) {
+        changed = true
+        break
+      }
+    }
+    if (!changed) return
+    commitGroups((cur) => cur.map((g) => ({ ...g, workspaceIds: g.workspaceIds.filter((id) => known.has(id)) })))
+  }, [itemsAll]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 同步已知工作区标题（重命名重名校验）。
+  // 页签失效回退：分组加载后 active 不存在则回默认；对话框目标消失则关闭。
   useEffect(() => {
-    knownWorkspaceTitles = items.map((w) => w.title || '').filter(Boolean)
-  }, [items])
+    if (!gs.ready) return
+    if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) setActive(DEFAULT_TAB)
+    if (dialog && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
+  }, [gs.ready, active, groupList, dialog])
 
-  const tryExpand = (id: string): void => {
-    if (id === ALL_TAB) return
-    try {
-      const actions = innerProps.actions as { setGroupExpanded?: (id: string, expanded: boolean) => void } | null
-      if (actions && typeof actions.setGroupExpanded === 'function') actions.setGroupExpanded(id, true)
-    } catch { /* 忽略 */ }
-  }
-
-  const onPick = (id: string): void => {
-    setActive(id)
-    try {
-      window.localStorage.setItem(ACTIVE_KEY, id)
-    } catch { /* 忽略 */ }
-    tryExpand(id)
-  }
-
-  // 标题行定位：把页签栏 Portal 进官方 header 行，并隐藏官方标题 span。
+  // 标题行定位与隐藏：官方标题原位替换为页签栏。
   useLayoutEffect(() => {
     if (!wide) {
       setHeader(null)
@@ -581,28 +814,58 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     return () => window.clearInterval(timer)
   }, [wide])
 
-  // 官方重渲染把标题 span 恢复后重新隐藏（低成本幂等）。
   useLayoutEffect(() => {
     if (!header) return
     header.label.style.display = 'none'
   }, [header])
 
-  // 过滤数据 hooks：单页签时官方树只看到该工作区的会话 / 单工作区。
-  const officialProps: ShellProps = { ...innerProps }
-  if (active !== ALL_TAB && useSessions && activeWs) {
-    const ids = activeWs.sessionIds || []
-    const wsId = activeWs.workspaceId || ''
-    const raw = useSessions
-    officialProps.useSessions = (sel: unknown, eq?: unknown): unknown =>
-      raw((state: unknown) => (sel as (s: unknown) => unknown)(filterSessions(state as SessionListState, ids)), eq)
-    if (useWorkspaces) {
-      const rawWs = useWorkspaces
-      officialProps.useWorkspaces = (sel: unknown, eq?: unknown): unknown =>
-        rawWs((state: unknown) => (sel as (s: unknown) => unknown)(filterWorkspaces(state as WsListState, wsId)), eq)
+  const tryExpandAll = (ids: string[]): void => {
+    if (!ids.length) return
+    try {
+      const actions = innerProps.actions as { setGroupExpanded?: (id: string, expanded: boolean) => void } | null
+      if (actions && typeof actions.setGroupExpanded === 'function') {
+        for (const id of ids) actions.setGroupExpanded(id, true)
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  const onPick = (id: string): void => {
+    setActive(id)
+    try {
+      window.localStorage.setItem(ACTIVE_KEY, id)
+    } catch { /* 忽略 */ }
+    if (id !== DEFAULT_TAB) {
+      const g = groupList.find((x) => x.id === id)
+      if (g) tryExpandAll(g.workspaceIds)
     }
   }
 
-  const modalWs = dialog ? items.find((w) => w.workspaceId === dialog.wsId) : undefined
+  const onAdd = (): void => {
+    const nu: WsGroup = { id: 'g-' + Date.now().toString(36), name: tt('new.name'), workspaceIds: [] }
+    commitGroups((cur) => [...cur, nu])
+    setActive(nu.id)
+    try {
+      window.localStorage.setItem(ACTIVE_KEY, nu.id)
+    } catch { /* 忽略 */ }
+    setDialog({ kind: 'rename', id: nu.id })
+  }
+
+  // 过滤 hooks：页签作用域驱动官方树。
+  const officialProps: ShellProps = { ...innerProps }
+  if (useSessions) {
+    const raw = useSessions
+    const ids = scopeSessionIds
+    officialProps.useSessions = (sel: unknown, eq?: unknown): unknown =>
+      raw((state: unknown) => (sel as (s: unknown) => unknown)(filterSessions(state as SessionListState, ids)), eq)
+  }
+  if (useWorkspaces) {
+    const rawWs = useWorkspaces
+    const ids = scopeWsIds
+    officialProps.useWorkspaces = (sel: unknown, eq?: unknown): unknown =>
+      rawWs((state: unknown) => (sel as (s: unknown) => unknown)(filterWorkspaces(state as WsListState, ids)), eq)
+  }
+
+  const dialogGroup = dialog ? groupList.find((g) => g.id === dialog.id) : undefined
 
   return h(
     'div',
@@ -612,37 +875,45 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
       header
         ? createPortal(
             h(TabStrip, {
-              items,
+              groups: groupList,
               active,
-              onSelect: onPick,
-              onRename: (wsId: string) => setDialog({ kind: 'rename', wsId }),
-              onDelete: (wsId: string) => setDialog({ kind: 'delete', wsId }),
+              ready: gs.ready,
+              onPick,
+              onRename: (id: string) => setDialog({ kind: 'rename', id }),
+              onMembers: (id: string) => setDialog({ kind: 'members', id }),
+              onDelete: (id: string) => setDialog({ kind: 'delete', id }),
+              onAdd,
             }),
             header.row,
           )
         : null,
-      dialog
-        ? h(DialogHost, {
-            dialog,
-            ws: modalWs,
-            workspaceService: workspaceServiceRef.current,
-            onDone: () => setDialog(null),
-          })
+      dialog && dialog.kind === 'rename' && dialogGroup
+        ? h(RenameDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
+        : null,
+      dialog && dialog.kind === 'members' && dialogGroup
+        ? h(MembersDialog, { groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })
+        : null,
+      dialog && dialog.kind === 'delete' && dialogGroup
+        ? h(DeleteDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
         : null,
     ],
   )
 }
 
-// ── install：包裹官方 sidebar.workspaces 条目 ───────────────────────────
-const workspaceServiceRef: { current: WorkspaceServiceLike | null } = { current: null }
-
+// ── install ─────────────────────────────────────────────────────────────
 export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   if (typeof document === 'undefined') return () => {}
-  try {
-    workspaceServiceRef.current = (ctx.get?.('workspaces') as WorkspaceServiceLike | undefined) || null
-  } catch {
-    workspaceServiceRef.current = null
+  rpcCall = (method: string, payload?: Record<string, unknown>) => {
+    try {
+      if (!ctx.connection?.rpc?.call) {
+        return Promise.resolve({ ok: false, error: { code: 'no-rpc', message: tt('warn.noRpc') } })
+      }
+      return ctx.connection.rpc.call('/width-slider', method, payload || {})
+    } catch {
+      return Promise.resolve({ ok: false, error: { code: 'no-rpc', message: tt('warn.noRpc') } })
+    }
   }
+  void loadGroups()
 
   const style = document.createElement('style')
   style.id = STYLE_ID
@@ -722,6 +993,9 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     }
     unwrap()
     style.remove()
-    workspaceServiceRef.current = null
+    rpcCall = null
+    groupReady = false
+    groups = []
+    emitGroups()
   }
 }

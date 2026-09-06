@@ -29,6 +29,57 @@ import { deleteSessionById, type SessionDeleteCtx } from './host/sessionDeleteSe
 
 const SETTINGS_DIR = join(resolveDshHome(), 'storages', 'dsh-plugin-width-slider')
 const SETTINGS_FILE = join(SETTINGS_DIR, 'settings.json')
+/** 工作区分组文件夹持久化（默认页签为根；文件夹内为归属工作区 id）。 */
+const GROUPS_FILE = join(SETTINGS_DIR, 'workspace-groups.json')
+
+interface GroupFileItem { id?: unknown; name?: unknown; workspaceIds?: unknown }
+interface GroupsFile { version?: unknown; groups?: unknown }
+
+function normalizeGroups(raw: unknown): Array<{ id: string; name: string; workspaceIds: string[] }> {
+  const list = raw && typeof raw === 'object' && Array.isArray((raw as GroupsFile).groups)
+    ? (raw as GroupsFile).groups as unknown[]
+    : []
+  const out: Array<{ id: string; name: string; workspaceIds: string[] }> = []
+  const seen = new Set<string>()
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue
+    const it = item as GroupFileItem
+    if (typeof it.id !== 'string' || it.id === '' || seen.has(it.id)) continue
+    const name = typeof it.name === 'string' && it.name.trim() !== '' ? it.name.trim() : '未命名'
+    const workspaceIds = Array.isArray(it.workspaceIds)
+      ? it.workspaceIds.filter((v): v is string => typeof v === 'string' && v !== '')
+      : []
+    seen.add(it.id)
+    out.push({ id: it.id, name, workspaceIds })
+  }
+  return out
+}
+
+/** 读分组文件；缺失返回空数组，损坏改名保留现场。 */
+function readGroupsSync(): Array<{ id: string; name: string; workspaceIds: string[] }> {
+  try {
+    if (!existsSync(GROUPS_FILE)) return []
+    const raw = readFileSync(GROUPS_FILE, 'utf-8')
+    return normalizeGroups(JSON.parse(raw))
+  } catch (err) {
+    try {
+      if (existsSync(GROUPS_FILE)) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+        renameSync(GROUPS_FILE, GROUPS_FILE + '.corrupt-' + stamp)
+      }
+    } catch { /* 忽略 */ }
+    console.warn('[width-slider] workspace-groups.json 损坏或不可读，已按空分组处理并保留现场', err)
+    return []
+  }
+}
+
+/** 原子写分组文件。 */
+function writeGroupsSync(groups: Array<{ id: string; name: string; workspaceIds: string[] }>): void {
+  mkdirSync(SETTINGS_DIR, { recursive: true })
+  const tmp = GROUPS_FILE + '.tmp'
+  writeFileSync(tmp, JSON.stringify({ version: 1, groups }, null, 2), 'utf-8')
+  renameSync(tmp, GROUPS_FILE)
+}
 
 export { DEFAULT_FEATURE_SETTINGS, mergeSettings }
 export type { FeatureSettings }
@@ -100,6 +151,8 @@ export function apply(baseCtx: Context): void {
 
   // 当前配置（启动时读文件合并默认；写操作热更新）。
   let current = readSettingsSync()
+  // 工作区分组文件夹（默认根 + 用户文件夹）；由 client 经 RPC 读写。
+  let currentGroups = readGroupsSync()
 
   // 中文强制注入控制器（可热切换：注销即不再出现在组装后的系统提示里）。
   // 整体 try/catch：systemPrompt 服务缺失 / ctx 已卸载 / 上游同名冲突等
@@ -161,6 +214,21 @@ export function apply(baseCtx: Context): void {
             }
             current = next
             syncChinesePrompt(next)
+            return { ok: true, value: {} }
+          }
+          if (endpoint === 'wsGroupsRead') {
+            return { ok: true, value: { groups: currentGroups } }
+          }
+          if (endpoint === 'wsGroupsWrite') {
+            const groups = normalizeGroups((body as { groups?: unknown }).groups)
+            try {
+              writeGroupsSync(groups)
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err)
+              logger?.warn?.('[width-slider] wsGroupsWrite failed', message)
+              return { ok: false, error: { code: 'write-failed', message } }
+            }
+            currentGroups = groups
             return { ok: true, value: {} }
           }
           if (endpoint === 'sessionDelete') {

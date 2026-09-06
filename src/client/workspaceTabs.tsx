@@ -179,8 +179,15 @@ function emitGroups(): void {
   }
 }
 
+// 快照引用必须稳定（useSyncExternalStore 要求 getSnapshot 在 store 未变化时
+// 返回同一对象；每次新建字面量会触发无限重渲染 → React #185）。
+let groupSnapshot: { ready: boolean; failed: boolean; groups: readonly WsGroup[] } | null = null
 function getGroupSnapshot(): { ready: boolean; failed: boolean; groups: readonly WsGroup[] } {
-  return { ready: groupReady, failed: groupLoadFailed, groups }
+  if (groupSnapshot && groupSnapshot.ready === groupReady && groupSnapshot.failed === groupLoadFailed && groupSnapshot.groups === groups) {
+    return groupSnapshot
+  }
+  groupSnapshot = { ready: groupReady, failed: groupLoadFailed, groups }
+  return groupSnapshot
 }
 
 function subscribeGroups(cb: () => void): () => void {

@@ -25,6 +25,7 @@ import { installUiLocalize } from './think/uiLocalize.ts'
 import { applySavedWidth } from './widthPrefs.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { installSessionDelete } from './sessionDelete.ts'
+import { installWorkspaceTabs } from './workspaceTabs.tsx'
 import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
 import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
@@ -269,7 +270,7 @@ async function rpcWriteSettings(ctx: RpcClientContext, settings: unknown): Promi
   await ctx.connection.rpc.call('/width-slider', 'writeSettings', { settings })
 }
 
-export const inject = ['slots', 'locale', 'connection', 'sessions']
+export const inject = ['slots', 'locale', 'connection', 'sessions', 'workspaces']
 
 export function apply(ctx: RpcClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'width-slider: dictionaries')
@@ -282,7 +283,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel'
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel' | 'wsTabs'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -302,13 +303,16 @@ export function apply(ctx: RpcClientContext): void {
       ensure('nav', s.navScroll, () => installNavScrollPatch())
       ensure('owButton', s.openWithButton, () => installOpenWithButton(ctx))
       ensure('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
+      // 工作区分页：组件常驻（启动即包裹一次），开关只切换 wrapper 内 enabled
+      // 状态（显示标签/过滤），不再反复安装/卸载组件——开关即时生效。
+      ensure('wsTabs', true, () => installWorkspaceTabs(ctx as never))
     }
 
     const unsubscribe = onSettingsChanged(sync)
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel', 'wsTabs'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

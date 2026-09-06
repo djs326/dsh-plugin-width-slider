@@ -22,8 +22,9 @@
 | Node.js | `^22.11 \|\| >= 24` |
 | 平台 | 仅 `win32` |
 
-> 本插件已在 **DSH Desktop**（[anywhere-labs/dsh-desktop](https://github.com/anywhere-labs/dsh-desktop)，Windows 桌面壳，Electron 薄壳 + DSH Host + Web renderer）上实测通过。
-> 若你的 DSH 是自建/Web 版，机制相同（同为 Web 端注入），但以桌面版为准验证。
+> 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 收编）由作者在真机验证主要流程
+> （逐项清单见 [docs/verification-0.4.0-openwith.md](./docs/verification-0.4.0-openwith.md)）。若你的 DSH 是自建/Web 版，
+> 机制相同（同为 Web 端注入），但以桌面版为准验证。
 
 ---
 
@@ -38,7 +39,7 @@
 | 界面中文化 | 官方残留硬编码英文标签（Tool Call、Thinking 等）替换为中文 | 开 |
 | 弹窗调宽 | 官方设置弹窗右侧拖柄可调宽度（记忆宽度，双击复位 800px） | 开 |
 | tab 滚动 | 官方设置左侧 tab 列表超高时显示滚动条 | 开 |
-| Open With 按钮 | 对话头部胶囊按钮（左键启动当前项 / 右键下拉切换），在当前会话目录启动 | 开 |
+| Open With 按钮 | 对话头部胶囊按钮（主按钮启动当前项 / 右侧箭头展开菜单切换），在当前会话目录启动 | 开 |
 | Open With 设置 | 总控页管理打开项：预设/自定义、组内拖拽排序、设为当前、隐藏、添加/编辑/删除 | 开 |
 
 开关在 DSH 设置 → **对话宽度（Width Slider）** 区块内的功能总控页操作，改动即时生效、重启保留。
@@ -68,12 +69,19 @@
 "actions 槽位修复版"（inject 目标 = register 的 slot 自身）。若之前装过
 dsh-plugin-open-with，请将其移除或停用，避免出现双按钮/双设置。打开的
 配置沿用同一份数据文件（`$DSH_HOME/storages/dsh-open-with/settings.json`），
-停用官方插件后你的预设/自定义项无缝保留。自定义项请填 `.exe` 可执行文件
-路径（直接启动，不经 cmd 二次解析，路径含 `&` 等符号也不受影响）。
+停用官方插件后你的预设/自定义项无缝保留。**首次安装（无该文件）时按默认
+4 个预设项工作**（VS Code / 终端 / PowerShell / 资源管理器），添加自定义项
+后才会落盘。自定义项请填 `.exe` / `.com` 可执行文件路径（直接启动，
+不经 cmd 二次解析，路径含 `&` 等符号也不受影响）。启动子进程由 DSH
+桌面版内置 subprocess 服务承担（`@deepseek-ai/dsh-subprocess` 仅作
+peer 声明）。
 
 ---
 
 ## 安装
+
+> 任选一种方式安装后，请**重启 DSH Desktop**（host 端 `index.mjs`、client bundle
+> 与 `/width-slider`、`/open-with` RPC 均需重启生效）。
 
 ### 方式一：npm（推荐）
 
@@ -171,6 +179,9 @@ dsh-plugin-width-slider/
 │   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider + /open-with RPC + storages 配置
 │   ├── host/
 │   │   └── openWithService.ts       # Open With host 服务（收编：launch/图标提取/路径解析/设置文件）
+│   ├── shared/
+│   │   ├── settings.ts              # 功能开关契约唯一真源（host/client 共用）
+│   │   └── dshHome.ts               # $DSH_HOME 解析
 │   └── client/
 │       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载）
 │       ├── config.ts                # FeatureSettings 契约 + client 配置 store（热切换源）
@@ -183,7 +194,10 @@ dsh-plugin-width-slider/
 │       ├── think/
 │       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（收编，dsh-ws- 前缀）
 │       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（收编）
+│       ├── lang.ts                  # 界面语言判定（中文化门控/双语文本）
+│       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案
+├── env.d.ts                         # 运行时模块类型桩
 ├── cordis.patch.yml                 # bundle patch：insert width-slider
 ├── tsdown.config.ts
 ├── tsconfig.json

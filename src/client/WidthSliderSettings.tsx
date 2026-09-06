@@ -237,6 +237,20 @@ export function WidthSliderSettings({ readSettings, writeSettings, t }: WidthSli
           checked={settings.uiLocalize}
           onChange={(checked) => persist({ uiLocalize: checked })}
         />
+        <SwitchRow
+          id={id('enable-resize')}
+          label={t('enableResize')}
+          info={t('enableResizeInfo')}
+          checked={settings.dialogResize}
+          onChange={(checked) => persist({ dialogResize: checked })}
+        />
+        <SwitchRow
+          id={id('enable-nav-scroll')}
+          label={t('enableNavScroll')}
+          info={t('enableNavScrollInfo')}
+          checked={settings.navScroll}
+          onChange={(checked) => persist({ navScroll: checked })}
+        />
       </Card>
     </div>
   )

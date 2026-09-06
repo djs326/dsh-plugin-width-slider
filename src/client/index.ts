@@ -21,6 +21,7 @@ import { WidthSliderSettings } from './WidthSliderSettings.tsx'
 import { en, zh, type WidthSliderKey } from './locales.ts'
 import { AssistantStepView, THINK_STYLES } from './think/thinkView.tsx'
 import { installUiLocalize } from './think/uiLocalize.ts'
+import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -142,9 +143,10 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    const installed: Partial<Record<'handle' | 'think' | 'localize', Disposer>> = {}
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav'
+    const installed: Partial<Record<Slot, Disposer>> = {}
 
-    const ensure = (slot: 'handle' | 'think' | 'localize', want: boolean, installer: () => Disposer): void => {
+    const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
       if (want && installed[slot] === undefined) installed[slot] = installer()
       if (!want && installed[slot] !== undefined) {
         installed[slot]!()
@@ -157,13 +159,15 @@ export function apply(ctx: RpcClientContext): void {
       ensure('handle', s.widthSlider, () => installHandleHide())
       ensure('think', s.thinkRender, () => installThinkRenderer(ctx))
       ensure('localize', s.uiLocalize, () => installLocalize())
+      ensure('resize', s.dialogResize, () => installDialogResizePatch())
+      ensure('nav', s.navScroll, () => installNavScrollPatch())
     }
 
     const unsubscribe = onSettingsChanged(sync)
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

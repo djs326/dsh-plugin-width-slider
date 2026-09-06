@@ -23,6 +23,10 @@ export interface WidthSliderKey {
   groupUi: string
   enableLocalize: string
   enableLocalizeInfo: string
+  enableResize: string
+  enableResizeInfo: string
+  enableNavScroll: string
+  enableNavScrollInfo: string
   disabledHint: string
 }
 
@@ -50,6 +54,10 @@ const zh: Record<keyof WidthSliderKey, string> = {
   groupUi: '界面',
   enableLocalize: '界面英文中文化',
   enableLocalizeInfo: '把官方界面残留的硬编码英文标签替换为中文（如 Tool Call→工具调用、Thinking→思考）。',
+  enableResize: '设置弹窗可拖拽调宽',
+  enableResizeInfo: '给官方设置面板弹窗加右侧拖柄：拖动调整宽度（双击拖柄恢复默认 800px），宽度会被记住。',
+  enableNavScroll: '设置左侧 tab 栏超高滚动',
+  enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
 }
 
@@ -77,6 +85,10 @@ const en: Record<keyof WidthSliderKey, string> = {
   groupUi: 'Interface',
   enableLocalize: 'Localize interface labels to Chinese',
   enableLocalizeInfo: 'Replaces leftover hard-coded English UI labels with Chinese (Tool Call to 工具调用, Thinking to 思考, etc.).',
+  enableResize: 'Resizable settings dialog',
+  enableResizeInfo: 'Adds a right-edge drag handle to the official settings dialog (double-click to restore the default 800px); the width is remembered.',
+  enableNavScroll: 'Scrollable settings nav when tabs overflow',
+  enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
 }
 

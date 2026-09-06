@@ -112,7 +112,8 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
     }
     case 'cmd': {
       const cmdPath = windir + '\\System32\\cmd.exe'
-      const inner = 'title ' + quoteForCmd(cmdPath) + ' && cd /d ' + quoteForCmd(cwd)
+      // title 是窗口标题（裸路径，避免字面引号）；cd 参数需 cmd 层转义。
+      const inner = 'title ' + cmdPath + ' && cd /d ' + quoteForCmd(cwd)
       return { argv: ['cmd', '/c', 'start', quoteForCmd(cmdPath), 'cmd', '/K', inner], useSpawnCwd: false }
     }
     case 'powershell': {

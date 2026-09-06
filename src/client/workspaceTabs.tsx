@@ -46,10 +46,6 @@ const TABS_CSS = `
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover{color:var(--dsw-alias-label-primary,#e6edf3)}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]{color:var(--dsw-alias-label-primary,#e6edf3);font-weight:600}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]::after{content:"";position:absolute;left:8px;right:6px;bottom:0;height:2px;border-radius:2px 2px 0 0;background:currentColor}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab] [data-dsh-ws-op]{display:none;appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);padding:0 2px;margin:0;cursor:pointer;border-radius:4px;line-height:0}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover [data-dsh-ws-op]{display:inline-flex}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab] [data-dsh-ws-op]:hover{color:var(--dsw-alias-label-primary,#e6edf3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab] [data-dsh-ws-op] svg{display:block}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add]{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;padding:2px;margin-left:auto;flex:none;border-radius:6px;line-height:0}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add]:hover{color:var(--dsw-alias-label-primary,#e6edf3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add] svg{display:block}
@@ -343,8 +339,6 @@ function locateHeader(host: Element): { row: HTMLElement; label: HTMLElement } |
 
 // ── 图标 ────────────────────────────────────────────────────────────────
 const I = {
-  pen: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-  x: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   plus: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
 }
 
@@ -572,35 +566,22 @@ function TabStrip(props: {
 
   useEffect(() => {
     if (!ctx) return
-    const close = () => setCtx(null)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+    // 点菜单自身不关；点外部 / Esc 才关（否则菜单项 click 永远被吞）。
+    const closeOnOutside = (e: Event) => {
+      const t = e.target
+      if (t instanceof Node && t.closest && t.closest('[data-dsh-ws-ctx-menu]')) return
+      setCtx(null)
     }
-    document.addEventListener('pointerdown', close, true)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCtx(null)
+    }
+    document.addEventListener('pointerdown', closeOnOutside, true)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('pointerdown', close, true)
+      document.removeEventListener('pointerdown', closeOnOutside, true)
       document.removeEventListener('keydown', onKey)
     }
   }, [ctx])
-
-  const opBtn = (id: string, kind: 'rename' | 'members' | 'delete', title: string, icon: string): ReactNode =>
-    h(
-      'button',
-      {
-        type: 'button',
-        'data-dsh-ws-op': '',
-        title,
-        'aria-label': title,
-        onClick: (e: { stopPropagation: () => void }) => {
-          e.stopPropagation()
-          if (kind === 'rename') onRename(id)
-          else if (kind === 'members') onMembers(id)
-          else onDelete(id)
-        },
-      },
-      h('span', { dangerouslySetInnerHTML: { __html: icon } }),
-    )
 
   const tabOf = (id: string): ReactNode => {
     const isDefault = id === DEFAULT_TAB
@@ -627,15 +608,7 @@ function TabStrip(props: {
           setCtx({ x: e.clientX, y: e.clientY, id })
         },
       },
-      [
-        name,
-        !isDefault
-          ? [
-              opBtn(id, 'members', tt('ctx.members'), I.pen),
-              opBtn(id, 'delete', tt('ctx.delete'), I.x),
-            ]
-          : null,
-      ],
+      name,
     )
   }
 
@@ -702,6 +675,7 @@ function TabStrip(props: {
               'div',
               {
                 key: 'ctx-menu',
+                'data-dsh-ws-ctx-menu': '',
                 onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
                 style: {
                   position: 'fixed',

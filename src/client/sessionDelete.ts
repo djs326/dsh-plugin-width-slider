@@ -272,15 +272,18 @@ function ensureDeleteMenuItem(): void {
 
   let item: HTMLButtonElement
   if (template) {
+    // 克隆官方菜单项：保留其全部结构/类/内边距/hover 规则。
     item = template.cloneNode(true) as HTMLButtonElement
     item.setAttribute(MENU_DELETE_ATTR, '1')
-    // 清掉官方图标（svg），前面插入垃圾桶图标。
-    item.querySelectorAll('svg').forEach((s) => s.remove())
-    const svgWrap = document.createElement('span')
-    svgWrap.style.cssText = 'display:inline-flex;flex:none'
-    svgWrap.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="' + TRASH_PATH + '" fill="currentColor"/></svg>'
-    item.insertBefore(svgWrap, item.firstChild)
-    // 更新文本（官方 label span 保留其样式类）。
+    // 图标：直接替换官方 svg 的 path 为垃圾桶（保留官方 svg 的尺寸与
+    // wrapper，布局与其它项完全一致）。
+    const iconSvg = item.querySelector('svg')
+    if (iconSvg) {
+      iconSvg.setAttribute('fill', 'currentColor')
+      iconSvg.setAttribute('stroke', 'none')
+      iconSvg.innerHTML = '<path d="' + TRASH_PATH + '" fill="currentColor"/>'
+    }
+    // 文本：官方 label span 保留样式类，仅改文字。
     const spans = Array.from(item.querySelectorAll('span'))
     const labelSpan = spans.find((s) => s.textContent && s.textContent.trim() !== '') ?? null
     if (labelSpan) labelSpan.textContent = tt('menu.delete')
@@ -289,10 +292,9 @@ function ensureDeleteMenuItem(): void {
       span.textContent = tt('menu.delete')
       item.appendChild(span)
     }
-    // 危险色：语义色覆盖（布局/样式其余全部继承官方）。
+    // 仅危险色覆盖；hover 灰底等全部由官方类接管（不设 inline background，
+    // 否则会压掉官方 hover 样式）。
     item.style.color = 'var(--dsw-alias-state-error-primary,#e5484d)'
-    // hover 背景：官方类自带；仅确保非透明背景样式不覆盖我们的透明初始。
-    item.style.background = 'transparent'
   } else {
     // 兜底（无官方模板时）：手写与官方一致的布局。
     item = document.createElement('button') as HTMLButtonElement

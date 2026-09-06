@@ -721,7 +721,9 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const [active, setActive] = useState<string>(() => {
     try {
       const saved = window.localStorage.getItem(ACTIVE_KEY)
-      return saved === null ? DEFAULT_TAB : saved
+      // 校验：只认 默认 或本插件生成的组 id（g- 前缀）；旧版残留（工作区 id）一律忽略，避免作用域为空。
+      const valid = saved !== null && (saved === DEFAULT_TAB || saved.indexOf('g-') === 0)
+      return valid ? saved : DEFAULT_TAB
     } catch {
       return DEFAULT_TAB
     }
@@ -739,14 +741,18 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const membership = new Map<string, string>()
   for (const g of groupList) for (const id of g.workspaceIds) if (!membership.has(id)) membership.set(id, g.id)
 
+  // active 失效（组未加载 / 残留 id / 组已删除）时一律按默认页签渲染，避免作用域为空导致空白。
+  const effectiveActive =
+    active !== DEFAULT_TAB && !groupList.some((g) => g.id === active) ? DEFAULT_TAB : active
+
   // 当前页签作用域的工作区 id。
   const scopeWsIds: string[] = (() => {
-    if (active === DEFAULT_TAB) {
+    if (effectiveActive === DEFAULT_TAB) {
       return itemsAll
         .map((w) => w.workspaceId)
         .filter((id): id is string => !!id && !membership.has(id))
     }
-    const g = groupList.find((x) => x.id === active)
+    const g = groupList.find((x) => x.id === effectiveActive)
     if (!g) return []
     const known = new Set(itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v))
     return g.workspaceIds.filter((id) => known.has(id))
@@ -755,13 +761,13 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   // 当前页签作用域的会话 id。
   const scopeSessionIds: string[] = (() => {
     const inScope = (wid: string): boolean =>
-      active === DEFAULT_TAB ? !membership.has(wid) : scopeWsIds.includes(wid)
+      effectiveActive === DEFAULT_TAB ? !membership.has(wid) : scopeWsIds.includes(wid)
     const ids: string[] = []
     for (const w of itemsAll) {
       if (!w.workspaceId || !inScope(w.workspaceId)) continue
       for (const s of w.sessionIds || []) ids.push(s)
     }
-    if (active === DEFAULT_TAB && listState) {
+    if (effectiveActive === DEFAULT_TAB && listState) {
       for (const id of unownedSessionIds(listState, itemsAll)) ids.push(id)
     }
     return Array.from(new Set(ids))
@@ -788,7 +794,12 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   // 页签失效回退：分组加载后 active 不存在则回默认；对话框目标消失则关闭。
   useEffect(() => {
     if (!gs.ready) return
-    if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) setActive(DEFAULT_TAB)
+    if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) {
+      setActive(DEFAULT_TAB)
+      try {
+        window.localStorage.removeItem(ACTIVE_KEY)
+      } catch { /* 忽略 */ }
+    }
     if (dialog && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
   }, [gs.ready, active, groupList, dialog])
 
@@ -876,7 +887,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
         ? createPortal(
             h(TabStrip, {
               groups: groupList,
-              active,
+              active: effectiveActive,
               ready: gs.ready,
               onPick,
               onRename: (id: string) => setDialog({ kind: 'rename', id }),

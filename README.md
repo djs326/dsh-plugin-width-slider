@@ -64,17 +64,16 @@
 
 ## 与 dsh-plugin-open-with 的关系
 
-从 v0.4.0 开始，dsh-plugin-open-with 的能力（头部胶囊按钮 + 打开项管理）
-已并入本插件，**不需要再单独安装它**；本实现基于你在本地验证有效的
-"actions 槽位修复版"（inject 目标 = register 的 slot 自身）。若之前装过
-dsh-plugin-open-with，请将其移除或停用，避免出现双按钮/双设置。打开的
-配置沿用同一份数据文件（`$DSH_HOME/storages/dsh-open-with/settings.json`），
-停用官方插件后你的预设/自定义项无缝保留。**首次安装（无该文件）时按默认
-4 个预设项工作**（VS Code / 终端 / PowerShell / 资源管理器），添加自定义项
-后才会落盘。自定义项请填 `.exe` / `.com` 可执行文件路径（直接启动，
-不经 cmd 二次解析，路径含 `&` 等符号也不受影响）。启动子进程由 DSH
-桌面版内置 subprocess 服务承担（`@deepseek-ai/dsh-subprocess` 仅作
-peer 声明）。
+本插件从 v0.4.0 起已内置 **Open With（打开方式）** 的全部能力——对话头部
+的"打开"胶囊按钮、以及设置里对打开项的管理。**装了本插件就不用再装
+dsh-plugin-open-with**。
+
+如果之前装过 dsh-plugin-open-with，请把它停用或卸载，避免出现两个按钮、
+两套设置；你原来的打开项与排序会自动保留，不受影响。
+
+**首次使用**：默认自带 VS Code / 终端 / PowerShell / 资源管理器四项，
+点对话头部的打开按钮即可在当前目录启动；想加其它程序，到设置 →
+对话宽度 → 打开方式里点"添加"，填应用名称与程序路径（.exe）即可。
 
 ---
 

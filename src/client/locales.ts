@@ -52,6 +52,13 @@ export interface WidthSliderKey {
   'settings.delete': string
   'settings.cancel': string
   'settings.save': string
+  'settings.form.nameRequired': string
+  'settings.form.pathRequired': string
+  'settings.form.exeOnly': string
+  owEmptyMenu: string
+  owNoCwdTip: string
+  resetAllLabel: string
+  resetAllInfo: string
 }
 
 const zh: Record<keyof WidthSliderKey, string> = {
@@ -106,6 +113,13 @@ const zh: Record<keyof WidthSliderKey, string> = {
   'settings.delete': '删除',
   'settings.cancel': '取消',
   'settings.save': '保存',
+  'settings.form.nameRequired': '请输入应用名称',
+  'settings.form.pathRequired': '请输入可执行文件路径',
+  'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（直接启动，不经 cmd）',
+  owEmptyMenu: '没有可见的打开项（全部已隐藏），可到设置中调整',
+  owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
+  resetAllLabel: '恢复默认设置',
+  resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
 }
 
 const en: Record<keyof WidthSliderKey, string> = {
@@ -160,6 +174,13 @@ const en: Record<keyof WidthSliderKey, string> = {
   'settings.delete': 'Delete',
   'settings.cancel': 'Cancel',
   'settings.save': 'Save',
+  'settings.form.nameRequired': 'Please enter an app name',
+  'settings.form.pathRequired': 'Please enter an executable path',
+  'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched directly, not through cmd)',
+  owEmptyMenu: 'No visible open targets (all hidden); adjust in settings',
+  owNoCwdTip: 'No folder in this session (cannot open here)',
+  resetAllLabel: 'Reset all settings',
+  resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
 }
 
 export { zh, en }

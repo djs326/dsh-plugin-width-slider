@@ -17,6 +17,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
 import { OpenWithPanel, type LaunchTarget, type OpenWithSettingsData } from './openWith/OpenWithPanel.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
+import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
 
 export interface WidthSliderSettingsInjected {
   writeSettings: (settings: unknown) => Promise<void>
@@ -161,10 +162,56 @@ export function WidthSliderSettings({
     applySettings({ ...getSettings(), ...patch })
   }, [])
 
+  /** 恢复默认：重置开关 + 清宽度/弹窗宽度记忆，刷新页面应用。 */
+  const resetAll = useCallback((): void => {
+    try {
+      localStorage.removeItem('dsh.conversation.contentWidth')
+      localStorage.removeItem('dsh.conversation.contentWidthFollow')
+      localStorage.removeItem('dsh.conversation.settingsPanelWidth')
+    } catch { /* ignore */ }
+    applySettings({ ...DEFAULT_FEATURE_SETTINGS })
+    writeSettings({ ...DEFAULT_FEATURE_SETTINGS }).catch((err) =>
+      console.warn('[width-slider] reset write failed', err))
+    // 宽度/弹窗 UI 均读自记忆与组件本地态，刷新后整体取默认最可靠。
+    window.location.reload()
+  }, [writeSettings])
+
   const id = (k: string): string => 'dsh-plugin-width-slider-' + k
 
   return (
     <div style={{ padding: '4px 0' }}>
+      {/* 顶部：总说明 + 恢复默认 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          marginBottom: 12,
+          fontSize: 12,
+          lineHeight: '18px',
+          color: 'var(--dsw-alias-label-caption, #888)',
+        }}
+      >
+        <span>{t('resetAllInfo')}</span>
+        <button
+          type="button"
+          onClick={resetAll}
+          style={{
+            flex: 'none',
+            height: 26,
+            padding: '0 10px',
+            border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.08))',
+            borderRadius: 6,
+            background: 'transparent',
+            color: 'var(--dsw-alias-label-secondary, #888)',
+            cursor: 'pointer',
+            fontSize: 12,
+          }}
+        >
+          {t('resetAllLabel')}
+        </button>
+      </div>
       {/* 1. 对话宽度滑块 */}
       <Card title={t('groupWidth')}>
         <SwitchRow

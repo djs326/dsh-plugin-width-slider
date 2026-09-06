@@ -27,6 +27,8 @@
 
 // ── 常量 ─────────────────────────────────────────────────────────────
 
+import { pickText } from './lang.ts'
+
 const DIALOG_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
 const RESIZE_KEY = 'dsh.conversation.settingsPanelWidth'
 const RESIZE_HANDLE_ATTR = 'data-width-slider-resize-handle'
@@ -97,6 +99,8 @@ function applyNavScrollPatch(navList: HTMLElement): void {
 }
 
 const patchedNavLists = new WeakSet<HTMLElement>()
+/** 已 patch 过的 navList（保留引用，供开关关闭时还原内联样式）。 */
+const patchedNavListEls = new Set<HTMLElement>()
 
 function probeAndPatchNavList(): void {
   if (typeof document === 'undefined') return
@@ -105,6 +109,7 @@ function probeAndPatchNavList(): void {
   const navList = findNavList(dialog)
   if (!navList || patchedNavLists.has(navList)) return
   patchedNavLists.add(navList)
+  patchedNavListEls.add(navList)
   applyNavScrollPatch(navList)
 }
 
@@ -118,6 +123,16 @@ export function installNavScrollPatch(): () => void {
   return () => {
     observer.disconnect()
     probe.dispose()
+    // 开关关闭/插件卸载：还原已 patch 的 navList 内联样式（关闭即回到官方）。
+    for (const navList of patchedNavListEls) {
+      navList.style.flex = ''
+      navList.style.minHeight = ''
+      navList.style.overflowY = ''
+      navList.style.paddingRight = ''
+      const nav = navList.parentElement
+      if (nav) nav.style.minHeight = ''
+    }
+    patchedNavListEls.clear()
   }
 }
 
@@ -174,7 +189,7 @@ function restoreBodyUserSelect(): void {
 function buildResizeHandle(dialog: HTMLElement): HTMLElement {
   const handle = document.createElement('div')
   handle.setAttribute(RESIZE_HANDLE_ATTR, '')
-  handle.title = '拖动调整设置面板宽度（双击恢复默认）'
+  handle.title = pickText('拖动调整设置面板宽度（双击恢复默认）', 'Drag to resize the settings panel width (double-click to reset)')
   handle.style.cssText = [
     'position:absolute',
     'top:48px',
@@ -232,6 +247,8 @@ function buildResizeHandle(dialog: HTMLElement): HTMLElement {
 }
 
 const patchedDialogs = new WeakSet<HTMLElement>()
+/** 最近一次 patch 的 dialog（供开关关闭时摘柄并还原官方宽度）。 */
+let activeResizeDialog: HTMLElement | null = null
 
 function applyResizePatch(dialog: HTMLElement): void {
   // 已有我们挂的拖柄（例如同一次会话重复 patch）则跳过。
@@ -250,6 +267,7 @@ function probeAndPatchDialog(): void {
   const dialog = findSettingsDialog()
   if (!dialog || patchedDialogs.has(dialog)) return
   patchedDialogs.add(dialog)
+  activeResizeDialog = dialog
   applyResizePatch(dialog)
 }
 
@@ -263,7 +281,15 @@ export function installDialogResizePatch(): () => void {
   return () => {
     observer.disconnect()
     probe.dispose()
-    // 开关关闭/插件卸载时复位拖拽锁定的文本选择（若仍在锁定）。
     restoreBodyUserSelect()
+    // 关闭即时可逆：当前仍开着的设置弹窗摘除拖柄、还原官方默认宽度，
+    // 并清掉记忆宽度——"关闭=回到官方"（设置弹窗本身就在总控页内操作）。
+    const dialog = activeResizeDialog
+    activeResizeDialog = null
+    if (dialog && dialog.isConnected) {
+      dialog.querySelector('[' + RESIZE_HANDLE_ATTR + ']')?.remove()
+      dialog.style.width = ''
+    }
+    clearStoredWidth()
   }
 }

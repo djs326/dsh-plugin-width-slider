@@ -16,8 +16,8 @@
  * 差异：用 ctx.logger 输出日志（上游为自建文件 logger，收编后不再留独立
  * 日志文件）；client 的 log endpoint 转发到 ctx.logger。
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, extname, join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, extname, isAbsolute, join } from 'node:path'
 import { dshHomePath } from '../shared/dshHome.ts'
 
 // ── 设置文件存储路径：与官方/用户本地版本共用，迁移零成本 ──────────────
@@ -26,12 +26,78 @@ const SETTINGS_DIR = dshHomePath('storages', 'dsh-open-with')
 const SETTINGS_FILE = join(SETTINGS_DIR, 'settings.json')
 
 /** 读取设置文件；不存在/损坏时返回 null（保持上游语义）。 */
+/** 默认结构（与官方 dsh-plugin-open-with 一致：4 预设 + code 当前）。 */
+function defaultOpenWithSettings(): { currentId: string; items: Array<Record<string, unknown>>; hiddenIds: string[] } {
+  return {
+    currentId: 'code',
+    items: [
+      { id: 'code', name: 'VS Code', path: 'code', icon: '', preset: true, target: 'code' },
+      { id: 'cmd', name: 'Command Prompt', path: 'cmd', icon: '', preset: true, target: 'cmd' },
+      { id: 'powershell', name: 'PowerShell', path: 'powershell', icon: '', preset: true, target: 'powershell' },
+      { id: 'explorer', name: 'File Explorer', path: 'explorer', icon: '', preset: true, target: 'explorer' },
+    ],
+    hiddenIds: [],
+  }
+}
+
 function readSettingsFile(): unknown {
   try {
     if (!existsSync(SETTINGS_FILE)) return null
     return JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8')) as unknown
   } catch {
     return null
+  }
+}
+
+/**
+ * open-with 设置结构运行时校验（host 侧纵深：设置文件可能被本机进程改写，
+ * client 可能被同源脚本调 writeSettings 植入任意结构）。校验通过才落盘，
+ * launch/渲染据此保持可信。
+ */
+function isValidOpenWithSettings(raw: unknown): raw is { currentId: string; items: unknown[]; hiddenIds: unknown[] } {
+  if (!raw || typeof raw !== 'object') return false
+  const o = raw as Record<string, unknown>
+  if (typeof o.currentId !== 'string' || o.currentId.length === 0 || o.currentId.length > 64) return false
+  if (!Array.isArray(o.items) || o.items.length > 64) return false
+  const ids = new Set<string>()
+  for (const it of o.items) {
+    if (!it || typeof it !== 'object') return false
+    const item = it as Record<string, unknown>
+    if (typeof item.id !== 'string' || item.id.length === 0 || item.id.length > 64) return false
+    if (ids.has(item.id)) return false
+    ids.add(item.id)
+    if (typeof item.name !== 'string' || item.name.length === 0 || item.name.length > 200) return false
+    if (typeof item.path !== 'string' || item.path.length === 0 || item.path.length > 1024) return false
+    if (typeof item.icon !== 'string' || item.icon.length > 2_000_000) return false
+    if (typeof item.preset !== 'boolean') return false
+    if (item.target !== undefined && typeof item.target !== 'string') return false
+  }
+  if (!Array.isArray(o.hiddenIds) || o.hiddenIds.length > 64) return false
+  for (const hid of o.hiddenIds) {
+    if (typeof hid !== 'string' || !ids.has(hid)) return false
+  }
+  return ids.has(o.currentId)
+}
+
+/** 自定义启动项路径校验：本地绝对路径、.exe/.com、存在、非 UNC。 */
+function isValidLaunchPath(p: string): boolean {
+  if (typeof p !== 'string' || p.length === 0 || p.length > 1024) return false
+  if (!isAbsolute(p)) return false
+  if (p.startsWith('\\')) return false // 拒绝 UNC（NTLM/SMB 出站面）
+  const ext = extname(p).toLowerCase()
+  if (ext !== '.exe' && ext !== '.com') return false
+  try {
+    return existsSync(p) && statIsFile(p)
+  } catch {
+    return false
+  }
+}
+
+function statIsFile(p: string): boolean {
+  try {
+    return statSync(p).isFile()
+  } catch {
+    return false
   }
 }
 
@@ -96,38 +162,37 @@ async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
   return resolvedPath
 }
 
-/** 给进入 cmd.exe 上下文的字符串加双引号（内部双引号转义为 ""）。 */
-function quoteForCmd(value: string): string {
-  return '"' + value.replace(/"/g, '""') + '"'
-}
+// 注意：argv 一律不手工预包引号——libuv/Node 在 Windows 组装命令行时会
+// 二次转义（内部引号变 \" 再整体外包），预引号会与 cmd.exe 引号剥离规则叠加
+// 导致逃逸或失败。目录一律经 spawn 的 cwd 承载（CreateProcess
+// lpCurrentDirectory，不经命令行解析），路径作为独立 argv 元素原样传递。
 
-/** 预设目标的 argv 组装（cmd start / 直接 argv 两种形态）。 */
+/**
+ * 预设目标的 spawn 规格（全部不经 cmd 文本承载用户路径）：
+ * - code：exe 直启，argv=[exe, 目录]（目录作为 VS Code CLI 参数，libuv 自动引号）；
+ * - cmd/powershell：argv 固定（含窗口标题参数），会话目录由 useSpawnCwd+cwd 承载，
+ *   子进程（及它派生的新控制台窗口）启动目录即会话目录；
+ * - explorer：exe 直启 + 目录参数。
+ */
 async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Promise<{ argv: string[]; useSpawnCwd: boolean }> {
   const windir = process.env.windir ?? 'C:\\Windows'
   switch (target) {
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
-      // cwd 会经 cmd.exe 二次解析：整体加引号，含 & | % 等元字符也不分叉。
-      return { argv: ['cmd', '/c', exe, quoteForCmd(cwd)], useSpawnCwd: false }
+      return { argv: [exe], useSpawnCwd: true }
     }
     case 'cmd': {
       const cmdPath = windir + '\\System32\\cmd.exe'
-      // title 是窗口标题（裸路径，避免字面引号）；cd 参数需 cmd 层转义。
-      const inner = 'title ' + cmdPath + ' && cd /d ' + quoteForCmd(cwd)
-      return { argv: ['cmd', '/c', 'start', quoteForCmd(cmdPath), 'cmd', '/K', inner], useSpawnCwd: false }
+      // title 参数用无空格单词，避免经 libuv 引号包裹后 cmd 解析歧义。
+      return { argv: [cmdPath, '/K', 'title width-slider-cmd'], useSpawnCwd: true }
     }
     case 'powershell': {
       const psPath = windir + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-      const escapedCwd = cwd.replace(/'/g, "''")
-      return {
-        argv: [
-          'cmd', '/c', 'start', '"' + psPath + '"', 'powershell', '-NoExit', '-Command',
-          "[Console]::Title = '" + psPath.replace(/'/g, "''") + "'; Set-Location -LiteralPath '" + escapedCwd + "'",
-        ],
-        useSpawnCwd: false,
-      }
+      return { argv: [psPath, '-NoExit'], useSpawnCwd: true }
     }
     case 'explorer':
+      // explorer.exe 无参数默认打开"快速访问"，目录必须显式作为参数传入
+      //（libuv 自动引号，安全）。
       return { argv: ['explorer.exe', cwd], useSpawnCwd: false }
     default:
       throw new Error('unknown launch target: ' + String(target))
@@ -136,16 +201,42 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
 
 // ── 图标提取（PowerShell System.Drawing）────────────────────────────
 
+/** 图标缓存（exePath → data URL；成功缓存，失败不缓存）。 */
+const iconCache = new Map<string, string>()
+/** 进行中的提取（同 path 去重，防并发进程风暴）。 */
+const iconInflight = new Map<string, Promise<string>>()
+
 /** 从 exe 提取图标，返回 base64 PNG data URL；失败/无图标返回空串。 */
 async function extractFileIcon(ctx: OpenWithCtx, exePath: string): Promise<string> {
+  const cached = iconCache.get(exePath)
+  if (cached !== undefined) return cached
+  const inflight = iconInflight.get(exePath)
+  if (inflight !== undefined) return inflight
+  const promise = doExtractFileIcon(ctx, exePath).then((icon) => {
+    iconInflight.delete(exePath)
+    if (icon !== '') iconCache.set(exePath, icon)
+    return icon
+  }).catch((err: unknown) => {
+    iconInflight.delete(exePath)
+    throw err
+  })
+  iconInflight.set(exePath, promise)
+  return promise
+}
+
+async function doExtractFileIcon(ctx: OpenWithCtx, exePath: string): Promise<string> {
   const sp = ctx.subprocess
   if (!sp) throw new Error('subprocess service unavailable')
+  if (!isValidLaunchPath(exePath)) {
+    ctx.logger?.warn?.('extractIcon rejected path', { exePath })
+    return ''
+  }
   const escapedPath = exePath.replace(/'/g, "''")
   const psScript = [
     "$ErrorActionPreference = 'Stop'",
     '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)',
     'Add-Type -AssemblyName System.Drawing -ErrorAction Stop',
-    "[System.Drawing.Icon]::ExtractAssociatedIcon('" + escapedPath + "')",
+    "$icon = [System.Drawing.Icon]::ExtractAssociatedIcon('" + escapedPath + "')",
     'if (!$icon) { exit 0 }',
     '$bitmap = $icon.ToBitmap()',
     '$ms = New-Object System.IO.MemoryStream',
@@ -168,10 +259,15 @@ async function extractFileIcon(ctx: OpenWithCtx, exePath: string): Promise<strin
   }
   if (stderr) ctx.logger?.warn?.('extractIcon PowerShell stderr', { exePath, stderr })
   const stdout = handle.collected?.stdout?.readFrom(0)?.text ?? ''
-  const icon = stdout.trim()
-  if (!icon) ctx.logger?.warn?.('extractIcon returned empty', { exePath, stdoutLen: stdout.length, stderr })
-  else ctx.logger?.info?.('extractIcon done', { exePath, dataLen: icon.length })
-  return icon
+  const raw = stdout.trim()
+  // 输出防御：只接受 base64 PNG data URL；任何其它内容（错误文本/对象 ToString）
+  // 一律丢弃返回空串，防止坏数据被 client 持久化进共用设置文件。
+  if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(raw)) {
+    ctx.logger?.warn?.('extractIcon returned non-image output', { exePath, stdoutLen: raw.length, head: raw.slice(0, 60) })
+    return ''
+  }
+  ctx.logger?.info?.('extractIcon done', { exePath, dataLen: raw.length })
+  return raw
 }
 
 /** 预设启动器实际路径（cmd/powershell/explorer；code 返回 "code" 由调用方 resolve）。 */
@@ -213,6 +309,7 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
   if (endpoint === 'extractIcon') {
     const { exePath } = body
     if (typeof exePath !== 'string' || exePath.length === 0) return fail('invalid-path', 'exePath is required')
+    if (!isValidLaunchPath(exePath)) return fail('invalid-path', 'exePath must be a local .exe path')
     try {
       const icon = await extractFileIcon(ctx, exePath)
       return ok({ icon })
@@ -241,7 +338,8 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
   }
   if (endpoint === 'readSettings') {
     try {
-      return ok({ settings: readSettingsFile() })
+      // 无文件（全新安装/从未用官方插件）时返回默认结构，按钮与面板首装即用。
+      return ok({ settings: readSettingsFile() ?? defaultOpenWithSettings() })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       ctx.logger?.error?.('readSettings failed', err)
@@ -250,7 +348,7 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
   }
   if (endpoint === 'writeSettings') {
     const { settings } = body
-    if (settings === undefined) return fail('invalid-settings', 'settings is required')
+    if (!isValidOpenWithSettings(settings)) return fail('invalid-settings', 'settings structure invalid')
     try {
       writeOpenWithSettingsSync(settings)
       ctx.logger?.info?.('settings saved', { file: SETTINGS_FILE })
@@ -264,10 +362,10 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
   if (endpoint === 'setCurrent') {
     // 胶囊按钮选择项后写回 currentId（与设置面板的"设为当前"同源）。
     const { id } = body
-    if (typeof id !== 'string' || id.length === 0) return fail('invalid-id', 'id is required')
+    if (typeof id !== 'string' || id.length === 0 || id.length > 64) return fail('invalid-id', 'id is required')
     try {
-      const raw = readSettingsFile() as { currentId?: string; items?: Array<{ id: string }> } | null
-      if (!raw || !Array.isArray(raw.items) || !raw.items.some((it) => it.id === id)) {
+      const raw = readSettingsFile() ?? defaultOpenWithSettings()
+      if (!isValidOpenWithSettings(raw) || !raw.items.some((it) => (it as { id: string }).id === id)) {
         return fail('invalid-id', 'item not found: ' + id)
       }
       writeOpenWithSettingsSync({ ...raw, currentId: id })
@@ -296,9 +394,13 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
   try {
     if (!isPreset) {
       // 自定义项：从设置文件取 id → path（preset=false 且带 path）。
-      const settings = readSettingsFile() as { items?: Array<{ id: string; preset?: boolean; path?: string }> } | null
-      const item = settings?.items?.find((it) => it.id === targetStr)
-      if (!item || item.preset || !item.path) return fail('invalid-target', 'custom item not found: ' + targetStr)
+      const settings = readSettingsFile()
+      if (!isValidOpenWithSettings(settings)) return fail('invalid-target', 'settings structure invalid')
+      const item = settings.items.find((it) => (it as { id: string }).id === targetStr) as
+        { id: string; preset?: boolean; path?: string } | undefined
+      if (!item || item.preset || !item.path || !isValidLaunchPath(item.path)) {
+        return fail('invalid-target', 'custom item not found or not launchable: ' + targetStr)
+      }
       // 自定义项直接 spawn 可执行文件（不经 cmd 二次解析，避免路径中的
       // cmd 元字符如 & | % 被解释）；设置面板限定 .exe 路径。
       const handle = sp.spawn({

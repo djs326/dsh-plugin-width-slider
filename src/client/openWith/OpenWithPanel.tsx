@@ -22,6 +22,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
+import { isSafePngIcon } from '../icons.ts'
 
 /** 默认应用图标（DSH logo 风格），用于图标提取完成前的回退。 */
 const appDefaultPngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAKDSURBVFhH7ZZJyI1xFMZ/yJQpMmRhDkkplCglWSAiUaadDSVDlI2FhZAyFAsbCSkiYqGQDBEbU4ayMC1E5qnMUw/nvY7j3O/e78PuPnW63TM9533P//zPCzXU8H/QEhgXlQ1FE6At0ML+K/kMYB9wF7gCdAoxc4A7Ftsg9Ac2AteA98AX4DPwBHgFfHMyJgYD28y2C+gajYbewLSoVMVrjcyT1CUjYxJgj7O/AcaavjMwHJgF3Ad2+yCR708IKsljYKJPBKwOPjeB9cCnoF/ug1YmyasVtWixyzUs8YmiGLX6BwYAHxOn+shXYJkrYnvi42WD8y0dmr8VFbHAcjYHdiQ+asMaPyFN3cl+av16lgRWKypihRGMcPpbwDygx6/n/onB5nAKaGw6/fa1vl5PSCKh7oJY9AXgiPt/OPCWMMUczkSDQcXo4nmQkEtuA4PssqprirbExAWmm8NDoFE0OnQEjieJP9iB0+2ndp5NfCRzY8IC451Tz2gMaAYcSJLr7Swyn35lJmpgyFWCZrFwWhiNCbQTziUE6rnekt7CxWBTm8pCPS4O0NUKbSjQDXieFPEWeJHoNRV1YqdznhyNZTA7IcrkdbIt/4AWShGgeW0VHRLoTR1KCKMsjYHl4GdWW6q4EwpofS4B2jldF5ueSFrI0fp8E/QJu36rHagCQ0wvQt+mUTaKkfwG0N75VYVJYWWeBno5+wnT6/bbbGMpzExW7TFgdJWH+jcomX+id8BBu8leBpLzwFAjmVBmAi4B3SNJJehQ3kuSlZNHtjP0CbbOCtM3oRbbXqBDJKgGbYBVyVNnogLmJwf3n6C1LSO14CRw2W46Tc0mYKr7Yq6hhnrjO8xVal7nQeXKAAAAAElFTkSuQmCC'
@@ -85,9 +86,11 @@ function defaultSettings(): OpenWithSettingsData {
 // ── 小组件 ───────────────────────────────────────────────────────────
 
 function ItemIcon({ src, size = 20 }: { src: string; size?: number }) {
+  // icon 前缀白名单：非 base64 PNG data URL（外链等）一律回退默认图标
+  const safeSrc = isSafePngIcon(src) ? src : ''
   return (
     <img
-      src={src || appDefaultPngDataUrl}
+      src={safeSrc || appDefaultPngDataUrl}
       alt=""
       width={size}
       height={size}
@@ -368,8 +371,13 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
     if ((path.startsWith('"') && path.endsWith('"')) || (path.startsWith("'") && path.endsWith("'"))) {
       path = path.slice(1, -1)
     }
-    if (!name) { setFormError(t('settings.custom.namePlaceholder')); return }
-    if (!path) { setFormError(t('settings.custom.pathPlaceholder')); return }
+    if (!name) { setFormError(t('settings.form.nameRequired')); return }
+    if (!path) { setFormError(t('settings.form.pathRequired')); return }
+    const pathExt = path.slice(path.lastIndexOf('.')).toLowerCase()
+    if (pathExt !== '.exe' && pathExt !== '.com') {
+      setFormError(t('settings.form.exeOnly'))
+      return
+    }
     setFormError('')
 
     if (formItemId === '__add__') {
@@ -550,7 +558,7 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
           />
         </div>
       </div>
-      {formError && <span style={{ fontSize: '11px', color: dangerColor }}>{formError}</span>}
+      {formError && <span role="alert" style={{ fontSize: '11px', color: dangerColor }}>{formError}</span>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
         <button
           type="button"

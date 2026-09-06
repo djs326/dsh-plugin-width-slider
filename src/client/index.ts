@@ -23,6 +23,7 @@ import { AssistantStepView, THINK_STYLES } from './think/thinkView.tsx'
 import { installUiLocalize } from './think/uiLocalize.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
+import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -89,8 +90,14 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
   }
 }
 
-/** 界面英文中文化（界面中文化=开时）。 */
+/** 界面英文中文化（开关=开 且 界面语言为中文时生效）。 */
 function installLocalize(): Disposer {
+  // 语言门控：en 界面默认不中文化官方标签，避免中英混杂（开关保留，供
+  // 中文界面用户控制）。
+  if (!isZhInterface()) {
+    console.info('[width-slider] 界面语言非中文，界面中文化未启用')
+    return () => {}
+  }
   return installUiLocalize()
 }
 

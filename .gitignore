@@ -3,3 +3,4 @@ lib/
 *.tsbuildinfo
 dsh-plugin-open-with-main
 my-dsh-plugins-main
+viz/

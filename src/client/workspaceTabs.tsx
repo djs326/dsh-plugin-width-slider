@@ -38,7 +38,6 @@ import { getSettings, onSettingsChanged } from './config.ts'
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
 const DEFAULT_TAB = '__default__'
-const ACTIVE_KEY = 'dsh-plugin-width-slider.wsTab'
 /** 分组本地缓存（host 文件之外的兜底：开关/重启后标签不丢）。 */
 const GROUPS_CACHE_KEY = 'dsh-plugin-width-slider.wsg.cache'
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
@@ -1002,16 +1001,8 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const enabled = useWsTabsEnabled()
   const gs = useGroups()
   const groupList = gs.groups
-  const [active, setActive] = useState<string>(() => {
-    try {
-      const saved = window.localStorage.getItem(ACTIVE_KEY)
-      // 校验：只认 默认 或本插件生成的组 id（g- 前缀）；旧版残留（工作区 id）一律忽略，避免作用域为空。
-      const valid = saved !== null && (saved === DEFAULT_TAB || saved.indexOf('g-') === 0)
-      return valid ? saved : DEFAULT_TAB
-    } catch {
-      return DEFAULT_TAB
-    }
-  })
+  // 重启/重载后一律回到「默认」页签（上次停留页签不跨会话恢复）。
+  const [active, setActive] = useState<string>(DEFAULT_TAB)
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
   const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string } | null>(null)
@@ -1137,9 +1128,6 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (!gs.ready) return
     if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) {
       setActive(DEFAULT_TAB)
-      try {
-        window.localStorage.removeItem(ACTIVE_KEY)
-      } catch { /* 忽略 */ }
     }
     if (dialog && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
   }, [gs.ready, active, groupList, dialog])
@@ -1187,9 +1175,6 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
 
   const onPick = (id: string): void => {
     setActive(id)
-    try {
-      window.localStorage.setItem(ACTIVE_KEY, id)
-    } catch { /* 忽略 */ }
     if (id !== DEFAULT_TAB) {
       const g = groupList.find((x) => x.id === id)
       if (g) tryExpandAll(g.workspaceIds)
@@ -1200,9 +1185,6 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     const nu: WsGroup = { id: 'g-' + Date.now().toString(36), name: tt('new.name'), workspaceIds: [] }
     commitGroups((cur) => [...cur, nu])
     setActive(nu.id)
-    try {
-      window.localStorage.setItem(ACTIVE_KEY, nu.id)
-    } catch { /* 忽略 */ }
     setDialog({ kind: 'rename', id: nu.id })
   }
 

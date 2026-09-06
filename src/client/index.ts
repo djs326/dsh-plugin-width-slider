@@ -22,6 +22,7 @@ import { en, zh, type WidthSliderKey } from './locales.ts'
 import { AssistantStepView, THINK_STYLES } from './think/thinkView.tsx'
 import { installUiLocalize } from './think/uiLocalize.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
+import { installSessionDelete } from './sessionDelete.ts'
 import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
 import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
@@ -266,7 +267,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton'
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -285,13 +286,14 @@ export function apply(ctx: RpcClientContext): void {
       ensure('resize', s.dialogResize, () => installDialogResizePatch())
       ensure('nav', s.navScroll, () => installNavScrollPatch())
       ensure('owButton', s.openWithButton, () => installOpenWithButton(ctx))
+      ensure('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
     }
 
     const unsubscribe = onSettingsChanged(sync)
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

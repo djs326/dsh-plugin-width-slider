@@ -93,4 +93,15 @@ SOFTWARE.
 
 ---
 
+## dsh-archived-chats（仅作实现参考，未并入代码）
+
+- 版权：Copyright (c) 2026 Ultronen（https://github.com/Ultronen/dsh-archived-chats，MIT）
+- 用途：v0.5.0 的"会话删除"host 实现参考其 deleteSession / disposeLiveSession
+  删除链（会话运行态处置、数据目录定位与删除的 basename 校验、workspace
+  detach 与 registry 索引清理思路）；本插件按其思路独立实现了精简的永久
+  删除版本（无其回收站/快照/元数据层），相关文件：src/host/sessionDeleteService.ts。
+- 依据 MIT 许可声明参考关系；不涉及代码直接拷贝的段落。
+
+---
+
 本插件自身以 MIT 许可发布，见仓库根 LICENSE。

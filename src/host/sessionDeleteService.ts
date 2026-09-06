@@ -15,7 +15,7 @@
  */
 import { readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { dshHomePath } from '../shared/dshHome.ts'
 
 export interface SessionDeleteCtx {
   logger?: { info?: (m: string, e?: unknown) => void; warn?: (m: string, e?: unknown) => void; error?: (m: string, e?: unknown) => void }
@@ -24,20 +24,8 @@ export interface SessionDeleteCtx {
 
 const SESSION_ID_RE = /^(session-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-class DeleteError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.status = status
-  }
-}
-
-function dshHome(): string {
-  return process.env.DSH_HOME || join(homedir(), '.dsh')
-}
-
 function sessionsRoot(): string {
-  return join(dshHome(), 'sessions')
+  return dshHomePath('sessions')
 }
 
 /** 会话 id 两种拼写（raw uuid 与 session- 前缀）。 */
@@ -78,17 +66,21 @@ function findSessionDirs(sessionId: string): string[] {
 function removeSessionDirs(sessionId: string): boolean {
   const dirs = findSessionDirs(sessionId)
   for (const dir of dirs) {
-    rmSync(dir, { recursive: true, force: true })
+    // Windows 下瞬时句柄占用 / 杀软扫描可能使 rmSync 抛错：带重试避免
+    // 中断整条删除链（审查建议 2）。
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
   }
   return dirs.length > 0
 }
 
-/** 清 projection 与 workspace 记账（storageDomain KvTable/global）。 */
+/** 清 projection 与 workspace 记账（storageDomain KvTable/global）。
+ * *Failed 标记表/global 存在但读写抛错（非"无此表"的无害情形）——目录已删
+ * 而记账残留是"删除后残留/掉入未分组"的主要来源，必须留痕而非静默。 */
 async function stripStorageDomains(
   ctx: SessionDeleteCtx,
   sessionId: string,
   opts: { workspace: boolean },
-): Promise<{ projRemoved: boolean; workspaceRemoved: boolean }> {
+): Promise<{ projRemoved: boolean; projFailed: boolean; workspaceRemoved: boolean; workspaceFailed: boolean }> {
   const sd = ctx.get<{
     get: (name: string) => {
       table?: (name: string) => {
@@ -100,10 +92,14 @@ async function stripStorageDomains(
       global?: { get: () => unknown; set: (v: unknown) => Promise<unknown> }
     } | undefined
   }>('storageDomain')
-  if (!sd) return { projRemoved: false, workspaceRemoved: false }
+  if (!sd) {
+    return { projRemoved: false, projFailed: false, workspaceRemoved: false, workspaceFailed: false }
+  }
   const variants = sessionIdVariants(sessionId)
   let projRemoved = false
   let workspaceRemoved = false
+  let projFailed = false
+  let workspaceFailed = false
 
   const proj = sd.get('session_projcache')
   if (proj && typeof proj.table === 'function') {
@@ -115,7 +111,10 @@ async function stripStorageDomains(
           projRemoved = true
         }
       }
-    } catch { /* unit closed or table absent */ }
+    } catch (err) {
+      projFailed = true
+      ctx.logger?.warn?.('[width-slider] projection cache cleanup failed', { sessionId, error: err })
+    }
   }
 
   if (opts.workspace) {
@@ -133,7 +132,10 @@ async function stripStorageDomains(
             workspaceRemoved = true
           }
         }
-      } catch { /* unit closed */ }
+      } catch (err) {
+        workspaceFailed = true
+        ctx.logger?.warn?.('[width-slider] workspace sessionIds cleanup failed', { sessionId, error: err })
+      }
       try {
         const g = ws.global
         if (g && typeof g.get === 'function' && typeof g.set === 'function') {
@@ -146,10 +148,13 @@ async function stripStorageDomains(
             workspaceRemoved = true
           }
         }
-      } catch { /* no global slot */ }
+      } catch (err) {
+        workspaceFailed = true
+        ctx.logger?.warn?.('[width-slider] workspace archivedSessionIds cleanup failed', { sessionId, error: err })
+      }
     }
   }
-  return { projRemoved, workspaceRemoved }
+  return { projRemoved, projFailed, workspaceRemoved, workspaceFailed }
 }
 
 // ── live 会话处置 ────────────────────────────────────────────────────
@@ -189,33 +194,46 @@ async function flushSessionIfLive(ctx: SessionDeleteCtx, sessionId: string): Pro
   return flushed
 }
 
-function detachLiveSession(ctx: SessionDeleteCtx, sessionId: string): boolean {
+type DetachResult = { status: 'ok' | 'none' | 'failed'; reason?: string }
+
+/** 从内存 store detach 会话（两种 id 拼写）。
+ * store 中命中条目却无 detach 能力（官方内部 API 演进）或调用抛错时返回
+ * failed——继续删目录会让官方后续 flush 把会话写回（删除后复活），
+ * 上层据此中止删除（fail closed）。 */
+function detachLiveSession(ctx: SessionDeleteCtx, sessionId: string): DetachResult {
   const sessions = ctx.get<{
     store?: { get?: (k: string) => unknown; delete?: (k: string) => void }
     detachEntered?: (entry: unknown) => void
     attachments?: { delete?: (k: unknown) => void }
   }>('sessions')
-  if (!sessions) return false
-  let detached = false
+  if (!sessions) return { status: 'none' }
+  let foundAny = false
+  let detachedAny = false
   try {
     const store = sessions.store
     for (const variant of sessionIdVariants(sessionId)) {
       const entry = store && typeof store.get === 'function' ? store.get(variant) : undefined
       if (entry === undefined) continue
+      foundAny = true
       if (typeof sessions.detachEntered === 'function') {
         sessions.detachEntered(entry)
-        detached = true
+        detachedAny = true
       } else if (store && typeof store.delete === 'function') {
         store.delete(variant)
         const s = entry as { session?: unknown } | null
         if (sessions.attachments && s?.session && typeof sessions.attachments.delete === 'function') {
           sessions.attachments.delete(s.session)
         }
-        detached = true
+        detachedAny = true
+      } else {
+        return { status: 'failed', reason: 'store entry found but no detachEntered / store.delete capability' }
       }
     }
-  } catch { /* ignore */ }
-  return detached
+  } catch (err) {
+    return { status: 'failed', reason: err instanceof Error ? err.message : String(err) }
+  }
+  if (!foundAny) return { status: 'none' }
+  return detachedAny ? { status: 'ok' } : { status: 'failed', reason: 'detach did not run for found entries' }
 }
 
 // ── 删除核心（顺序：目录 → projection → workspace 记账）──────────────
@@ -228,7 +246,17 @@ export async function deleteSessionById(ctx: SessionDeleteCtx, id: string): Prom
   try {
     await stopAgentIfRunning(ctx, sessionId)
     await flushSessionIfLive(ctx, sessionId)
-    detachLiveSession(ctx, sessionId)
+    const detach = detachLiveSession(ctx, sessionId)
+    if (detach.status === 'failed') {
+      // 内存 store 仍持有该会话且无法 detach：继续删目录会在官方后续 flush
+      // 时"复活"——中止删除并明确报错（fail closed，防复活承诺）。
+      ctx.logger?.warn?.('[width-slider] delete aborted: live session detach failed', { sessionId, reason: detach.reason })
+      return {
+        ok: false,
+        code: 'detach-failed',
+        message: '无法安全移除内存中的会话条目' + (detach.reason ? '（' + detach.reason + '）' : '') + '，删除已取消',
+      }
+    }
 
     const firstDirRemoved = removeSessionDirs(sessionId)
     const projStorage = await stripStorageDomains(ctx, sessionId, { workspace: false })
@@ -248,7 +276,13 @@ export async function deleteSessionById(ctx: SessionDeleteCtx, id: string): Prom
     if (!dirRemoved && !projRemoved && !workspaceRemoved) {
       return { ok: false, code: 'not-found', message: 'session not found: ' + sessionId }
     }
-    ctx.logger?.info?.('[width-slider] session deleted', { sessionId, dirRemoved, projRemoved, workspaceRemoved })
+    const cleanupFailed = projStorage.projFailed || workspaceStorage.projFailed || workspaceStorage.workspaceFailed
+    ctx.logger?.info?.('[width-slider] session deleted', { sessionId, dirRemoved, projRemoved, workspaceRemoved, cleanupFailed })
+    // 目录已删、仅索引清理异常：不打断成功语义（日志已留痕），
+    // 提示用户重启后检查列表是否残留（见 docs/verification F7 兜底）。
+    if (cleanupFailed) {
+      return { ok: true, message: 'session deleted; workspace/cache index cleanup had errors (see host log), restart DSH if the list still shows it' }
+    }
     return { ok: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

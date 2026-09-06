@@ -2,19 +2,20 @@
  * sessionDelete.ts — 会话删除（client 端，v0.5.0）。
  *
  * 集成自：lsz-asd/dsh-plugin-session-delete（@huanlin/dsh-plugin-session-delete
- * v0.3.1，MIT，仓库 session-delete-ref/）——保留其完整交互：
- *   - 头部"删除会话"危险按钮（conversation.session.header.actions）；
- *   - 会话行 ⋯ 菜单注入"删除会话"项（DOM 注入，分隔线 + 红色）；
- *   - 官方 primitives.Modal 居中确认框（标题/描述/序列号/运行警告/
- *     "我已了解后果"勾选 + 确认/取消），不再是自绘浮层；
+ * v0.3.1，MIT，仓库 session-delete-ref/）——保留核心交互、修正 UI 形态：
+ *   - 会话行 ⋯ 菜单注入"删除会话"项：克隆官方 menuitem 模板（继承官方
+ *     padding/圆角/hover 灰底），仅图标换垃圾桶、文字标危险色，与官方项
+ *     平级追加、无分隔线（UI 定稿，按用户要求移除头部按钮与手写分隔线）；
+ *   - 官方 primitives.Modal 确认框（shell.overlay 注册：标题/描述/序列号/
+ *     运行警告/"我已了解后果"勾选 + 确认/取消），不再是自绘浮层；
  *   - 删除成功后调用会话列表刷新。
  * 规避其 issue #2：目标会话 id 从会话行 React fiber 直读 node.id
  * （menu 路径），绝不按标题反查；读不到 id 即失败提示（fail closed）。
  * 删除经 /width-slider RPC sessionDelete{id}（host 见 src/host/
  * sessionDeleteService.ts）。文案随界面语言（zh/en，运行时取值）。
  */
-import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import { pickText, isZhInterface } from './lang.ts'
+import { createElement, useCallback, useEffect, useState } from 'react'
+import { isZhInterface } from './lang.ts'
 
 interface SessCtx {
   connection: {
@@ -32,7 +33,6 @@ interface SessCtx {
 
 const OVERLAY_SLOT = 'shell.overlay'
 const DIALOG_ID = 'session-delete-dialog'
-const BTN_ID = 'session-delete'
 const EVENT = 'dsh:session-delete'
 const MENU_DELETE_ATTR = 'data-session-delete-item'
 
@@ -104,7 +104,6 @@ function DeleteSessionDialog(): any {
   const [acknowledged, setAcknowledged] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogRef = useRef<{ rpc: (id: string) => Promise<string | null> } | null>(null)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -321,6 +320,15 @@ function ensureDeleteMenuItem(): void {
 
 export function installSessionDelete(ctx: SessCtx): () => void {
   if (typeof document === 'undefined') return () => {}
+  // 官方 primitives 不可用时（依赖缺失/升级破坏）：确认框无法渲染，
+  // 菜单项点了没反馈——干脆整个功能降级跳过并在 console 说明原因。
+  if (!primitives().Modal) {
+    try {
+      // eslint-disable-next-line no-console
+      console.warn('[width-slider] session delete disabled: @deepseek-ai/dsh-client-ui-primitives Modal unavailable')
+    } catch { /* ignore */ }
+    return () => {}
+  }
   // 供组件/模块使用：rpc 出口 + 会话服务 + createElement。
   deleteViaRpc = (sessionId: string) => rpcDelete(ctx, sessionId)
   try {

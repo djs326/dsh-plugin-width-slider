@@ -1195,9 +1195,10 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   // 工作区行菜单「分配工作区」注入 + 目标选择框（shell.overlay）。
   const overlayDispose = (() => {
     try {
-      if (typeof ctx.slots?.inject === 'function' && typeof ctx.slots?.register === 'function') {
-        return ctx.slots.inject(OVERLAY_SLOT, () =>
-          ctx.slots.register(
+      const slots = ctx.slots
+      if (slots && typeof slots.inject === 'function' && typeof slots.register === 'function') {
+        return slots.inject(OVERLAY_SLOT, () =>
+          slots.register(
             { name: OVERLAY_SLOT, id: ASSIGN_TAB_DIALOG_ID, order: 100 },
             AssignWorkspaceToTabDialog,
           ),

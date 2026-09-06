@@ -33,6 +33,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { isZhInterface } from './lang.ts'
+import { getSettings, onSettingsChanged } from './config.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
@@ -282,6 +283,15 @@ function groupOf(id: string): WsGroup | undefined {
   return groups.find((g) => g.id === id)
 }
 
+/** 开关状态（组件常驻：开关只切显示/过滤，不重新挂组件，保证即时）。 */
+function useWsTabsEnabled(): boolean {
+  return useSyncExternalStore(
+    (cb) => onSettingsChanged(cb),
+    () => getSettings().workspaceTabs,
+    () => getSettings().workspaceTabs,
+  )
+}
+
 // ── 数据过滤（带结果缓存）────────────────────────────────────────────────
 // 官方树把收到的 useSessions / useWorkspaces 结果当渲染依赖做引用比较，
 // 且内部会对会话顺序做账（写 store 再触发重渲染）。过滤结果每次都是新对象
@@ -447,6 +457,7 @@ function openAssignToTab(row: HTMLElement): void {
 
 /** 往工作区行打开的 ⋯ 菜单里克隆官方项插入「分配工作区」（四字、普通色）。 */
 function ensureWorkspaceAssignMenuItem(): void {
+  if (!getSettings().workspaceTabs) return
   const row = findOpenProjectRow()
   if (!row) return
   const menu = document.querySelector('[role=menu]')
@@ -983,6 +994,8 @@ interface ShellProps {
 
 function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const { OfficialComp, wide = true, useSessions, useWorkspaces } = innerProps
+  // 开关状态：组件常驻，开关只切「标签+过滤」，不重新挂载组件（即时生效）。
+  const enabled = useWsTabsEnabled()
   const gs = useGroups()
   const groupList = gs.groups
   const [active, setActive] = useState<string>(() => {
@@ -1096,6 +1109,12 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
       if (!host) return
       try {
         const found = locateHeader(host)
+        if (!enabled) {
+          // 关闭：恢复官方标题显示、移除页签栏（即时回官方原样）。
+          if (found) found.label.style.display = ''
+          setHeader(null)
+          return
+        }
         if (found) {
           found.label.style.display = 'none'
           setHeader((cur) => (cur && cur.row === found.row ? cur : { row: found.row, label: found.label }))
@@ -1109,7 +1128,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     tick()
     const timer = window.setInterval(tick, 400)
     return () => window.clearInterval(timer)
-  }, [wide])
+  }, [wide, enabled])
 
   const tryExpandAll = (ids: string[]): void => {
     if (!ids.length) return
@@ -1142,15 +1161,15 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     setDialog({ kind: 'rename', id: nu.id })
   }
 
-  // 过滤 hooks：页签作用域驱动官方树。
+  // 过滤 hooks：仅开关开启时用页签作用域驱动官方树；关闭时原样透传（官方原貌）。
   const officialProps: ShellProps = { ...innerProps }
-  if (useSessions) {
+  if (enabled && useSessions) {
     const raw = useSessions
     const ids = scopeSessionIds
     officialProps.useSessions = (sel: unknown, eq?: unknown): unknown =>
       raw((state: unknown) => (sel as (s: unknown) => unknown)(filterSessions(state as SessionListState, ids)), eq)
   }
-  if (useWorkspaces) {
+  if (enabled && useWorkspaces) {
     const rawWs = useWorkspaces
     const ids = scopeWsIds
     officialProps.useWorkspaces = (sel: unknown, eq?: unknown): unknown =>
@@ -1164,7 +1183,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     { ref: hostRef, 'data-dsh-ws-tabs-host': '', style: { display: 'contents' } },
     [
       typeof OfficialComp === 'function' ? h(OfficialComp as never, officialProps) : null,
-      header
+      header && enabled
         ? createPortal(
             h(TabStrip, {
               groups: groupList,

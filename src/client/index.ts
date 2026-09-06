@@ -303,7 +303,9 @@ export function apply(ctx: RpcClientContext): void {
       ensure('nav', s.navScroll, () => installNavScrollPatch())
       ensure('owButton', s.openWithButton, () => installOpenWithButton(ctx))
       ensure('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
-      ensure('wsTabs', s.workspaceTabs, () => installWorkspaceTabs(ctx as never))
+      // 工作区分页：组件常驻（启动即包裹一次），开关只切换 wrapper 内 enabled
+      // 状态（显示标签/过滤），不再反复安装/卸载组件——开关即时生效。
+      ensure('wsTabs', true, () => installWorkspaceTabs(ctx as never))
     }
 
     const unsubscribe = onSettingsChanged(sync)

@@ -24,9 +24,7 @@
 | 平台 | 仅 `win32` |
 
 > 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 整合）主要流程已由作者真机验证；
-> 会话删除（v0.5.0）与近期修复（宽度启动恢复、Open With 即时同步）由作者验收中。逐项清单见
-> [verification-0.4.0-openwith.md](./docs/verification-0.4.0-openwith.md) 与
-> [verification-0.5.0-session-delete.md](./docs/verification-0.5.0-session-delete.md)。
+> 会话删除（v0.5.0）与近期修复（宽度启动恢复、Open With 即时同步）由作者验收中。
 > 若你的 DSH 是自建/Web 版，机制相同（同为 Web 端注入），但以桌面版为准验证。
 
 ---

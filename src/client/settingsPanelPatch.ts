@@ -7,7 +7,7 @@
  *   div.panel[role="dialog"][aria-modal="true"]
  *     ├── nav（设置左侧导航列）
  *     │   ├── div.navTitle（标题，settings.header）
- *     │   └── div.navList（tab 列表 —— nav 的第 2 个 div 且含多个 button）
+ *     │   └── div.navList（tab 列表 —— 首个含多个 button 的 div 子元素）
  *     └── div.content > div.options（右侧内容，官方已有 overflow-y:auto）
  *
  * 功能：
@@ -18,10 +18,11 @@
  *   localStorage（键 dsh.conversation.settingsPanelWidth）；双击拖柄恢复
  *   默认 800px。
  *
- * 设置面板每次开关都会重新挂载弹窗 DOM（React unmount/mount），因此两
- * 个补丁都用 body 级 MutationObserver 探测 dialog 出现后即时 patch；
- * 已 patch 过的元素用 WeakSet 记录防重复。面板关闭后 DOM 销毁，内联样式
- * 随元素一并消失，无残留。
+ * 设置面板每次开关都会重新挂载弹窗 DOM（React unmount/mount），因此两个
+ * 补丁都用 body 级 MutationObserver 探测 dialog 出现后即时 patch；已 patch
+ * 过的元素用 WeakSet 记录防重复。回调经 requestAnimationFrame 合并（一个
+ * 帧内多次 DOM 变更只 probe 一次）。面板关闭后 DOM 销毁，内联样式随元素
+ * 一并消失，无残留。
  */
 
 // ── 常量 ─────────────────────────────────────────────────────────────
@@ -45,17 +46,39 @@ function findSettingsDialog(): HTMLElement | null {
   return null
 }
 
-/** 找左侧 tab 列表容器（nav 内第二个 div 子元素且含多个 button）。 */
+/**
+ * 找左侧 tab 列表容器：nav 下首个含 button 的 div（= navList）。
+ * 官方结构 navTitle（无 button）在前、navList（多个 navCell button）在后；
+ * 用"含 button"判定比固定索引更抗标题区变化。
+ */
 function findNavList(dialog: HTMLElement): HTMLElement | null {
   const nav = dialog.querySelector(':scope > nav')
   if (!nav) return null
-  const divs = Array.from(nav.children).filter(
-    (child): child is HTMLElement => child instanceof HTMLElement && child.tagName === 'DIV',
-  )
-  for (const div of divs) {
-    if (div.querySelectorAll('button').length > 0) return div
+  for (const child of Array.from(nav.children)) {
+    if (child instanceof HTMLElement && child.tagName === 'DIV' && child.querySelectorAll('button').length > 0) {
+      return child
+    }
   }
   return null
+}
+
+/** rAF 合并的 observer 回调包装：一帧内多次变更只跑一次 probe。 */
+function debouncedProbe(probe: () => void): { schedule: () => void; dispose: () => void } {
+  let rafId = 0
+  const schedule = (): void => {
+    if (rafId !== 0) return
+    rafId = requestAnimationFrame(() => {
+      rafId = 0
+      probe()
+    })
+  }
+  const dispose = (): void => {
+    if (rafId !== 0) {
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+  }
+  return { schedule, dispose }
 }
 
 // ── 补丁 1：左侧 tab 列表超高滚动（navScroll）────────────────────────
@@ -89,9 +112,13 @@ function probeAndPatchNavList(): void {
 export function installNavScrollPatch(): () => void {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
   probeAndPatchNavList()
-  const observer = new MutationObserver(() => probeAndPatchNavList())
+  const probe = debouncedProbe(() => probeAndPatchNavList())
+  const observer = new MutationObserver(() => probe.schedule())
   observer.observe(document.body, { childList: true, subtree: true })
-  return () => observer.disconnect()
+  return () => {
+    observer.disconnect()
+    probe.dispose()
+  }
 }
 
 // ── 补丁 2：设置弹窗可拖拽调宽（dialogResize）────────────────────────
@@ -128,6 +155,22 @@ function clampWidth(px: number): number {
   return Math.min(Math.max(RESIZE_MIN, Math.round(px)), Math.min(RESIZE_MAX, maxAllowedWidth()))
 }
 
+// ── 拖拽期间锁定 body 文本选择；带兜底恢复（面板被关/元素移除也还原）──
+
+let bodyUserSelectLocked = false
+
+function lockBodyUserSelect(): void {
+  if (bodyUserSelectLocked) return
+  document.body.style.userSelect = 'none'
+  bodyUserSelectLocked = true
+}
+
+function restoreBodyUserSelect(): void {
+  if (!bodyUserSelectLocked) return
+  document.body.style.userSelect = ''
+  bodyUserSelectLocked = false
+}
+
 function buildResizeHandle(dialog: HTMLElement): HTMLElement {
   const handle = document.createElement('div')
   handle.setAttribute(RESIZE_HANDLE_ATTR, '')
@@ -157,31 +200,34 @@ function buildResizeHandle(dialog: HTMLElement): HTMLElement {
   })
 
   let drag: { startX: number; startWidth: number } | null = null
+  const endDrag = (): void => {
+    drag = null
+    restoreBodyUserSelect()
+  }
   handle.addEventListener('pointerdown', (event) => {
     event.preventDefault()
     event.stopPropagation()
     drag = { startX: event.clientX, startWidth: dialog.offsetWidth }
     handle.setPointerCapture(event.pointerId)
-    document.body.style.userSelect = 'none'
+    lockBodyUserSelect()
   })
   handle.addEventListener('pointermove', (event) => {
     if (!drag) return
-    const width = clampWidth(drag.startWidth + (event.clientX - drag.startX))
-    dialog.style.width = width + 'px'
+    dialog.style.width = clampWidth(drag.startWidth + (event.clientX - drag.startX)) + 'px'
   })
   handle.addEventListener('pointerup', (event) => {
     if (!drag) return
-    persistWidth(drag.startWidth + (event.clientX - drag.startX))
-    drag = null
-    document.body.style.userSelect = ''
+    // 持久化与拖动应用同一 clamp 值，避免越界值落盘。
+    persistWidth(clampWidth(drag.startWidth + (event.clientX - drag.startX)))
+    endDrag()
     try {
       handle.releasePointerCapture(event.pointerId)
     } catch { /* ignore */ }
   })
-  handle.addEventListener('pointercancel', () => {
-    drag = null
-    document.body.style.userSelect = ''
-  })
+  handle.addEventListener('pointercancel', endDrag)
+  // 兜底：拖拽中面板被关闭/元素被移除时浏览器释放 capture 并触发本事件；
+  // 若未触发（元素直接移除），disposer 也会复位 userSelect。
+  handle.addEventListener('lostpointercapture', endDrag)
   return handle
 }
 
@@ -211,7 +257,13 @@ function probeAndPatchDialog(): void {
 export function installDialogResizePatch(): () => void {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
   probeAndPatchDialog()
-  const observer = new MutationObserver(() => probeAndPatchDialog())
+  const probe = debouncedProbe(() => probeAndPatchDialog())
+  const observer = new MutationObserver(() => probe.schedule())
   observer.observe(document.body, { childList: true, subtree: true })
-  return () => observer.disconnect()
+  return () => {
+    observer.disconnect()
+    probe.dispose()
+    // 开关关闭/插件卸载时复位拖拽锁定的文本选择（若仍在锁定）。
+    restoreBodyUserSelect()
+  }
 }

@@ -2,23 +2,22 @@
  * WidthSliderSettings: settings-panel section — 功能总控页（v0.3.0）。
  *
  * 卡片分组（每个功能带独立开关，默认全开、热生效）：
- * 1. 对话宽度滑块  —— 开关 + 滑块（WidthSliderControl，关闭时置灰禁用）
+ * 1. 对话宽度滑块  —— 开关 + 滑块（WidthSliderControl，关闭时隐藏并提示）
  * 2. 思考块        —— 增强渲染开关 + 显示方式（自动收起 / 始终展开）
  * 3. 输出语言      —— 思考/回复强制中文开关（host 端 systemPrompt 注入）
- * 4. 界面          —— 英文中文化开关
- * （设置弹窗拖宽 / 左侧 tab 滚动两个界面补丁开关随 M3 一并加入本页）
+ * 4. 界面          —— 英文中文化 + 弹窗调宽 + tab 滚动开关
  *
- * 数据流：host 文件为持久化真源（/width-slider RPC readSettings /
- * writeSettings）；本页本地 state 与 config store（applySettings）同源，
- * 切换即写入 host 并通知各功能热切换。
+ * 数据流（单一读源）：
+ * - 读取只发生在 client 入口启动时（一次 readSettings → config store）；
+ * - 本页订阅 store 渲染；开关改动 → applySettings 广播（功能即时热切换）
+ *   + dirty 标记触发写盘（writeSettings）；不重复读、不与读回竞态。
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
-import { applySettings, mergeSettings, type FeatureSettings } from './config.ts'
+import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
 
 export interface WidthSliderSettingsInjected {
-  readSettings: () => Promise<unknown>
   writeSettings: (settings: unknown) => Promise<void>
 }
 
@@ -128,36 +127,26 @@ function RadioRow(props: {
 
 // ── 主组件：功能总控页 ────────────────────────────────────────────────
 
-export function WidthSliderSettings({ readSettings, writeSettings, t }: WidthSliderSettingsProps): JSX.Element {
-  const [settings, setSettings] = useState<FeatureSettings>(() => mergeSettings(null))
+export function WidthSliderSettings({ writeSettings, t }: WidthSliderSettingsProps): JSX.Element {
+  const [settings, setSettings] = useState<FeatureSettings>(() => getSettings())
+  /** 仅本地（用户）改动触发写盘；store 外部更新（启动读回）不写。 */
+  const dirtyRef = useRef(false)
 
-  // 挂载时从 host 拉取持久化配置；读回后同步进 store（功能热切换）。
+  // 订阅 config store：入口读回 / 其它来源的配置变化同步到本页。
+  useEffect(() => onSettingsChanged((next) => setSettings(next)), [])
+
+  // 本组件改动后写盘（dirty 由 persist 置位，effect 消费后复位）。
   useEffect(() => {
-    let cancelled = false
-    readSettings()
-      .then((raw) => {
-        if (cancelled) return
-        const merged = mergeSettings(raw)
-        setSettings(merged)
-        applySettings(merged)
-      })
-      .catch((err) => {
-        console.warn('[width-slider] readSettings failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [readSettings])
+    if (!dirtyRef.current) return
+    dirtyRef.current = false
+    writeSettings(settings).catch((err) => console.warn('[width-slider] writeSettings failed', err))
+  }, [settings, writeSettings])
 
-  /** 应用补丁：本地 state + store 同步 + 写入 host（乐观，失败仅告警）。 */
+  /** 应用补丁：以 store 最新值为基 → applySettings 广播热切换 → dirty 写盘。 */
   const persist = useCallback((patch: Partial<FeatureSettings>): void => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch }
-      applySettings(next)
-      writeSettings(next).catch((err) => console.warn('[width-slider] writeSettings failed', err))
-      return next
-    })
-  }, [writeSettings])
+    dirtyRef.current = true
+    applySettings({ ...getSettings(), ...patch })
+  }, [])
 
   const id = (k: string): string => 'dsh-plugin-width-slider-' + k
 
@@ -173,9 +162,7 @@ export function WidthSliderSettings({ readSettings, writeSettings, t }: WidthSli
           onChange={(checked) => persist({ widthSlider: checked })}
         />
         {settings.widthSlider ? (
-          <div style={{ paddingLeft: 0 }}>
-            <WidthSliderControl t={t} />
-          </div>
+          <WidthSliderControl t={t} />
         ) : (
           <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-caption, #888)' }}>
             {t('disabledHint')}
@@ -193,7 +180,7 @@ export function WidthSliderSettings({ readSettings, writeSettings, t }: WidthSli
           onChange={(checked) => persist({ thinkRender: checked })}
         />
         {settings.thinkRender && (
-          <div style={{ margin: '2px 0 6px', paddingLeft: 0 }}>
+          <div style={{ margin: '2px 0 6px' }}>
             <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, #bbb)', marginBottom: 8 }}>
               {t('thinkModeLabel')}
             </div>

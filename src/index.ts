@@ -2,29 +2,22 @@
  * Host-side plugin entry.
  *
  * v0.3.0（think-kit）职责：
- * 1. 思考/回复强制中文（systemPrompt.section 注入，order -90）；
+ * 1. 思考/回复强制中文（systemPrompt.section 注入，order -90，可热切换）；
  * 2. 插件功能开关的持久化与热切换（/width-slider RPC：readSettings /
  *    writeSettings；文件存 $DSH_HOME/storages/dsh-plugin-width-slider/
  *    settings.json，仿 dsh-plugin-open-with 的原子写模式）；
  * 3. writeSettings 时立即按新配置热切换「中文强制」（其余功能为纯
  *    client 行为，由 client 端配置 store 热切换）。
  *
- * 存储与协议契约（与 src/client/config.ts 保持同步）：
- *   FeatureSettings {
- *     widthSlider: boolean   // 1 对话宽度滑块（client）
- *     chinesePrompt: boolean // 2 思考/回复强制中文（host，此处热切换）
- *     thinkRender: boolean   // 3 思考块增强渲染（client）
- *     uiLocalize: boolean    // 4 界面英文中文化（client）
- *     thinkMode: 'auto-collapse' | 'keep-expanded' // 5 思考块模式
- *     dialogResize: boolean  // 6 设置弹窗可拖拽调宽（M3 接线，默认开）
- *     navScroll: boolean     // 7 设置左侧 tab 栏滚动（M3 接线，默认开）
- *   }
- * 两端 DEFAULTS 必须一致。
+ * 功能开关契约唯一真源：src/shared/settings.ts（host 与 client 共用）。
+ * section 名用 dsh-width-slider-think-zh（避免与上游 dsh-think-zh-expand
+ * 的 dsh-think-zh 同名重复注册抛错——收编后用户仍可能忘记卸载上游）。
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
+import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
 
 // ── $DSH_HOME 解析（与 open-with 同款：env DSH_HOME 优先，默认 ~/.dsh）──
 
@@ -35,47 +28,25 @@ function resolveDshHome(env: Record<string, string | undefined> = process.env): 
 const SETTINGS_DIR = join(resolveDshHome(), 'storages', 'dsh-plugin-width-slider')
 const SETTINGS_FILE = join(SETTINGS_DIR, 'settings.json')
 
-// ── 功能开关契约（与 client/src/config.ts 的 DEFAULT_FEATURE_SETTINGS 一致）──
+export { DEFAULT_FEATURE_SETTINGS, mergeSettings }
+export type { FeatureSettings }
 
-export interface FeatureSettings {
-  widthSlider: boolean
-  chinesePrompt: boolean
-  thinkRender: boolean
-  uiLocalize: boolean
-  thinkMode: 'auto-collapse' | 'keep-expanded'
-  dialogResize: boolean
-  navScroll: boolean
-}
-
-export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
-  widthSlider: true,
-  chinesePrompt: true,
-  thinkRender: true,
-  uiLocalize: true,
-  thinkMode: 'auto-collapse',
-  dialogResize: true,
-  navScroll: true,
-}
-
-function mergeSettings(raw: unknown): FeatureSettings {
-  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  return {
-    widthSlider: o.widthSlider !== false,
-    chinesePrompt: o.chinesePrompt !== false,
-    thinkRender: o.thinkRender !== false,
-    uiLocalize: o.uiLocalize !== false,
-    thinkMode: o.thinkMode === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse',
-    dialogResize: o.dialogResize !== false,
-    navScroll: o.navScroll !== false,
-  }
-}
-
-/** 读设置文件（不存在/损坏时回退默认），合并保证新键齐全。 */
+/** 读设置文件；损坏/缺失时回退默认。损坏文件改名保留现场（不静默覆盖）。 */
 function readSettingsSync(): FeatureSettings {
   try {
     if (!existsSync(SETTINGS_FILE)) return { ...DEFAULT_FEATURE_SETTINGS }
-    return mergeSettings(JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8')))
-  } catch {
+    const raw = readFileSync(SETTINGS_FILE, 'utf-8')
+    const parsed: unknown = JSON.parse(raw)
+    return mergeSettings(parsed)
+  } catch (err) {
+    // 文件损坏/半写：保留现场供排查，回退默认（下次写覆盖新文件，不丢证据）。
+    try {
+      if (existsSync(SETTINGS_FILE)) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+        renameSync(SETTINGS_FILE, SETTINGS_FILE + '.corrupt-' + stamp)
+      }
+    } catch { /* 改名失败不阻塞 */ }
+    console.warn('[width-slider] settings 文件损坏或不可读，已回退默认并保留现场', err)
     return { ...DEFAULT_FEATURE_SETTINGS }
   }
 }
@@ -129,13 +100,24 @@ export function apply(baseCtx: Context): void {
   let current = readSettingsSync()
 
   // 中文强制注入控制器（可热切换：注销即不再出现在组装后的系统提示里）。
+  // 整体 try/catch：systemPrompt 服务缺失 / ctx 已卸载 / 上游同名冲突等
+  // 都不应让中文开关或 RPC 写入失败。
   let promptDispose: (() => void) | null = null
   const syncChinesePrompt = (cfg: FeatureSettings): void => {
-    const sys = ctx.systemPrompt
-    if (cfg.chinesePrompt && promptDispose === null && sys?.section) {
-      promptDispose = sys.section({ name: 'dsh-think-zh', order: -90, text: PROMPT_TEXT }) ?? null
-    } else if (!cfg.chinesePrompt && promptDispose !== null) {
-      promptDispose()
+    try {
+      const sys = ctx.systemPrompt
+      if (cfg.chinesePrompt && promptDispose === null && sys?.section) {
+        promptDispose = sys.section({
+          name: 'dsh-width-slider-think-zh',
+          order: -90,
+          text: PROMPT_TEXT,
+        }) ?? null
+      } else if (!cfg.chinesePrompt && promptDispose !== null) {
+        promptDispose()
+        promptDispose = null
+      }
+    } catch (err) {
+      logger?.warn?.('[width-slider] 中文强制注入切换失败', err)
       promptDispose = null
     }
   }
@@ -145,7 +127,9 @@ export function apply(baseCtx: Context): void {
     syncChinesePrompt(current)
     return () => {
       if (promptDispose !== null) {
-        promptDispose()
+        try {
+          promptDispose()
+        } catch { /* 忽略 */ }
         promptDispose = null
       }
     }
@@ -153,6 +137,8 @@ export function apply(baseCtx: Context): void {
 
   // 生命周期 2：/width-slider RPC（client 总控页经 ctx.connection.rpc.call
   // 调用 readSettings / writeSettings；loopback 围栏防外部访问）。
+  // 写盘与热切换分开处理：文件落盘成功即 ok:true，热切换异常仅告警，
+  // 避免"已落盘但返回失败"导致 client 重复提交。
   ctx.effect(
     () =>
       ctx.connection?.rpc.handle(
@@ -166,14 +152,14 @@ export function apply(baseCtx: Context): void {
             const next = mergeSettings(body.settings)
             try {
               writeSettingsSync(next)
-              current = next
-              syncChinesePrompt(next)
-              return { ok: true, value: {} }
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err)
               logger?.warn?.('[width-slider] writeSettings failed', message)
               return { ok: false, error: { code: 'write-failed', message } }
             }
+            current = next
+            syncChinesePrompt(next)
+            return { ok: true, value: {} }
           }
           logger?.warn?.('[width-slider] unknown endpoint', endpoint)
           return { ok: false, error: { code: 'unknown-endpoint', message: 'unknown endpoint: ' + endpoint } }

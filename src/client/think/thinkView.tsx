@@ -14,7 +14,7 @@
  * renderMessageImages；tool-call 块由独立节点渲染（返回 null）。
  */
 
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { memo, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 
 // ── 思考块与 assistant 容器样式（DSH 语义 token，随激活注入）──────────
 // 视觉基线：与官方 ReasoningRow 一致（头部 DisclosureRow 结构：leading
@@ -109,13 +109,14 @@ function stripControlTags(text: string): string {
 }
 
 // ── 文本渲染（Markdown 或降级纯文本）────────────────────────────────
-
-function TextRenderer({ text }: { text: string }) {
+// memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
+// MarkdownView 重解析，减少每帧全量工作。
+const TextRenderer = memo(function TextRenderer({ text }: { text: string }) {
   const cleanText = stripControlTags(text)
   const MarkdownView = resolveMarkdownView()
   if (MarkdownView !== null) return <MarkdownView text={cleanText} />
   return <div className="dsh-ws-plain">{cleanText}</div>
-}
+})
 
 // ── 思考块：默认「思考完收起」行为 ──────────────────────────────────
 // 行为语义（用户定制版固化）：
@@ -133,8 +134,10 @@ export interface ThinkBlockProps {
 
 export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBlockProps) {
   const cleanText = stripControlTags(text)
-  // 初始收起：非生成中的历史思考块以折叠摘要呈现（思考完=已结束）。
-  const [expanded, setExpanded] = useState<boolean>(false)
+  // 初始态与模式对齐：auto-collapse（默认）初始收起——历史/非生成中的
+  // 思考块以折叠摘要呈现，生成中由 open=expanded||running 强制展开、结束
+  // 后自动收起；keep-expanded（上游语义）初始展开、可手动收起。
+  const [expanded, setExpanded] = useState<boolean>(() => !collapseAfterRun)
   const open = expanded || running
   const prevRunning = useRef(running)
 

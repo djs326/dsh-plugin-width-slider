@@ -211,6 +211,8 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     // Follow mode owns the width — manual drag / preview is disabled.
     if (followRef.current) return
+    // 重入保护：上一次拖动未结束（多指/快速二击）忽略新按下，防止锚点覆盖跳变。
+    if (dragRef.current !== null) return
     e.preventDefault()
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)

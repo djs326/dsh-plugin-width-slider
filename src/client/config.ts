@@ -1,53 +1,20 @@
 /**
  * config.ts — 插件功能开关的 client 端配置 store。
  *
- * 与 host 端（src/index.ts）的 FeatureSettings 契约保持一致：
+ * 契约（类型/默认值/合并）唯一真源 = src/shared/settings.ts（host 共用）。
  * - 持久化真源 = host 端文件（$DSH_HOME/storages/dsh-plugin-width-slider/
  *   settings.json），经 /width-slider RPC readSettings/writeSettings 读写；
- * - 进程内热切换源 = 本模块 current（setSettings 通知订阅者即时生效）；
- * - 默认值两端必须一致（见本文件 DEFAULT_FEATURE_SETTINGS）。
+ * - 进程内热切换源 = 本模块 current（applySettings 通知订阅者即时生效）；
+ * - 读取只发生一次（client 入口启动时）；总控页开关改动即写 host。
  */
+import {
+  DEFAULT_FEATURE_SETTINGS,
+  mergeSettings,
+  type FeatureSettings,
+} from '../shared/settings.ts'
 
-export interface FeatureSettings {
-  /** 1 对话宽度滑块（含隐藏原生手柄） */
-  widthSlider: boolean
-  /** 2 思考/回复强制中文（host 端 systemPrompt 注入） */
-  chinesePrompt: boolean
-  /** 3 思考块增强渲染（assistant-step 覆盖） */
-  thinkRender: boolean
-  /** 4 界面硬编码英文中文化 */
-  uiLocalize: boolean
-  /** 5 思考块模式：思考完自动收起 / 保持展开（上游语义） */
-  thinkMode: 'auto-collapse' | 'keep-expanded'
-  /** 6 官方设置弹窗可拖拽调宽（M3 接线） */
-  dialogResize: boolean
-  /** 7 官方设置左侧 tab 栏超高滚动（M3 接线） */
-  navScroll: boolean
-}
-
-export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
-  widthSlider: true,
-  chinesePrompt: true,
-  thinkRender: true,
-  uiLocalize: true,
-  thinkMode: 'auto-collapse',
-  dialogResize: true,
-  navScroll: true,
-}
-
-/** 合并任意来源（host 文件 / 缺失键）为完整配置。 */
-export function mergeSettings(raw: unknown): FeatureSettings {
-  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  return {
-    widthSlider: o.widthSlider !== false,
-    chinesePrompt: o.chinesePrompt !== false,
-    thinkRender: o.thinkRender !== false,
-    uiLocalize: o.uiLocalize !== false,
-    thinkMode: o.thinkMode === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse',
-    dialogResize: o.dialogResize !== false,
-    navScroll: o.navScroll !== false,
-  }
-}
+export type { FeatureSettings }
+export { DEFAULT_FEATURE_SETTINGS, mergeSettings }
 
 // ── 进程内 store（订阅者：client 功能生命周期；热切换即时生效）──────────
 

@@ -46,6 +46,8 @@ function installHandleHide(): Disposer {
   const style = document.createElement('style')
   style.id = 'dsh-plugin-width-slider-hide-handles'
   style.textContent = HANDLE_HIDE_CSS
+  // 幂等：热重载/重复实例时先清掉旧同 id 样式，避免开关只移除自己那份。
+  document.getElementById(style.id)?.remove()
   document.head.appendChild(style)
   return () => { style.remove() }
 }
@@ -56,6 +58,7 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
   const style = document.createElement('style')
   style.id = 'dsh-plugin-width-slider-think-styles'
   style.textContent = THINK_STYLES
+  document.getElementById(style.id)?.remove()
   document.head.appendChild(style)
   disposers.push(() => { style.remove() })
   // 渲染回调每次读最新 thinkMode：模式切换无需重建注册，下次渲染即生效。
@@ -197,8 +200,8 @@ export function apply(ctx: RpcClientContext): void {
         order: 600,
         label: 'Width Slider',
         locale: NS,
+        // 单一读源：client 入口启动时经 config load 拉取一次；总控页只写。
         inject: () => ({
-          readSettings: () => rpcReadSettings(ctx),
           writeSettings: (settings: unknown) => rpcWriteSettings(ctx, settings),
         }),
       },

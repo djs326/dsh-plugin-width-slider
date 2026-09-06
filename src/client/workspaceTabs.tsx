@@ -1086,8 +1086,53 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (!changed) return
     commitGroups((cur) => cur.map((g) => ({ ...g, workspaceIds: g.workspaceIds.filter((id) => known.has(id)) })))
   }, [itemsAll]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 新建工作区自动归属当前页签：官方「＋ 添加工作区」创建的工作区不带标签归属，
+  // 会直接落入「默认」页。这里监测全量列表，把「新建出现」的工作区（首次加载的
+  // 既有工作区除外）归入创建时正停留的页签；若停在默认页则不归属（本就在默认）。
+  // 基线策略：store 每次进入非 ready（加载/重载）或功能关闭时作废基线，下个 ready
+  // 快照重建基线，避免把「重载后的既有列表」误判为新增。
+  const seenWsRef = useRef<string[] | null>(null)
+  const wsPhaseReady = !!wsState && (wsState as { phase?: string }).phase === 'ready'
+  useEffect(() => {
+    if (!enabled || !gs.ready) {
+      seenWsRef.current = null
+      return
+    }
+    if (!wsPhaseReady) {
+      seenWsRef.current = null
+      return
+    }
+    const ids = itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v)
+    const seen = seenWsRef.current
+    if (seen === null) {
+      seenWsRef.current = ids
+      return
+    }
+    const fresh = ids.filter((id) => !seen.includes(id))
+    seenWsRef.current = ids
+    if (fresh.length === 0) return
+    if (effectiveActive === DEFAULT_TAB) return
+    const target = groupList.find((g) => g.id === effectiveActive)
+    if (!target) return
+    const owned = new Set<string>()
+    for (const g of groupList) for (const id of g.workspaceIds) owned.add(id)
+    const toAssign = fresh.filter((id) => !owned.has(id))
+    if (toAssign.length === 0) return
+    commitGroups((cur) =>
+      cur.map((g) =>
+        g.id === effectiveActive
+          ? { ...g, workspaceIds: Array.from(new Set([...g.workspaceIds, ...toAssign])) }
+          : g,
+      ),
+    )
+    try {
+      const actions = innerProps.actions as { setGroupExpanded?: (id: string, expanded: boolean) => void } | null
+      if (actions && typeof actions.setGroupExpanded === 'function') {
+        for (const id of toAssign) actions.setGroupExpanded(id, true)
+      }
+    } catch { /* 忽略 */ }
+  }, [itemsAll, enabled, gs.ready, wsPhaseReady, effectiveActive, groupList]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 页签失效回退：分组加载后 active 不存在则回默认；对话框目标消失则关闭。
   useEffect(() => {
     if (!gs.ready) return
     if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) {

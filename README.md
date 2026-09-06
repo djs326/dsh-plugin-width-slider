@@ -203,6 +203,15 @@ dsh-plugin-width-slider/
 └── package.json
 ```
 
+## 致谢
+
+本插件的思考增强与打开方式能力分别整合自两个优秀的 MIT 开源项目，感谢两位开发者及其生态：
+
+- [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins)（baosfeng 的 my-dsh-plugins 仓库）
+- [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with)
+
+也感谢 DSH 插件社区（dsh-md-render 等）提供的渲染与运行基础设施。许可归属明细见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+
 ## License
 
 [MIT](./LICENSE)

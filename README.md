@@ -1,6 +1,6 @@
 # dsh-plugin-width-slider
 
-**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
+**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除、v0.5.1 起 Markdown 渲染独立开关；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
 - **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染（Markdown 渲染可独立关闭，避免与其它渲染插件叠加）；

@@ -2,7 +2,7 @@
   "name": "dsh-plugin-width-slider",
   "displayName": "Width Slider · 对话宽度 / 思考增强 / 打开方式",
   "description": "DSH 个人多功能插件：对话宽度滑块 + 思考块增强（整合 dsh-think-zh-expand）+ Open With 打开方式（整合 dsh-plugin-open-with 本地修改版）+ 界面中文化 + 官方面板补丁，全部功能独立开关。Settings feature control page with width slider, thinking-block enhancements and an Open With launcher button — every feature has its own toggle.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.mjs",

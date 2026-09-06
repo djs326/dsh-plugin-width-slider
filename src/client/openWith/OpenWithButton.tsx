@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isSafePngIcon } from '../icons.ts'
+import { emitOpenWithChanged, subscribeOpenWithChanged } from './sync.ts'
 
 /** 默认图标（DSH logo 风格），用于图标提取完成前的回退。 */
 const fallbackIcon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAKDSURBVFhH7ZZJyI1xFMZ/yJQpMmRhDkkplCglWSAiUaadDSVDlI2FhZAyFAsbCSkiYqGQDBEbU4ayMC1E5qnMUw/nvY7j3O/e78PuPnW63TM9533P//zPCzXU8H/QEhgXlQ1FE6At0ML+K/kMYB9wF7gCdAoxc4A7Ftsg9Ac2AteA98AX4DPwBHgFfHMyJgYD28y2C+gajYbewLSoVMVrjcyT1CUjYxJgj7O/AcaavjMwHJgF3Ad2+yCR708IKsljYKJPBKwOPjeB9cCnoF/ug1YmyasVtWixyzUs8YmiGLX6BwYAHxOn+shXYJkrYnvi42WD8y0dmr8VFbHAcjYHdiQ+asMaPyFN3cl+av16lgRWKypihRGMcPpbwDygx6/n/onB5nAKaGw6/fa1vl5PSCKh7oJY9AXgiPt/OPCWMMUczkSDQcXo4nmQkEtuA4PssqprirbExAWmm8NDoFE0OnQEjieJP9iB0+2ndp5NfCRzY8IC451Tz2gMaAYcSJLr7Swyn35lJmpgyFWCZrFwWhiNCbQTziUE6rnekt7CxWBTm8pCPS4O0NUKbSjQDXieFPEWeJHoNRV1YqdznhyNZTA7IcrkdbIt/4AWShGgeW0VHRLoTR1KCKMsjYHl4GdWW6q4EwpofS4B2jldF5ueSFrI0fp8E/QJu36rHagCQ0wvQt+mUTaKkfwG0N75VYVJYWWeBno5+wnT6/bbbGMpzExW7TFgdJWH+jcomX+id8BBu8leBpLzwFAjmVBmAi4B3SNJJehQ3kuSlZNHtjP0CbbOCtM3oRbbXqBDJKgGbYBVyVNnogLmJwf3n6C1LSO14CRw2W46Tc0mYKr7Yq6hhnrjO8xVal7nQeXKAAAAAElFTkSuQmCC'
@@ -133,22 +134,27 @@ export function OpenWithButton({
     return () => document.removeEventListener('pointerdown', onDown)
   }, [open])
 
-  // 初始装载：胶囊项 + 隐藏项 + 当前项（设置面板"设为当前"同源）。
-  // 初载 target = currentId（有效时），否则落第一项；卸载后不再 setState。
+  // 装载 + 订阅数据变更：胶囊项/隐藏项/当前项（设置面板"设为当前"与
+  // 增删改/隐藏同源）。初载 target = currentId（有效时），否则落第一项；
+  // 订阅到变更广播即重拉——已挂载的按钮无需等会话切换即可即时同步。
   useEffect(() => {
     let alive = true
-    Promise.all([readCapsuleItems(), readHiddenIds(), readCurrentId()])
-      .then(([items, hidden, currentId]) => {
-        if (!alive) return
-        setCapsuleItems(items)
-        setHiddenIds(hidden)
-        const wanted = currentId !== null && items.some((it) => it.id === currentId)
-          ? currentId
-          : (items[0]?.id ?? 'code')
-        setTarget(wanted)
-      })
-      .catch(() => {})
-    return () => { alive = false }
+    const refresh = (): void => {
+      Promise.all([readCapsuleItems(), readHiddenIds(), readCurrentId()])
+        .then(([items, hidden, currentId]) => {
+          if (!alive) return
+          setCapsuleItems(items)
+          setHiddenIds(hidden)
+          const wanted = currentId !== null && items.some((it) => it.id === currentId)
+            ? currentId
+            : (items[0]?.id ?? 'code')
+          setTarget(wanted)
+        })
+        .catch(() => {})
+    }
+    refresh()
+    const unsubscribe = subscribeOpenWithChanged(refresh)
+    return () => { alive = false; unsubscribe() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readCapsuleItems, readHiddenIds, readCurrentId])
 
@@ -203,10 +209,13 @@ export function OpenWithButton({
       return
     }
     log('info', 'picker selected launch', { sessionId, target: next, cwd })
-    // 写回 currentId（host setCurrent），与设置面板"设为当前"同源。
-    setCurrent(next).catch((err) => {
-      log('warn', 'setCurrent failed', err)
-    })
+    // 写回 currentId（host setCurrent），与设置面板"设为当前"同源；
+    // 成功后广播变更，让其它已挂载按钮（含其它窗口）即时跟上。
+    setCurrent(next)
+      .then(() => emitOpenWithChanged())
+      .catch((err) => {
+        log('warn', 'setCurrent failed', err)
+      })
     launch(cwd, next).then((result) => {
       if (result.ok) log('info', 'RPC result', result)
       else log('warn', 'RPC returned error', result)

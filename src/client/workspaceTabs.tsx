@@ -41,7 +41,8 @@ const ACTIVE_KEY = 'dsh-plugin-width-slider.wsTab'
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
 const TABS_CSS = `
-[data-dsh-ws-tabs-bar]{display:flex;align-items:center;gap:2px;flex:1;min-width:0;height:100%;overflow:hidden;padding-left:2px}
+[data-dsh-ws-tabs-bar]{display:flex;align-items:center;gap:2px;flex:0 1 auto;min-width:0;max-width:62%;height:100%;overflow-x:auto;overflow-y:hidden;padding-left:2px;scrollbar-width:none}
+[data-dsh-ws-tabs-bar]::-webkit-scrollbar{display:none}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0 6px 0 10px;font:inherit;font-size:13px;line-height:36px;height:36px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:3px;flex:none}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover{color:var(--dsw-alias-label-primary,#e6edf3)}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]{color:var(--dsw-alias-label-primary,#e6edf3);font-weight:600}
@@ -637,6 +638,12 @@ function TabStrip(props: {
           textAlign: 'left',
           cursor: 'pointer',
         },
+        onMouseEnter: (e: { currentTarget: HTMLElement }) => {
+          e.currentTarget.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))'
+        },
+        onMouseLeave: (e: { currentTarget: HTMLElement }) => {
+          e.currentTarget.style.background = 'transparent'
+        },
       },
       label,
     )
@@ -1032,32 +1039,34 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (dialog && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
   }, [gs.ready, active, groupList, dialog])
 
-  // 标题行定位与隐藏：官方标题原位替换为页签栏。
+  // 标题行处理：官方标题原位替换为页签栏。
+  // - 定位官方 header 行并隐藏其标题 span；把页签栏节点前置到该行最前
+  //   （搜索/视图/添加图标随之保持在右侧）；
+  // - 官方重渲染重建行时自动重新定位（周期自愈，低成本）。
   useLayoutEffect(() => {
     if (!wide) {
       setHeader(null)
       return
     }
-    const scan = (): boolean => {
+    const tick = () => {
       const host = hostRef.current
-      if (!host) return false
-      const found = locateHeader(host)
-      if (!found) return false
-      found.label.style.display = 'none'
-      setHeader(found)
-      return true
+      if (!host) return
+      try {
+        const found = locateHeader(host)
+        if (found) {
+          found.label.style.display = 'none'
+          setHeader((cur) => (cur && cur.row === found.row ? cur : { row: found.row, label: found.label }))
+        }
+        const bar = host.querySelector('[data-dsh-ws-tabs-bar]')
+        if (found && bar && bar.parentNode === found.row && found.row.firstChild !== bar) {
+          found.row.insertBefore(bar, found.row.firstChild)
+        }
+      } catch { /* 忽略 */ }
     }
-    if (scan()) return
-    const timer = window.setInterval(() => {
-      if (scan()) window.clearInterval(timer)
-    }, 300)
+    tick()
+    const timer = window.setInterval(tick, 400)
     return () => window.clearInterval(timer)
   }, [wide])
-
-  useLayoutEffect(() => {
-    if (!header) return
-    header.label.style.display = 'none'
-  }, [header])
 
   const tryExpandAll = (ids: string[]): void => {
     if (!ids.length) return

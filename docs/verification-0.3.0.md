@@ -4,7 +4,7 @@
 > 需重启 DSH Desktop（host 端 index.mjs 与 client bundle 均生效）；已停用/
 > 卸载上游 dsh-think-zh-expand；dsh-md-render 保持启用。
 
-## A. 收编功能（M1）
+## A. 整合功能（M1）
 
 - [ ] A1 思考块：新开一轮对话让模型思考，生成中思考块实时展开显示全文
 - [ ] A2 生成结束后思考块自动收起为一行（思考图标 + 首行摘要）

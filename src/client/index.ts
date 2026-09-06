@@ -1,9 +1,9 @@
 /**
- * Client-side plugin entry（v0.3.0 收编后）。
+ * Client-side plugin entry（v0.3.0 起整合上游能力）。
  *
  * 职责（全部挂独立开关，默认开、热生效，见 config.ts FeatureSettings）：
  * 1. 对话宽度滑块设置区块 —— 总控页（WidthSliderSettings）；
- * 2. 思考块增强渲染（assistant-step 覆盖，收编 dsh-think-zh-expand）；
+ * 2. 思考块增强渲染（assistant-step 覆盖，整合自 dsh-think-zh-expand）；
  * 3. 界面硬编码英文中文化；
  * 4. 隐藏官方原生宽度拖拽手柄（跟随「宽度滑块」开关联动）。
  *
@@ -127,7 +127,7 @@ function installLocalize(): Disposer {
   return installUiLocalize()
 }
 
-// ── Open With 头部胶囊按钮（收编 dsh-plugin-open-with；openWithButton=开时）──
+// ── Open With 头部胶囊按钮（整合 dsh-plugin-open-with；openWithButton=开时）──
 
 type OpenWithRpcContext = RpcClientContext & {
   sessions?: {
@@ -234,7 +234,7 @@ function warnIfUpstreamPresent(): void {
     if (hit) {
       console.warn(
         '[width-slider] 检测到上游 dsh-think-zh-expand 仍启用：其 assistant-step 渲染器' +
-        '与本插件同 key 注册会互相覆盖。请卸载 dsh-think-zh-expand（本插件已收编其全部能力）。',
+        '与本插件同 key 注册会互相覆盖。请卸载 dsh-think-zh-expand（本插件已整合其全部能力）。',
       )
     }
   } catch { /* 忽略 */ }

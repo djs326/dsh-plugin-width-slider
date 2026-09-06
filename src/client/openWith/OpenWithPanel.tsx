@@ -1,7 +1,7 @@
 /**
  * OpenWithPanel.tsx — Open With 配置面板（嵌入总控页的卡片分组）。
  *
- * 收编自 dsh-plugin-open-with（MIT，Copyright (c) 2026 hyrinx <xhy_23@qq.com>；
+ * 整合自 dsh-plugin-open-with（MIT，Copyright (c) 2026 hyrinx <xhy_23@qq.com>；
  * 归属声明见 THIRD_PARTY_NOTICES.md）。转写自上游 src/client/OpenWithSettings.tsx
  * （设置面板与 slot 注入修复无关，官方源码即行为基准），差异：
  * - 组件改名 OpenWithPanel，作为 WidthSliderSettings 总控页的 Open With 分组；

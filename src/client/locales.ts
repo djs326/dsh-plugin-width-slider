@@ -28,7 +28,7 @@ export interface WidthSliderKey {
   enableNavScroll: string
   enableNavScrollInfo: string
   disabledHint: string
-  // ── v0.4.0 Open With（收编 dsh-plugin-open-with）──
+  // ── v0.4.0 Open With（整合自 dsh-plugin-open-with）──
   owTooltip: string
   owPickerAria: string
   owMenuAria: string

@@ -21,9 +21,9 @@ export interface FeatureSettings {
   dialogResize: boolean
   /** 7 官方设置左侧 tab 栏超高滚动 */
   navScroll: boolean
-  /** 8 对话头部 Open With 胶囊按钮（收编 dsh-plugin-open-with） */
+  /** 8 对话头部 Open With 胶囊按钮（整合 dsh-plugin-open-with） */
   openWithButton: boolean
-  /** 9 Open With 设置在总控页中的分组（收编 dsh-plugin-open-with） */
+  /** 9 Open With 设置在总控页中的分组（整合 dsh-plugin-open-with） */
   openWithSettings: boolean
   /** 10 会话行 ⋯ 菜单"删除会话"项（克隆官方菜单项，二次确认后 host 永久删除） */
   sessionDelete: boolean

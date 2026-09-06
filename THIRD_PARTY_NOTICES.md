@@ -8,7 +8,7 @@
 - 版权：Copyright (c) 2026 bsfeng
 - 上游仓库：https://github.com/baosfeng/my-dsh-plugins
 - 参考版本：v0.4.7（插件目录 LICENSE 为 MIT）
-- 收编用途（v0.3.0）：思考/回复强制中文（host system prompt 注入）、
+- 整合用途（v0.3.0）：思考/回复强制中文（host system prompt 注入）、
   思考块增强渲染（assistant-step 渲染器替换）、界面硬编码英文中文化。
 - 本地转写文件（非逐字拷贝；类名/注册名/默认行为/降级逻辑有改动）：
   - src/client/think/thinkView.tsx —— 对应上游 lib/parts/assistant.part.js
@@ -52,7 +52,7 @@ SOFTWARE.
 - 上游仓库：https://github.com/hyrinx/dsh-plugin-open-with
 - 参考版本：本地修改版（用户验证有效的 actions 槽位修复版，上游 v1.0.0
   行为 + slot 注入修复：inject 目标 = register 的 slot 自身）
-- 收编用途（v0.4.0）：对话头部"用其他应用打开"胶囊按钮（host launch/
+- 整合用途（v0.4.0）：对话头部"用其他应用打开"胶囊按钮（host launch/
   图标提取/路径解析 + client 按钮/设置面板）。
 - 本地转写文件（非逐字拷贝；类名/注册名/图标/代码组织有改动）：
   - src/host/openWithService.ts —— 对应上游 lib/index.js（/open-with RPC）

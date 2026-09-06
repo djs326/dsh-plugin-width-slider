@@ -1,7 +1,7 @@
 /**
  * OpenWithButton.tsx — 对话头部"用其他应用打开"胶囊拆分按钮。
  *
- * 收编自 dsh-plugin-open-with（修改版：actions 槽位同槽注入修复）。
+ * 整合自 dsh-plugin-open-with（修改版：actions 槽位同槽注入修复）。
  * 上游：https://github.com/hyrinx/dsh-plugin-open-with（MIT，Copyright (c)
  * 2026 hyrinx <xhy_23@qq.com>；归属声明见 THIRD_PARTY_NOTICES.md）。
  * 转写自上游 lib/client.js 的 OpenVscodeButton 区，行为等价：

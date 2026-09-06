@@ -1,7 +1,7 @@
 /**
  * openWithService.ts — Open With（对话头部"用其他应用打开"）host 服务。
  *
- * 收编自 dsh-plugin-open-with（修改版：本地验证有效的 actions 槽位修复版）。
+ * 整合自 dsh-plugin-open-with（修改版：本地验证有效的 actions 槽位修复版）。
  * 上游：https://github.com/hyrinx/dsh-plugin-open-with（MIT，Copyright (c)
  * 2026 hyrinx <xhy_23@qq.com>；完整归属声明见 THIRD_PARTY_NOTICES.md）。
  * 转写自上游 lib/index.js（lib/client.js 构建产物的 host 半部），行为等价：
@@ -13,7 +13,7 @@
  *   id 对应、preset=false、带 path）；
  * - 图标提取：PowerShell System.Drawing ExtractAssociatedIcon → base64 PNG。
  *
- * 差异：用 ctx.logger 输出日志（上游为自建文件 logger，收编后不再留独立
+ * 差异：用 ctx.logger 输出日志（上游为自建文件 logger，整合后不再留独立
  * 日志文件）；client 的 log endpoint 转发到 ctx.logger。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'

@@ -1,10 +1,10 @@
 # dsh-plugin-width-slider
 
-**DSH 个人多功能插件**（v0.3.0 起收编 dsh-think-zh-expand、v0.4.0 起收编 dsh-plugin-open-with、v0.5.0 起内置会话删除；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
+**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
-- **思考块增强**（收编自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染；
-- **Open With**（收编自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
+- **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染；
+- **Open With**（整合自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
 - **界面中文化**：官方界面残留硬编码英文标签自动替换为中文；
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
 - **会话删除**（v0.5.0）：官方不支持删除会话，本插件在会话行 ⋯ 菜单补"删除会话"——二次确认后 host 执行完整删除链（停止任务/清内存/删磁盘/清投影缓存与工作区记账），不留半删残留。
@@ -23,7 +23,7 @@
 | Node.js | `^22.11 \|\| >= 24` |
 | 平台 | 仅 `win32` |
 
-> 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 收编）主要流程已由作者真机验证；
+> 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 整合）主要流程已由作者真机验证；
 > 会话删除（v0.5.0）与近期修复（宽度启动恢复、Open With 即时同步）由作者验收中。逐项清单见
 > [verification-0.4.0-openwith.md](./docs/verification-0.4.0-openwith.md) 与
 > [verification-0.5.0-session-delete.md](./docs/verification-0.5.0-session-delete.md)。
@@ -187,7 +187,7 @@ dsh-plugin-width-slider/
 ├── src/
 │   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider（readSettings/writeSettings/sessionDelete）+ /open-with RPC + storages 配置
 │   ├── host/
-│   │   ├── openWithService.ts       # Open With host 服务（收编：launch/图标提取/路径解析/设置文件）
+│   │   ├── openWithService.ts       # Open With host 服务（整合上游：launch/图标提取/路径解析/设置文件）
 │   │   └── sessionDeleteService.ts  # 会话删除 host 删除链（v0.5.0：停 agent/删目录/投影缓存/workspace 记账）
 │   ├── shared/
 │   │   ├── settings.ts              # 功能开关契约唯一真源（host/client 共用）
@@ -201,12 +201,12 @@ dsh-plugin-width-slider/
 │       ├── widthPrefs.ts            # 宽度偏好读写/发布 + 启动恢复（follow 全局 watcher / fixed 恢复）
 │       ├── sessionDelete.ts         # ⋯ 菜单"删除会话"项 + 官方 Modal 确认框（fiber 行级 id，防误删）
 │       ├── openWith/
-│       │   ├── OpenWithButton.tsx   # 头部胶囊按钮（收编，actions 同槽注入）
-│       │   ├── OpenWithPanel.tsx    # 打开项管理面板（并入总控页，收编）
+│       │   ├── OpenWithButton.tsx   # 头部胶囊按钮（整合上游，actions 同槽注入）
+│       │   ├── OpenWithPanel.tsx    # 打开项管理面板（并入总控页，整合上游）
 │       │   └── sync.ts              # Open With 数据变更广播（同窗口总线 + BroadcastChannel）
 │       ├── think/
-│       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（收编，dsh-ws- 前缀）
-│       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（收编）
+│       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（整合上游，dsh-ws- 前缀）
+│       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（整合上游）
 │       ├── lang.ts                  # 界面语言判定（中文化门控/双语文本）
 │       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案

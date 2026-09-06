@@ -30,7 +30,6 @@ interface SessCtx {
   effect: (fn: () => void | (() => void), label?: string) => void
 }
 
-const SLOT_HEADER = 'conversation.session.header.actions'
 const OVERLAY_SLOT = 'shell.overlay'
 const DIALOG_ID = 'session-delete-dialog'
 const BTN_ID = 'session-delete'
@@ -204,30 +203,6 @@ let deleteViaRpc: (sessionId: string) => Promise<string | null> = async () => 'r
 
 declare const require: (id: string) => unknown
 
-// ── 头部危险按钮（当前会话）──────────────────────────────────────────
-
-function DeleteSessionButton(props: { sessionId?: string; useSessions?: (s: (x: unknown) => unknown) => unknown }): any {
-  const ce = createElement as (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown
-  const summary = sessionsById()[props.sessionId ?? '']
-  const running = summary?.running === true
-  const openDialog = () => {
-    window.dispatchEvent(new CustomEvent(EVENT, { detail: { sessionId: props.sessionId, title: summary?.title ?? null, running } }))
-  }
-  const Icon = primitives().IconTrashOutline16
-  return ce('button', {
-    type: 'button',
-    title: running ? tt('button.titleRunning') : tt('button.title'),
-    'aria-label': tt('button.title'),
-    style: {
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      width: 28, height: 28, padding: 0, border: 'none', borderRadius: 6,
-      background: 'transparent', color: 'var(--dsw-alias-label-tertiary,#8a8a8e)',
-      cursor: 'pointer', flex: 'none',
-    },
-    onClick: openDialog,
-  }, Icon ? ce(Icon, { size: 16 }) : null)
-}
-
 // ── 菜单注入（⋯ → 删除会话，行级 id）───────────────────────────────
 
 const TRASH_PATH = 'M14.4782 4.84067L14.2138 10.1152C14.1102 12.1872 14.067 13.0115 13.3866 13.9607C13.1044 14.3546 12.7498 14.6912 12.3424 14.9535C11.8239 15.2872 11.2415 15.4316 10.5585 15.4998C9.88727 15.5668 9.04946 15.5656 7.99998 15.5656C6.95051 15.5656 6.1127 15.5668 5.44142 15.4998C4.75851 15.4316 4.17602 15.2872 3.65753 14.9535C3.25012 14.6912 2.89559 14.3546 2.61332 13.9607C1.93296 13.0115 1.88979 12.1872 1.78619 10.1152L1.52179 4.84067L2.89006 4.77277L3.15343 10.0463C3.26221 12.2218 3.32452 12.6015 3.72646 13.1624C3.90825 13.4161 4.13686 13.6334 4.39927 13.8023C4.66204 13.9714 5.00263 14.0792 5.57825 14.1367C6.16562 14.1953 6.92298 14.1963 7.99998 14.1963C9.07699 14.1963 9.83434 14.1953 10.4217 14.1367C10.9973 14.0792 11.3379 13.9714 11.6007 13.8023C11.8631 13.6334 12.0917 13.4161 12.2735 13.1624C12.6755 12.6015 12.7378 12.2218 12.8465 10.0463L13.1099 4.77277L14.4782 4.84067ZM5.43011 6.22849H6.7994V11.3909H5.43011V6.22849ZM9.20056 6.22849H10.5699V11.3909H9.20056V6.22849ZM8.53597 0.434431C9.17976 0.434431 9.6522 0.426926 10.0966 0.571258C10.2357 0.616451 10.3717 0.672554 10.502 0.738948C10.9182 0.951107 11.2464 1.29099 11.7015 1.74612L12.4978 2.54136H15.3742V3.91169H0.625732V2.54136H3.50218L4.29845 1.74612C4.75358 1.29099 5.08174 0.951107 5.49801 0.738948C5.62831 0.672554 5.76425 0.616451 5.90334 0.571258C6.34776 0.426926 6.82021 0.434431 7.46399 0.434431H8.53597ZM7.46399 1.80476C6.73208 1.80476 6.51641 1.81187 6.32617 1.87369C6.25545 1.89667 6.18668 1.92533 6.12041 1.95907C5.96398 2.03878 5.82348 2.16253 5.44142 2.54136H10.5585C10.1765 2.16253 10.036 2.03878 9.87955 1.95907C9.81329 1.92533 9.74452 1.89667 9.6738 1.87369C9.48356 1.81187 9.26789 1.80476 8.53597 1.80476H7.46399Z'
@@ -279,30 +254,64 @@ function openMenuDelete(row: HTMLElement): void {
   }))
 }
 
+/**
+ * 克隆官方菜单项做"删除会话"（继承官方全部样式：padding/圆角/字号/hover
+ * 由官方 hash 类控制，保证与 重命名/分叉会话/归档会话 视觉一致），仅把
+ * 图标换成垃圾桶、文本换成删除会话、文字标危险色。
+ */
 function ensureDeleteMenuItem(): void {
   const menu = document.querySelector('[role=menu]')
   if (!menu) return
   if (menu.querySelector('[' + MENU_DELETE_ATTR + ']')) return
   const row = findOpenSessionRow()
   if (!row) return
-  const item = document.createElement('button')
-  item.type = 'button'
-  item.setAttribute('role', 'menuitem')
-  item.setAttribute(MENU_DELETE_ATTR, '1')
-  item.style.cssText = [
-    'display:flex', 'alignItems:center', 'gap:8px', 'width:100%',
-    'padding:6px 12px', 'border:none', 'background:transparent',
-    'color:var(--dsw-alias-state-error-primary,#e5484d)',
-    'font:inherit', 'fontSize:13px', 'lineHeight:20px',
-    'textAlign:left', 'borderRadius:6px', 'cursor:pointer',
-  ].join(';')
-  item.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex:none"><path d="' + TRASH_PATH + '" fill="currentColor"/></svg><span>' + tt('menu.delete') + '</span>'
-  item.addEventListener('mouseenter', () => { item.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))' })
-  item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+  // 官方菜单项模板（任意一个官方 menuitem，如"重命名"）。
+  const template = Array.from(menu.querySelectorAll('[role=menuitem]')).find(
+    (el) => !el.hasAttribute(MENU_DELETE_ATTR),
+  ) as HTMLElement | null
+
+  let item: HTMLButtonElement
+  if (template) {
+    item = template.cloneNode(true) as HTMLButtonElement
+    item.setAttribute(MENU_DELETE_ATTR, '1')
+    // 清掉官方图标（svg），前面插入垃圾桶图标。
+    item.querySelectorAll('svg').forEach((s) => s.remove())
+    const svgWrap = document.createElement('span')
+    svgWrap.style.cssText = 'display:inline-flex;flex:none'
+    svgWrap.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="' + TRASH_PATH + '" fill="currentColor"/></svg>'
+    item.insertBefore(svgWrap, item.firstChild)
+    // 更新文本（官方 label span 保留其样式类）。
+    const spans = Array.from(item.querySelectorAll('span'))
+    const labelSpan = spans.find((s) => s.textContent && s.textContent.trim() !== '') ?? null
+    if (labelSpan) labelSpan.textContent = tt('menu.delete')
+    else {
+      const span = document.createElement('span')
+      span.textContent = tt('menu.delete')
+      item.appendChild(span)
+    }
+    // 危险色：语义色覆盖（布局/样式其余全部继承官方）。
+    item.style.color = 'var(--dsw-alias-state-error-primary,#e5484d)'
+    // hover 背景：官方类自带；仅确保非透明背景样式不覆盖我们的透明初始。
+    item.style.background = 'transparent'
+  } else {
+    // 兜底（无官方模板时）：手写与官方一致的布局。
+    item = document.createElement('button') as HTMLButtonElement
+    item.type = 'button'
+    item.setAttribute('role', 'menuitem')
+    item.setAttribute(MENU_DELETE_ATTR, '1')
+    item.style.cssText = [
+      'display:flex', 'alignItems:center', 'gap:8px', 'width:100%',
+      'padding:6px 12px', 'border:none', 'background:transparent',
+      'color:var(--dsw-alias-state-error-primary,#e5484d)',
+      'font:inherit', 'fontSize:13px', 'lineHeight:20px',
+      'textAlign:left', 'borderRadius:6px', 'cursor:pointer',
+    ].join(';')
+    item.innerHTML = '<span style="display:inline-flex;flex:none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="' + TRASH_PATH + '" fill="currentColor"/></svg></span><span>' + tt('menu.delete') + '</span>'
+    item.addEventListener('mouseenter', () => { item.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))' })
+    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+  }
   item.addEventListener('click', () => openMenuDelete(row))
-  const sep = document.createElement('div')
-  sep.style.cssText = 'height:1px;margin:4px 8px;background:var(--dsw-alias-border-l1,rgba(128,128,128,.2))'
-  menu.appendChild(sep)
+  // 不插分隔线：与官方菜单项平级直接追加，保持官方一致的列表外观。
   menu.appendChild(item)
 }
 
@@ -328,15 +337,6 @@ export function installSessionDelete(ctx: SessCtx): () => void {
     ))
     disposers.push(d)
   } catch { /* ignore */ }
-  // 头部删除按钮（当前会话）。
-  try {
-    const d = ctx.slots.inject(SLOT_HEADER, () => ctx.slots.register(
-      { name: SLOT_HEADER, id: BTN_ID, order: 30 },
-      DeleteSessionButton,
-    ))
-    disposers.push(d)
-  } catch { /* ignore */ }
-
   ensureDeleteMenuItem()
   let rafId = 0
   const schedule = () => {

@@ -91,6 +91,8 @@ export interface WsTabsCtx {
   slots?: {
     entries?: (key: string) => Array<{ component?: unknown }>
     subscribe?: (key: string, listener: () => void) => () => void
+    inject?: (name: string, register: () => () => void) => () => void
+    register?: (options: Record<string, unknown>, component: unknown) => () => void
   }
 }
 
@@ -343,6 +345,238 @@ const I = {
   pen: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   x: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   plus: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+}
+
+// ── 工作区行菜单「分配工作区」（把工作区分配到某个页签/默认）──────────────
+const WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'
+const ASSIGN_TAB_EVENT = 'dsh:ws-tab-assign'
+const ASSIGN_TAB_DIALOG_ID = 'ws-assign-tab-dialog'
+const OVERLAY_SLOT = 'shell.overlay'
+const ASSIGN_ICON_PATH =
+  '<path transform="translate(9.52 2.52)" d="M3.55246 0L3.55246 2.44252L6 2.44252L6 3.55748L3.55246 3.55748L3.55246 6L2.43834 6L2.43834 3.55748L0 3.55748L0 2.44252L2.43834 2.44252L2.43834 0L3.55246 0Z" fill="currentColor"/>' +
+  '<path transform="translate(0.3496 2.35)" d="M4.76367 0C5.36861 1.80598e-05 5.93113 0.310294 6.25488 0.821289L6.78027 1.64941C6.79685 1.67558 6.81791 1.69775 6.83887 1.71973C6.72186 2.15521 6.65702 2.61192 6.65137 3.08301C6.25601 2.96045 5.90909 2.70478 5.68164 2.3457L5.15723 1.5166C5.07183 1.38189 4.92318 1.3008 4.76367 1.30078L2.32422 1.30078C1.7589 1.30078 1.30078 1.7589 1.30078 2.32422L1.30078 10.1338C1.30078 10.6991 1.7589 11.1572 2.32422 11.1572L11.9766 11.1572C12.5419 11.1572 13 10.6991 13 10.1338L13 8.58398C13.4545 8.5135 13.8903 8.38748 14.3008 8.21289L14.3008 10.1338C14.3008 11.4171 13.2598 12.458 11.9766 12.458L2.32422 12.458C1.04093 12.458 0 11.4171 0 10.1338L0 2.32422C0 1.04093 1.04093 0 2.32422 0L4.76367 0Z" fill="currentColor"/>'
+
+const T_WS = {
+  'menu.assign': ['分配工作区', 'Assign workspace'],
+  'dlg.title': ['分配工作区', 'Assign workspace'],
+  'dlg.desc': ['把「{name}」分配到哪个页签？', 'Move "{name}" into which tab?'],
+  'dlg.cur': ['当前所在', 'Current'],
+  'dlg.done': ['已分配', 'Assigned'],
+  'dlg.noWs': ['该工作区已不存在。', 'This workspace no longer exists.'],
+} as Record<string, [string, string]>
+function ttw(key: string, vars?: Record<string, string>): string {
+  const pair = T_WS[key]
+  if (!pair) return key
+  let text = isZhInterface() ? pair[0] : pair[1]
+  if (vars) for (const k of Object.keys(vars)) text = text.replace('{' + k + '}', vars[k])
+  return text
+}
+
+/** 正在打开 ⋯ 菜单的工作区行（官方组头行，含 menuOpen）。 */
+function findOpenProjectRow(): HTMLElement | null {
+  const rows = document.querySelectorAll<HTMLElement>('[class*=projectRow]')
+  for (const row of rows) {
+    if (row.className.indexOf('menuOpen') >= 0) return row
+  }
+  return null
+}
+
+/** 从行 React fiber 直读官方 group 节点里的 workspaceId（不按标题反查）。 */
+function workspaceInfoFromRow(row: HTMLElement): { workspaceId: string | null; title: string } {
+  let title = ''
+  try {
+    const titleEl = row.querySelector('[class*=title]')
+    if (titleEl) title = String((titleEl as HTMLElement).innerText || '').trim()
+  } catch { /* 忽略 */ }
+  try {
+    for (const key of Object.keys(row)) {
+      if (key.indexOf('__reactFiber$') !== 0) continue
+      let node: unknown = (row as unknown as Record<string, unknown>)[key]
+      for (let depth = 0; node && depth < 32; depth += 1, node = (node as { return?: unknown }).return) {
+        const props = (node as { memoizedProps?: { group?: { workspaceId?: unknown; label?: unknown } } }).memoizedProps
+        if (props && props.group && typeof props.group.workspaceId === 'string') {
+          return { workspaceId: props.group.workspaceId, title: title || String(props.group.label ?? '') }
+        }
+      }
+    }
+  } catch { /* fail closed */ }
+  return { workspaceId: null, title }
+}
+
+function openAssignToTab(row: HTMLElement): void {
+  const info = workspaceInfoFromRow(row)
+  window.dispatchEvent(new CustomEvent(ASSIGN_TAB_EVENT, { detail: info }))
+}
+
+/** 往工作区行打开的 ⋯ 菜单里克隆官方项插入「分配工作区」（四字、普通色）。 */
+function ensureWorkspaceAssignMenuItem(): void {
+  const row = findOpenProjectRow()
+  if (!row) return
+  const menu = document.querySelector('[role=menu]')
+  if (!menu) return
+  if (menu.querySelector('[' + WS_ASSIGN_MENU_ATTR + ']')) return
+  const info = workspaceInfoFromRow(row)
+  if (!info.workspaceId) return
+  const template = Array.from(menu.querySelectorAll('[role=menuitem]')).find(
+    (el) =>
+      !el.hasAttribute(WS_ASSIGN_MENU_ATTR) &&
+      !el.hasAttribute('data-session-delete-item') &&
+      !el.hasAttribute('data-ws-assign-item'),
+  ) as HTMLElement | null
+  let item: HTMLButtonElement
+  if (template) {
+    item = template.cloneNode(true) as HTMLButtonElement
+    const iconSvg = item.querySelector('svg')
+    if (iconSvg) {
+      iconSvg.setAttribute('fill', 'currentColor')
+      iconSvg.setAttribute('stroke', 'none')
+      iconSvg.innerHTML = ASSIGN_ICON_PATH
+    }
+    const spans = Array.from(item.querySelectorAll('span'))
+    const labelSpan = spans.find((s) => s.textContent && s.textContent.trim() !== '') ?? null
+    if (labelSpan) labelSpan.textContent = ttw('menu.assign')
+    else {
+      const span = document.createElement('span')
+      span.textContent = ttw('menu.assign')
+      item.appendChild(span)
+    }
+  } else {
+    item = document.createElement('button')
+    item.type = 'button'
+    item.setAttribute('role', 'menuitem')
+    item.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:8px', 'width:100%',
+      'padding:6px 12px', 'border:none', 'background:transparent',
+      'color:var(--dsw-alias-label-primary,#e6edf3)',
+      'font:inherit', 'fontSize:13px', 'lineHeight:20px',
+      'textAlign:left', 'borderRadius:6px', 'cursor:pointer',
+    ].join(';')
+    item.innerHTML = '<span style="display:inline-flex;flex:none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none">' + ASSIGN_ICON_PATH + '</svg></span><span>' + ttw('menu.assign') + '</span>'
+    item.addEventListener('mouseenter', () => { item.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))' })
+    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
+  }
+  item.setAttribute(WS_ASSIGN_MENU_ATTR, '1')
+  item.addEventListener('click', () => openAssignToTab(row))
+  // 插到「删除工作区」上方（zh/en 均可），找不到则追加到末尾。
+  const deleteItem = Array.from(menu.querySelectorAll('[role=menuitem]')).find((el) => {
+    const text = (el.textContent || '').trim()
+    return text === '删除工作区' || text === 'Delete workspace' || text.indexOf('删除工作区') >= 0
+  })
+  if (deleteItem && deleteItem.parentNode) deleteItem.parentNode.insertBefore(item, deleteItem)
+  else menu.appendChild(item)
+}
+
+/** 把工作区分配到目标页签（null=默认），唯一归属：从其它页签移出。 */
+function assignWsToTab(wsId: string, targetGroupId: string | null): void {
+  commitGroups((cur) => {
+    const out = cur.map((g) =>
+      g.id === targetGroupId ? g : { ...g, workspaceIds: g.workspaceIds.filter((id) => id !== wsId) },
+    )
+    if (targetGroupId === null) return out
+    return out.map((g) => {
+      if (g.id !== targetGroupId) return g
+      if (g.workspaceIds.includes(wsId)) return g
+      return { ...g, workspaceIds: [...g.workspaceIds, wsId] }
+    })
+  })
+}
+
+/** 分配目标选择框（官方 Modal，注册 shell.overlay）：目标 = 默认 / 各页签。 */
+function AssignWorkspaceToTabDialog(): ReactNode {
+  const gs = useGroups()
+  const [target, setTarget] = useState<{ workspaceId: string | null; title: string; done: boolean } | null>(null)
+  const [doneName, setDoneName] = useState('')
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail ?? {}
+      const workspaceId = typeof d.workspaceId === 'string' && d.workspaceId !== '' ? d.workspaceId : null
+      setTarget({ workspaceId, title: String(d.title ?? ''), done: false })
+      setDoneName('')
+    }
+    window.addEventListener(ASSIGN_TAB_EVENT, handler)
+    return () => window.removeEventListener(ASSIGN_TAB_EVENT, handler)
+  }, [])
+
+  if (!target) return null
+  const Modal = primitives().Modal
+  if (!Modal) return null
+
+  const owner = target.workspaceId ? membershipOf(target.workspaceId) : undefined
+  const close = () => setTarget(null)
+  const pick = (groupId: string | null, label: string) => {
+    if (!target.workspaceId) return
+    assignWsToTab(target.workspaceId, groupId)
+    setDoneName(label)
+    setTarget({ ...target, done: true })
+  }
+
+  const option = (groupId: string | null, name: string): ReactNode =>
+    h(
+      'button',
+      {
+        type: 'button',
+        onClick: () => pick(groupId, name),
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          width: '100%',
+          border: 0,
+          background: 'transparent',
+          color: 'var(--dsw-alias-label-primary,#e6edf3)',
+          padding: '8px 10px',
+          borderRadius: 8,
+          font: 'inherit',
+          fontSize: 13,
+          textAlign: 'left',
+          cursor: 'pointer',
+        },
+        onMouseEnter: (e: { currentTarget: HTMLElement }) => {
+          e.currentTarget.style.background = 'var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.12))'
+        },
+        onMouseLeave: (e: { currentTarget: HTMLElement }) => {
+          e.currentTarget.style.background = 'transparent'
+        },
+      },
+      [
+        h('span', { key: 'n', style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+        owner === groupId || (owner === undefined && groupId === null)
+          ? h('span', { key: 'c', style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary,#a8abb3)' } }, ttw('dlg.cur'))
+          : null,
+      ],
+    )
+
+  return h(
+    Modal,
+    {
+      open: true,
+      onClose: close,
+      title: ttw('dlg.title'),
+      closeLabel: tt('cancel'),
+      footer: [h('button', { key: 'ok', type: 'button', onClick: close, style: btnStyle({ primary: true }, false) }, tt('done'))],
+    },
+    h('div', null, [
+      target.workspaceId === null
+        ? h('div', { style: { padding: '8px 4px', fontSize: 12, color: 'var(--dsw-alias-label-secondary,#a8abb3)' } }, ttw('dlg.noWs'))
+        : target.done
+          ? h('div', { style: { padding: '8px 4px', fontSize: 13, color: 'var(--dsw-alias-state-success-primary,#3fb950)' } }, ttw('dlg.done') + '：' + doneName)
+          : h('div', null, [
+              h('div', { key: 'd', style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary,#a8abb3)', marginBottom: 8 } }, ttw('dlg.desc', { name: target.title || '' })),
+              h('div', { key: 'l', style: { display: 'flex', flexDirection: 'column', gap: 1 } }, [
+                option(null, tt('tab.default')),
+                ...gs.groups.map((g) => option(g.id, g.name)),
+              ]),
+            ]),
+    ]),
+  )
+}
+
+function membershipOf(wsId: string): string | undefined {
+  for (const g of groups) {
+    if (g.workspaceIds.includes(wsId)) return g.id
+  }
+  return undefined
 }
 
 // ── 页签栏（Portal 进官方 header 行）───────────────────────────────────
@@ -958,6 +1192,32 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   }
   void loadGroups()
 
+  // 工作区行菜单「分配工作区」注入 + 目标选择框（shell.overlay）。
+  const overlayDispose = (() => {
+    try {
+      if (typeof ctx.slots?.inject === 'function' && typeof ctx.slots?.register === 'function') {
+        return ctx.slots.inject(OVERLAY_SLOT, () =>
+          ctx.slots.register(
+            { name: OVERLAY_SLOT, id: ASSIGN_TAB_DIALOG_ID, order: 100 },
+            AssignWorkspaceToTabDialog,
+          ),
+        )
+      }
+    } catch { /* 忽略 */ }
+    return () => {}
+  })()
+  ensureWorkspaceAssignMenuItem()
+  let assignRaf = 0
+  const scheduleAssign = () => {
+    if (assignRaf !== 0) return
+    assignRaf = requestAnimationFrame(() => {
+      assignRaf = 0
+      try { ensureWorkspaceAssignMenuItem() } catch { /* 忽略 */ }
+    })
+  }
+  const assignObserver = new MutationObserver(() => scheduleAssign())
+  assignObserver.observe(document.body, { childList: true, subtree: true })
+
   const style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = TABS_CSS
@@ -1035,6 +1295,12 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
       } catch { /* 忽略 */ }
     }
     unwrap()
+    assignObserver.disconnect()
+    if (assignRaf !== 0) cancelAnimationFrame(assignRaf)
+    try {
+      overlayDispose()
+    } catch { /* 忽略 */ }
+    document.querySelectorAll('[' + WS_ASSIGN_MENU_ATTR + ']').forEach((el) => el.remove())
     style.remove()
     rpcCall = null
     groupReady = false

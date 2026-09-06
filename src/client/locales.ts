@@ -64,8 +64,6 @@ export interface WidthSliderKey {
   groupWorkspace: string
   enableWsTabs: string
   enableWsTabsInfo: string
-  enableAssign: string
-  enableAssignInfo: string
   resetAllLabel: string
   resetAllInfo: string
 }
@@ -133,9 +131,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
   groupWorkspace: '工作区分页',
   enableWsTabs: '启用工作区分页（页签栏）',
-  enableWsTabsInfo: '侧栏「工作区」标题位置改为分组页签：固定「默认」显示未分组的直属工作区与官方未分组会话；点右侧＋新建分组页签（文件夹）并命名，页签内可勾选放入工作区（工作区同一时间只归一处）；删除页签时其中工作区自动回到默认。',
-  enableAssign: '分配工作区（⋯ 菜单）',
-  enableAssignInfo: '会话 "⋯" 菜单在"删除会话"上方新增四字项"分配工作区"：选择目标工作区后把该会话移入对应分页。',
+  enableWsTabsInfo: '侧栏「工作区」标题位置改为分组页签：固定「默认」显示未分组的直属工作区与官方未分组会话；点右侧＋新建分组页签（文件夹）并命名；工作区行的操作菜单新增四字项「分配工作区」，可把该工作区放进任意页签或移回默认；删除页签时其中工作区自动回到默认。',
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
 }
@@ -203,9 +199,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
   groupWorkspace: 'Workspace tabs',
   enableWsTabs: 'Enable workspace tabs',
-  enableWsTabsInfo: 'Turns the sidebar Workspaces heading into group tabs: a fixed Default tab shows direct workspaces and ungrouped sessions; use ＋ to create named group tabs (folders) and check workspaces into them (a workspace belongs to one place at a time); deleting a tab moves its workspaces back to Default.',
-  enableAssign: 'Assign workspace (⋯ menu)',
-  enableAssignInfo: 'Adds the four-character "Assign workspace" item above "Delete session" in the session "⋯" menu: pick a target workspace to move the session into it.',
+  enableWsTabsInfo: 'Turns the sidebar Workspaces heading into group tabs: a fixed Default tab shows direct workspaces and ungrouped sessions; use ＋ to create named group tabs (folders); each workspace row menu gains a four-character Assign workspace item to move it into any tab or back to Default; deleting a tab moves its workspaces back to Default.',
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
 }

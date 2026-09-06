@@ -332,13 +332,6 @@ export function WidthSliderSettings({
           checked={settings.workspaceTabs}
           onChange={(checked) => persist({ workspaceTabs: checked })}
         />
-        <SwitchRow
-          id={id('enable-assign-ws')}
-          label={t('enableAssign')}
-          info={t('enableAssignInfo')}
-          checked={settings.assignWorkspace}
-          onChange={(checked) => persist({ assignWorkspace: checked })}
-        />
       </Card>
 
       {/* 6. 打开方式（Open With，整合自 dsh-plugin-open-with） */}

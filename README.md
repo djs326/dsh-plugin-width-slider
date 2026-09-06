@@ -1,6 +1,6 @@
 # dsh-plugin-width-slider
 
-**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除、v0.5.1 起 Markdown 渲染独立开关；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
+**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除、v0.5.1 起 Markdown 渲染独立开关、v0.6.0 起内置工作区分页；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
 - **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染（Markdown 渲染可独立关闭，避免与其它渲染插件叠加）；
@@ -8,6 +8,7 @@
 - **界面中文化**：官方界面残留硬编码英文标签自动替换为中文；
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
 - **会话删除**（v0.5.0）：官方不支持删除会话，本插件在会话行 ⋯ 菜单补"删除会话"——二次确认后 host 执行完整删除链（停止任务/清内存/删磁盘/清投影缓存与工作区记账），不留半删残留。
+- **工作区分页**（v0.6.0）：官方侧栏「工作区」标题原位替换为页签栏——固定「默认」+ 用户自建可命名页签（文件夹）收纳工作区；工作区唯一归属（默认或某一页签），行菜单「分配标签」移动归属；删除页签时其中工作区自动回默认；在其它页签新建工作区会自动归入当前页签。
 
 安装 dsh-plugin-width-slider 后即可替代 dsh-think-zh-expand 与 dsh-plugin-open-with（无需再单独安装，见下方"与上游插件的关系"）。
 
@@ -24,7 +25,7 @@
 | 平台 | 仅 `win32` |
 
 > 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 整合）主要流程已由作者真机验证；
-> 会话删除（v0.5.0）与近期修复（宽度启动恢复、Open With 即时同步）由作者验收中。
+> 会话删除（v0.5.0）、近期修复（宽度启动恢复、Open With 即时同步）与工作区分页（v0.6.0）由作者验收中。
 > 若你的 DSH 是自建/Web 版，机制相同（同为 Web 端注入），但以桌面版为准验证。
 
 ---
@@ -44,6 +45,7 @@
 | Open With 按钮 | 对话头部胶囊按钮（主按钮启动当前项 / 右侧箭头展开菜单切换），在当前会话目录启动 | 开 |
 | Open With 设置 | 总控页管理打开项：预设/自定义、组内拖拽排序、设为当前、隐藏、添加/编辑/删除；改动即时同步到已挂载的头部按钮（含其它窗口） | 开 |
 | 会话删除 | 会话行 ⋯ 菜单新增"删除会话"项：二次确认后永久删除会话及数据（官方不支持删除，由本插件补全） | 开 |
+| 工作区分页 | 官方侧栏「工作区」标题变为页签栏：固定「默认」页签 + 可新建/重命名/删除的命名页签（文件夹）；工作区唯一归属，行菜单「分配标签」移入任意页签或回默认；删除页签其中工作区自动回默认；在其它页签新建工作区自动归入该页签；重启后回到默认页签 | 开 |
 
 开关在 DSH 设置 → **对话宽度（Width Slider）** 区块内的功能总控页操作，改动即时生效、重启保留。
 
@@ -130,11 +132,18 @@ dsh-plugin-width-slider/
    - **输出语言**：思考/回复强制中文开关；
    - **界面**：英文中文化开关、设置弹窗调宽开关、设置 tab 滚动开关；
    - **打开方式（Open With）**：头部按钮开关 + 打开项管理（预设/自定义、拖拽排序、设为当前、隐藏、添加/编辑/删除；图标自动提取）；
-   - **会话删除**：⋯ 菜单"删除会话"项开关（详见第 6 条）。
+   - **会话删除**：⋯ 菜单"删除会话"项开关（详见第 6 条）；
+   - **工作区分页**：官方侧栏页签栏开关（详见第 7 条）。
 3. 对话头部胶囊按钮：左侧主按钮直接在当前会话目录启动当前打开项；右侧箭头展开菜单选择其它项（选择即启动并设为当前）。按钮跟随设置即时同步——在设置面板点"设为当前"、增删改项、隐藏/显示，所有已打开会话的头部按钮（含其它窗口）立即刷新，无需切换会话或重启。
 4. 调节范围（宽度滑块）：最小值 640px，最大值 = 对话列宽 − 176px（与原生拖拽一致）。
 5. 设置弹窗补丁：弹窗窗口化——右下角把手拖动可同时调整宽度与高度，顶部标题区空白拖动可移动弹窗位置，双击把手复位 800×800 居中；尺寸与位置会被记住。
 6. 删除会话：点击会话条目右侧"⋯"打开操作菜单，菜单末尾会出现红色的"删除会话"（与官方 重命名/分叉会话/归档会话 同级、样式一致，垃圾桶图标，无分隔线）；点击后二次确认，确认即永久删除该会话及全部数据，不可恢复。
+7. 工作区分页：开启后，官方侧栏顶部「工作区」标题位置变成页签栏，最前是固定的「默认」页签，其后是你自建的可命名页签，末尾 ＋ 新建页签（新建后立即改名）。
+   - 「默认」页签显示未分组的直属工作区与官方未分组会话；自建页签收纳被分配过来的工作区（同一工作区只属于一个位置）；
+   - 把工作区移入某页签：展开工作区行右侧 ⋯ 菜单，点「分配标签」，在弹窗中选择目标页签（或「默认」移回）；
+   - 删除页签：右键页签 → 删除，其中工作区自动回到「默认」，不会丢失；
+   - 在其它页签点官方侧栏顶部的 ＋添加工作区 新建，工作区会自动归入当前页签；
+   - 重启 DSH 后侧栏回到「默认」页签。
 
 ---
 
@@ -142,12 +151,13 @@ dsh-plugin-width-slider/
 
 | 机制 | 说明 |
 |------|------|
-| Slot 注入 | `settings.section`（总控页，id `width-slider`）、`conversation.session.header.actions`（Open With 按钮）、`shell.overlay`（会话删除确认框）、`conversation.chat.node`（思考块渲染器） |
+| Slot 注入 | `settings.section`（总控页，id `width-slider`）、`conversation.session.header.actions`（Open With 按钮）、`shell.overlay`（会话删除确认框）、`conversation.chat.node`（思考块渲染器）、`sidebar.workspaces`（工作区分页 wrapper） |
 | 宽度应用 | 对每个 `[data-phase]` 的 conversation root 元素写内联 `--dsh-chat-user-width`（与原生 `onHandleDrag` 同路径） |
 | 宽度启动恢复 | client 启动即应用持久偏好：follow=1 起全局 ResizeObserver 跟随 watcher（观察对话根尺寸/窗口/根增减）；fixed 值等对话根出现后发布一次——应用不只在设置页组件内（修复"重启不生效、打开插件页才生效"） |
 | 持久化 | `localStorage["dsh.conversation.contentWidth"]`（固定宽度）、`["dsh.conversation.contentWidthFollow"]`（跟随模式） |
 | Open With 同步 | 头部按钮订阅数据变更广播（同窗口事件总线 + BroadcastChannel 跨窗口）；设置面板/按钮写盘成功后广播，各按钮重拉 host 真源刷新 |
 | 会话删除 | ⋯ 菜单注入（克隆官方 menuitem，目标会话 id 从会话行 React fiber 直读，规避按标题反查误删）；host `/width-slider` `sessionDelete` 执行删除链：停 agent（cancel+15s）→ flush/detach 内存 → 删磁盘日志目录（两拼写、多轮重扫）→ 清投影缓存 → workspace 记账（顺序防"未分组"残留）；失败中止并留痕 |
+| 工作区分页 | 常驻 wrapper 包裹官方 `sidebar.workspaces` 组件，把 useSessions/useWorkspaces 按当前页签作用域过滤（结果按源引用+作用域缓存、getSnapshot 引用稳定，规避 React #185 循环）；页签栏以 Portal 放进官方标题行首、隐藏原标题（官方重渲染自动重新定位）；分组（默认根 + 用户页签 + 工作区归属）经 `/width-slider` `wsGroupsRead/Write` 存 `$DSH_HOME/storages/dsh-plugin-width-slider/workspace-groups.json`，localStorage 缓存兜底 + host 写失败脏标志下次启动重试；行菜单「分配标签」克隆官方 menuitem、从工作区行 fiber 直读 workspaceId；新建工作区监测（store ready 后 diff 新出现 id）自动归入创建时停留页签 |
 | 预览模式 | `createPortal` 到 `document.body`，`position: fixed; inset: 0; z-index: 100000`；同时把 `[data-shell-overlay]` 等设置面板覆盖层设为 `opacity: 0` |
 | 隐藏手柄 | 入口注入 `<style>[data-width-handle]{display:none!important}</style>` |
 | 思考块渲染 | slots 覆盖 `conversation.chat.node` 的 `assistant-step`（priority -1）；思考块默认收起、running 强制展开、结束自动收起；MarkdownView 经运行时 `require('dsh-md-render')` 解析（`dsh.client.external` 声明）；`thinkMarkdown=false` 时跳过 MarkdownView，正文纯文本 |
@@ -186,7 +196,7 @@ lib/
 ```
 dsh-plugin-width-slider/
 ├── src/
-│   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider（readSettings/writeSettings/sessionDelete）+ /open-with RPC + storages 配置
+│   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider（readSettings/writeSettings/sessionDelete/wsGroupsRead/Write）+ /open-with RPC + storages 配置
 │   ├── host/
 │   │   ├── openWithService.ts       # Open With host 服务（整合上游：launch/图标提取/路径解析/设置文件）
 │   │   └── sessionDeleteService.ts  # 会话删除 host 删除链（v0.5.0：停 agent/删目录/投影缓存/workspace 记账）
@@ -194,13 +204,14 @@ dsh-plugin-width-slider/
 │   │   ├── settings.ts              # 功能开关契约唯一真源（host/client 共用）
 │   │   └── dshHome.ts               # $DSH_HOME 解析
 │   └── client/
-│       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载 + 宽度启动恢复）
+│       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载 + 宽度启动恢复 + 工作区分页安装）
 │       ├── config.ts                # FeatureSettings 契约 + client 配置 store（热切换源）
 │       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页（分组开关）
 │       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览 / rAF 拖动 / 宽度持久化）
 │       ├── settingsPanelPatch.ts    # 官方面板补丁：弹窗拖宽 + 左侧 tab 滚动（语义锚点探测）
 │       ├── widthPrefs.ts            # 宽度偏好读写/发布 + 启动恢复（follow 全局 watcher / fixed 恢复）
 │       ├── sessionDelete.ts         # ⋯ 菜单"删除会话"项 + 官方 Modal 确认框（fiber 行级 id，防误删）
+│       ├── workspaceTabs.tsx        # 工作区分页：页签栏 + 分组 store + 官方树过滤 wrapper + 行菜单「分配标签」（fiber 直读 id）
 │       ├── openWith/
 │       │   ├── OpenWithButton.tsx   # 头部胶囊按钮（整合上游，actions 同槽注入）
 │       │   ├── OpenWithPanel.tsx    # 打开项管理面板（并入总控页，整合上游）

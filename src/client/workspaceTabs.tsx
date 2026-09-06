@@ -45,13 +45,11 @@ const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
 const TABS_CSS = `
 [data-dsh-ws-tabs-bar]{display:flex;align-items:center;gap:0;flex:0 1 auto;min-width:0;max-width:62%;height:100%;overflow-x:auto;overflow-y:hidden;padding-left:0;scrollbar-width:none;order:-1}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{padding:0 6px 0 0}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:first-child{padding-left:0}
 [data-dsh-ws-tabs-bar]::-webkit-scrollbar{display:none}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0 6px 0 10px;font:inherit;font-size:13px;line-height:36px;height:36px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:3px;flex:none}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0 3px 0 0;font:inherit;font-size:13px;line-height:36px;height:36px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:3px;flex:none}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover{color:var(--dsw-alias-label-primary,#e6edf3)}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]{color:var(--dsw-alias-label-primary,#e6edf3);font-weight:600}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]::after{content:"";position:absolute;left:0;right:6px;bottom:0;height:2px;border-radius:2px 2px 0 0;background:currentColor}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]::after{content:"";position:absolute;left:0;right:3px;bottom:0;height:2px;border-radius:2px 2px 0 0;background:currentColor}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add]{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;padding:2px;margin-left:auto;flex:none;border-radius:6px;line-height:0}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add]:hover{color:var(--dsw-alias-label-primary,#e6edf3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add] svg{display:block}

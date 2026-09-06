@@ -1196,9 +1196,11 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   const overlayDispose = (() => {
     try {
       const slots = ctx.slots
-      if (slots && typeof slots.inject === 'function' && typeof slots.register === 'function') {
-        return slots.inject(OVERLAY_SLOT, () =>
-          slots.register(
+      const injectFn = slots?.inject
+      const registerFn = slots?.register
+      if (injectFn && registerFn) {
+        return injectFn(OVERLAY_SLOT, () =>
+          registerFn(
             { name: OVERLAY_SLOT, id: ASSIGN_TAB_DIALOG_ID, order: 100 },
             AssignWorkspaceToTabDialog,
           ),

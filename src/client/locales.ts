@@ -131,7 +131,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
   groupWorkspace: '工作区分页',
   enableWsTabs: '启用工作区分页（页签栏）',
-  enableWsTabsInfo: '侧栏「工作区」标题位置改为分组页签：固定「默认」显示未分组的直属工作区与官方未分组会话；点右侧＋新建分组页签（文件夹）并命名；工作区行的操作菜单新增四字项「分配工作区」，可把该工作区放进任意页签或移回默认；删除页签时其中工作区自动回到默认。',
+  enableWsTabsInfo: '侧栏「工作区」标题位置改为分组页签：固定「默认」显示未分组的直属工作区与官方未分组会话；点右侧＋新建分组页签（文件夹）并命名；工作区行的操作菜单新增四字项「分配标签」，可把该工作区放进任意页签或移回默认；在其他页签新建工作区会自动归入当前页签；删除页签时其中工作区自动回到默认。',
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
 }
@@ -199,7 +199,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
   groupWorkspace: 'Workspace tabs',
   enableWsTabs: 'Enable workspace tabs',
-  enableWsTabsInfo: 'Turns the sidebar Workspaces heading into group tabs: a fixed Default tab shows direct workspaces and ungrouped sessions; use ＋ to create named group tabs (folders); each workspace row menu gains a four-character Assign workspace item to move it into any tab or back to Default; deleting a tab moves its workspaces back to Default.',
+  enableWsTabsInfo: 'Turns the sidebar Workspaces heading into group tabs: a fixed Default tab shows direct workspaces and ungrouped sessions; use ＋ to create named group tabs (folders); each workspace row menu gains a four-character Assign tag item to move it into any tab or back to Default; a workspace created while on another tab joins that tab automatically; deleting a tab moves its workspaces back to Default.',
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
 }

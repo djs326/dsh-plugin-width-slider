@@ -20,11 +20,32 @@
  *   React Portal 放进官方 header 行首（标题位置）；
  * - 分组持久化在 host（workspace-groups.json，/width-slider wsGroupsRead/Write），
  *   本模块维护小组 store（useSyncExternalStore），任何增删改即时落盘。
+ *
+ * 对官方内部结构的依赖（升级回归自检清单；官方 = @deepseek-ai/
+ * dsh-client-ui-workspace/lib/client.js）：
+ * - header 行：含搜索 input（placeholder 匹配「搜索会话/Search sessions」），
+ *   行首 label span（文本精确等于「工作区/会话/Workspaces/Sessions」且无子元素），
+ *   右侧 ViewOptions / ＋添加工作区（aria-label = t('workspace.add')）；
+ * - 组头行：class 含 projectRow + menuOpen（⋯ 菜单打开时），workspaceId 经
+ *   React fiber memoizedProps.group.workspaceId 读取（深度上限 32，fail-closed）；
+ * - 官方「＋添加工作区」经 workspaces.create 新建（不带标签归属），picker 为
+ *   WorkspacePickFlow（addOnly），新建成功即出现在 workspace store items 中；
+ * - workspace store 快照带 phase（pending/ready）；组件在 ready 时调用
+ *   actions.retainAccountKeys（含 "" 与 FLAT_SESSION_ORDER_KEY），本插件需
+ *   补全全量工作区键，否则跨页签切换会清掉其它页签的排序/展开账本；
+ * - View store persist 键 dsh.workspace.view.v5；FLAT_SESSION_ORDER_KEY =
+ *   "__flat_session_order__"。
+ * 以上任一假设被官方改版破坏时的典型失效表现：功能不出现 / 页签不定位 /
+ * 菜单不注入（fail-closed），不会崩溃。本插件对页签作用域的数据过滤依赖
+ * workspace store 的 phase 语义：非 ready 快照一律不写分组（自动归属与
+ * 孤儿清理都以此门控），若官方将来取消 pending 态需同步调整。
  */
 import {
   createElement as h,
+  useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -38,8 +59,12 @@ import { getSettings, onSettingsChanged } from './config.ts'
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
 const DEFAULT_TAB = '__default__'
+/** 官方 view store 的 flat 视图账本键（retainAccountKeys 补全用）。 */
+const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 /** 分组本地缓存（host 文件之外的兜底：开关/重启后标签不丢）。 */
 const GROUPS_CACHE_KEY = 'dsh-plugin-width-slider.wsg.cache'
+/** host 落盘失败的脏标志：下次启动据此以本地缓存为准并重试写回。 */
+const GROUPS_DIRTY_KEY = 'dsh-plugin-width-slider.wsg.dirty'
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
 const TABS_CSS = `
@@ -202,7 +227,7 @@ function subscribeGroups(cb: () => void): () => void {
 
 function cacheWrite(): void {
   try {
-    window.localStorage.setItem(GROUPS_CACHE_KEY, JSON.stringify({ version: 1, groups }))
+    window.localStorage.setItem(GROUPS_CACHE_KEY, JSON.stringify({ version: 1, groups, savedAt: Date.now() }))
   } catch { /* 忽略 */ }
 }
 function cacheRead(): WsGroup[] {
@@ -214,15 +239,48 @@ function cacheRead(): WsGroup[] {
     return []
   }
 }
+/** 读缓存里的写入时间戳（无缓存/解析失败 = 0）。 */
+function cacheSavedAt(): number {
+  try {
+    const raw = window.localStorage.getItem(GROUPS_CACHE_KEY)
+    if (!raw) return 0
+    const parsed = JSON.parse(raw) as { savedAt?: unknown }
+    return typeof parsed.savedAt === 'number' && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0
+  } catch {
+    return 0
+  }
+}
+
+function markDirty(): void {
+  try {
+    window.localStorage.setItem(GROUPS_DIRTY_KEY, '1')
+  } catch { /* 忽略 */ }
+}
+function clearDirty(): void {
+  try {
+    window.localStorage.removeItem(GROUPS_DIRTY_KEY)
+  } catch { /* 忽略 */ }
+}
 
 function persistGroups(): void {
-  if (!rpcCall) return
+  if (!rpcCall) {
+    markDirty()
+    return
+  }
   rpcCall('wsGroupsWrite', { groups })
     .then((res) => {
       const r = res as { ok?: boolean } | null
-      if (!r || r.ok !== true) console.warn('[width-slider] wsGroupsWrite rejected by host')
+      if (!r || r.ok !== true) {
+        console.warn('[width-slider] wsGroupsWrite rejected by host，下次启动将以本地缓存为准重试')
+        markDirty()
+      } else {
+        clearDirty()
+      }
     })
-    .catch((err: unknown) => console.warn('[width-slider] wsGroupsWrite failed', err))
+    .catch((err: unknown) => {
+      console.warn('[width-slider] wsGroupsWrite failed，下次启动将以本地缓存为准重试', err)
+      markDirty()
+    })
 }
 
 function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
@@ -253,8 +311,25 @@ async function loadGroups(): Promise<void> {
     if (result && result.ok === true) {
       const remote = sanitize(result.value)
       if (remote.length > 0) {
-        groups = remote
-        groupLoadFailed = false
+        // 上次写 host 失败过（脏标志）且本地缓存更新 → 以本地为准并重试写回，
+        // 否则直接采用 host 数据（host 是权威）。
+        const dirty = (() => {
+          try {
+            return window.localStorage.getItem(GROUPS_DIRTY_KEY) === '1'
+          } catch {
+            return false
+          }
+        })()
+        const cached = cacheRead()
+        const cacheNewer = cacheSavedAt() > 0 && cached.length > 0
+        if (dirty && cacheNewer && JSON.stringify(cached) !== JSON.stringify(remote)) {
+          groups = cached
+          groupLoadFailed = false
+          persistGroups()
+        } else {
+          groups = remote
+          groupLoadFailed = false
+        }
       } else {
         // host 返回空：旧 host 无写入端点或文件缺失 —— 本地缓存兜底并尝试写回。
         const cached = cacheRead()
@@ -263,10 +338,12 @@ async function loadGroups(): Promise<void> {
         if (cached.length > 0) persistGroups()
       }
     } else {
+      console.warn('[width-slider] wsGroupsRead 失败：分组功能可能不可用（RPC 拒绝），以本地缓存继续')
       groups = cacheRead()
       groupLoadFailed = true
     }
-  } catch {
+  } catch (err) {
+    console.warn('[width-slider] wsGroupsRead 异常，以本地缓存继续', err)
     groups = cacheRead()
     groupLoadFailed = true
   }
@@ -396,7 +473,7 @@ const I = {
   plus: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
 }
 
-// ── 工作区行菜单「分配工作区」（把工作区分配到某个页签/默认）──────────────
+// ── 工作区行菜单「分配标签」（把工作区分配到某个页签/默认）────────────────
 const WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'
 const ASSIGN_TAB_EVENT = 'dsh:ws-tab-assign'
 const ASSIGN_ICON_PATH =
@@ -455,7 +532,7 @@ function openAssignToTab(row: HTMLElement): void {
   window.dispatchEvent(new CustomEvent(ASSIGN_TAB_EVENT, { detail: info }))
 }
 
-/** 往工作区行打开的 ⋯ 菜单里克隆官方项插入「分配工作区」（四字、普通色）。 */
+/** 往工作区行打开的 ⋯ 菜单里克隆官方项插入「分配标签」（四字、普通色）。 */
 function ensureWorkspaceAssignMenuItem(): void {
   if (!getSettings().workspaceTabs) return
   const row = findOpenProjectRow()
@@ -638,16 +715,36 @@ function TabStrip(props: {
     }
   }, [ctx])
 
+  // 键盘导航顺序：默认 + 分组（与渲染顺序一致，含分隔符占位）。
+  const tabOrder: string[] = useMemo(
+    () => [DEFAULT_TAB, ...groups.map((g) => g.id)],
+    [groups],
+  )
   const tabOf = (id: string): ReactNode => {
     const isDefault = id === DEFAULT_TAB
     const name = isDefault ? tt('tab.default') : (groupOf(id)?.name || '')
     const g = isDefault ? undefined : groupOf(id)
     const count = g ? g.workspaceIds.length : 0
+    // roving tabindex：仅激活页签可聚焦，方向键在页签间移动并激活（键盘可达性）。
+    const moveTo = (dir: -1 | 1) => {
+      const idx = tabOrder.indexOf(id)
+      if (idx < 0) return
+      const next = tabOrder[(idx + dir + tabOrder.length) % tabOrder.length]
+      onPick(next)
+      requestAnimationFrame(() => {
+        try {
+          const host = document.querySelector('[data-dsh-ws-tabs-bar]')
+          const el = host && host.querySelector('[data-dsh-ws-tab][data-dsh-ws-id="' + next + '"]')
+          ;(el as HTMLElement | null)?.focus?.()
+        } catch { /* 忽略 */ }
+      })
+    }
     return h(
       'span',
       {
         key: id,
         role: 'tab',
+        tabIndex: active === id ? 0 : -1,
         'aria-selected': active === id,
         'data-dsh-ws-tab': '',
         'data-dsh-ws-id': id,
@@ -655,6 +752,22 @@ function TabStrip(props: {
         onClick: (e: { stopPropagation: () => void }) => {
           e.stopPropagation()
           onPick(id)
+        },
+        onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+          if (e.key === 'ArrowLeft') {
+            e.preventDefault()
+            moveTo(-1)
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault()
+            moveTo(1)
+          } else if (e.key === 'Home') {
+            e.preventDefault()
+            onPick(DEFAULT_TAB)
+          } else if (e.key === 'End') {
+            e.preventDefault()
+            const last = tabOrder[tabOrder.length - 1]
+            if (last !== undefined) onPick(last)
+          }
         },
         onContextMenu: (e: { preventDefault: () => void; stopPropagation: () => void; clientX: number; clientY: number }) => {
           if (isDefault) return
@@ -865,7 +978,7 @@ function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode
 function MembersDialog(props: {
   groupId: string
   items: WorkspaceLike[]
-  membership: Map<string, string>
+  membership: ReadonlyMap<string, string>
   onDone: () => void
 }): ReactNode {
   const g = groupOf(props.groupId)
@@ -1003,6 +1116,10 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const groupList = gs.groups
   // 重启/重载后一律回到「默认」页签（上次停留页签不跨会话恢复）。
   const [active, setActive] = useState<string>(DEFAULT_TAB)
+  // 用户最近一次主动选中的页签（ref）：官方新建工作区的自动归属以「创建动作发起时
+  // 停留页签」为准，而不是 effect 运行时的渲染闭包值（新建流程含目录选择往返，
+  // 期间可能已切换页签）。
+  const activeIntentRef = useRef<string>(DEFAULT_TAB)
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
   const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string } | null>(null)
@@ -1024,16 +1141,26 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const wsState = useWorkspaces ? (useWorkspaces((s: unknown) => s) as WsListState | null) : null
   const itemsAll: WorkspaceLike[] = (wsState && Array.isArray(wsState.items) ? wsState.items : []) as WorkspaceLike[]
 
-  // 归属：workspaceId -> groupId | null（null = 默认）。
-  const membership = new Map<string, string>()
-  for (const g of groupList) for (const id of g.workspaceIds) if (!membership.has(id)) membership.set(id, g.id)
+  // 官方 workspace store 是否就绪（加载/重载中为非 ready）。孤儿清理与自动归属
+  // 都以此门控：非 ready 快照一律不写分组，避免把「清空重载」误判为删除/新增。
+  const wsPhaseReady = !!wsState && (wsState as { phase?: string }).phase === 'ready'
+
+  // 归属：workspaceId -> groupId | null（null = 默认）。groupList 引用稳定时保持不变。
+  const membership: ReadonlyMap<string, string> = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const g of groupList) for (const id of g.workspaceIds) if (!m.has(id)) m.set(id, g.id)
+    return m
+  }, [groupList])
 
   // active 失效（组未加载 / 残留 id / 组已删除）时一律按默认页签渲染，避免作用域为空导致空白。
-  const effectiveActive =
-    active !== DEFAULT_TAB && !groupList.some((g) => g.id === active) ? DEFAULT_TAB : active
+  const effectiveActive = useMemo(
+    () => (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active) ? DEFAULT_TAB : active),
+    [active, groupList],
+  )
 
-  // 当前页签作用域的工作区 id。
-  const scopeWsIds: string[] = (() => {
+  // 当前页签作用域的工作区 id（引用稳定：官方子树把包装后的 useWorkspaces 当
+  // props 传递，作用域数组每次渲染新建会让包装引用失效 → 无谓重渲染）。
+  const scopeWsIds: string[] = useMemo(() => {
     if (effectiveActive === DEFAULT_TAB) {
       return itemsAll
         .map((w) => w.workspaceId)
@@ -1043,10 +1170,10 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (!g) return []
     const known = new Set(itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v))
     return g.workspaceIds.filter((id) => known.has(id))
-  })()
+  }, [itemsAll, effectiveActive, membership, groupList])
 
   // 当前页签作用域的会话 id。
-  const scopeSessionIds: string[] = (() => {
+  const scopeSessionIds: string[] = useMemo(() => {
     const inScope = (wid: string): boolean =>
       effectiveActive === DEFAULT_TAB ? !membership.has(wid) : scopeWsIds.includes(wid)
     const ids: string[] = []
@@ -1058,12 +1185,16 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
       for (const id of unownedSessionIds(listState, itemsAll)) ids.push(id)
     }
     return Array.from(new Set(ids))
-  })()
+  }, [itemsAll, effectiveActive, membership, scopeWsIds, listState])
 
   // 孤儿清理（官方删了工作区则从分组中剔除）。
+  // 门控：非 ready 快照不清理（清空重载的中间态会把整组误判为孤儿）；空列表而
+  // 分组有内容时同样跳过（真·清空重载的兜底保险），数据恢复优先于即时清理。
   const knownRef = useRef('')
   useEffect(() => {
+    if (!wsPhaseReady) return
     const known = new Set(itemsAll.map((w) => w.workspaceId).filter((v): v is string => !!v))
+    if (known.size === 0 && groupList.some((g) => g.workspaceIds.length > 0)) return
     const key = [...known].sort().join('|')
     if (key === knownRef.current) return
     knownRef.current = key
@@ -1076,14 +1207,13 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     }
     if (!changed) return
     commitGroups((cur) => cur.map((g) => ({ ...g, workspaceIds: g.workspaceIds.filter((id) => known.has(id)) })))
-  }, [itemsAll]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itemsAll, wsPhaseReady, groupList]) // eslint-disable-line react-hooks/exhaustive-deps
   // 新建工作区自动归属当前页签：官方「＋ 添加工作区」创建的工作区不带标签归属，
   // 会直接落入「默认」页。这里监测全量列表，把「新建出现」的工作区（首次加载的
   // 既有工作区除外）归入创建时正停留的页签；若停在默认页则不归属（本就在默认）。
   // 基线策略：store 每次进入非 ready（加载/重载）或功能关闭时作废基线，下个 ready
   // 快照重建基线，避免把「重载后的既有列表」误判为新增。
   const seenWsRef = useRef<string[] | null>(null)
-  const wsPhaseReady = !!wsState && (wsState as { phase?: string }).phase === 'ready'
   useEffect(() => {
     if (!enabled || !gs.ready) {
       seenWsRef.current = null
@@ -1102,8 +1232,12 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     const fresh = ids.filter((id) => !seen.includes(id))
     seenWsRef.current = ids
     if (fresh.length === 0) return
-    if (effectiveActive === DEFAULT_TAB) return
-    const target = groupList.find((g) => g.id === effectiveActive)
+    // 归属目标 = 用户最近一次主动停留的页签（intent ref），而非 effect 运行时的
+    // 渲染闭包：官方新建流程含目录选择往返，期间用户可能已切换页签，新建应归入
+    // 「发起创建时」的页签。默认页不归属（新建本就在默认）。
+    const targetId = activeIntentRef.current
+    if (targetId === DEFAULT_TAB) return
+    const target = groupList.find((g) => g.id === targetId)
     if (!target) return
     const owned = new Set<string>()
     for (const g of groupList) for (const id of g.workspaceIds) owned.add(id)
@@ -1111,7 +1245,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (toAssign.length === 0) return
     commitGroups((cur) =>
       cur.map((g) =>
-        g.id === effectiveActive
+        g.id === targetId
           ? { ...g, workspaceIds: Array.from(new Set([...g.workspaceIds, ...toAssign])) }
           : g,
       ),
@@ -1122,7 +1256,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
         for (const id of toAssign) actions.setGroupExpanded(id, true)
       }
     } catch { /* 忽略 */ }
-  }, [itemsAll, enabled, gs.ready, wsPhaseReady, effectiveActive, groupList]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itemsAll, enabled, gs.ready, wsPhaseReady, groupList]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!gs.ready) return
@@ -1175,6 +1309,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
 
   const onPick = (id: string): void => {
     setActive(id)
+    activeIntentRef.current = id
     if (id !== DEFAULT_TAB) {
       const g = groupList.find((x) => x.id === id)
       if (g) tryExpandAll(g.workspaceIds)
@@ -1182,25 +1317,67 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   }
 
   const onAdd = (): void => {
-    const nu: WsGroup = { id: 'g-' + Date.now().toString(36), name: tt('new.name'), workspaceIds: [] }
+    // crypto.randomUUID 可用则用（无碰撞），否则回退时间+随机（g- 前缀必须保留：active 校验/sanitize 依赖）。
+    const gid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? 'g-' + crypto.randomUUID()
+      : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+    const nu: WsGroup = { id: gid, name: tt('new.name'), workspaceIds: [] }
     commitGroups((cur) => [...cur, nu])
     setActive(nu.id)
+    activeIntentRef.current = nu.id
     setDialog({ kind: 'rename', id: nu.id })
   }
 
   // 过滤 hooks：仅开关开启时用页签作用域驱动官方树；关闭时原样透传（官方原貌）。
+  // useCallback 稳定包装函数引用（官方子树把包装后的 hooks 当 props 传递，
+  // 每次渲染新建引用会退化为全量重渲染 / effect 重跑，把正确性押在官方不 memo 上）。
+  const filteredUseSessions = useCallback(
+    (sel: unknown, eq?: unknown): unknown => {
+      const raw = useSessions
+      if (!raw) return null
+      return raw((state: unknown) => (sel as (s: unknown) => unknown)(filterSessions(state as SessionListState, scopeSessionIds)), eq)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [useSessions, scopeSessionIds],
+  )
+  const filteredUseWorkspaces = useCallback(
+    (sel: unknown, eq?: unknown): unknown => {
+      const rawWs = useWorkspaces
+      if (!rawWs) return null
+      return rawWs((state: unknown) => (sel as (s: unknown) => unknown)(filterWorkspaces(state as WsListState, scopeWsIds)), eq)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [useWorkspaces, scopeWsIds],
+  )
+
+  // 官方 view store 在 ready 后会按「当前过滤后的工作区列表」调用 retainAccountKeys
+  // 清理跨页签的排序/展开账本（groupExpansion/sessionOrderByAccount…）。这里包装该
+  // action：补全全量工作区键（+ "" 与 flat 键）后再调用，避免切换页签清掉其它页签
+  // 的手动排序与展开状态；真正从 itemsAll 消失（被删除）的工作区键仍会被清理。
+  const rawActions = (innerProps.actions ?? {}) as { retainAccountKeys?: (keys: string[]) => void }
+  const actionsWithFullRetain = useMemo(() => {
+    const retain = rawActions.retainAccountKeys
+    if (typeof retain !== 'function') return innerProps.actions
+    const allKeys = itemsAll
+      .map((w) => w.workspaceId)
+      .filter((v): v is string => !!v)
+      .join('\u0001')
+    return {
+      ...(innerProps.actions as Record<string, unknown>),
+      retainAccountKeys: (keys: string[] | undefined): void => {
+        const base = Array.isArray(keys) ? keys.filter((k): k is string => typeof k === 'string') : []
+        const merged = Array.from(new Set([...base, '', FLAT_SESSION_ORDER_KEY, ...(allKeys === '' ? [] : allKeys.split('\u0001'))]))
+        retain(merged)
+      },
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [innerProps.actions, itemsAll])
+
   const officialProps: ShellProps = { ...innerProps }
-  if (enabled && useSessions) {
-    const raw = useSessions
-    const ids = scopeSessionIds
-    officialProps.useSessions = (sel: unknown, eq?: unknown): unknown =>
-      raw((state: unknown) => (sel as (s: unknown) => unknown)(filterSessions(state as SessionListState, ids)), eq)
-  }
-  if (enabled && useWorkspaces) {
-    const rawWs = useWorkspaces
-    const ids = scopeWsIds
-    officialProps.useWorkspaces = (sel: unknown, eq?: unknown): unknown =>
-      rawWs((state: unknown) => (sel as (s: unknown) => unknown)(filterWorkspaces(state as WsListState, ids)), eq)
+  if (enabled) {
+    if (useSessions) officialProps.useSessions = filteredUseSessions
+    if (useWorkspaces) officialProps.useWorkspaces = filteredUseWorkspaces
+    if (actionsWithFullRetain !== innerProps.actions) officialProps.actions = actionsWithFullRetain
   }
 
   const dialogGroup = dialog ? groupList.find((g) => g.id === dialog.id) : undefined
@@ -1250,6 +1427,18 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
 // ── install ─────────────────────────────────────────────────────────────
 export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   if (typeof document === 'undefined') return () => {}
+  // 所有对话框（页签重命名/管理工作区/删除/分配标签）都依赖官方 primitives 的
+  // Modal；缺失时静默失效（点了没反应）。安装期探测一次，缺失则 warn 并整体跳过，
+  // 降级为「功能不出现」而不是「交互无响应」。
+  try {
+    if (!primitives().Modal) {
+      console.warn('[width-slider] dsh-client-ui-primitives Modal 不可用，工作区分页功能已跳过安装')
+      return () => {}
+    }
+  } catch {
+    console.warn('[width-slider] 读取 dsh-client-ui-primitives 失败，工作区分页功能已跳过安装')
+    return () => {}
+  }
   rpcCall = (method: string, payload?: Record<string, unknown>) => {
     try {
       if (!ctx.connection?.rpc?.call) {
@@ -1273,7 +1462,30 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     })
   }
   const assignObserver = new MutationObserver(() => scheduleAssign())
-  assignObserver.observe(document.body, { childList: true, subtree: true })
+  // 观察器随功能开关启停：关闭时 disconnect，避免开关关闭期间仍全树 mutation
+  // 白跑 rAF 与 DOM 查询（ensure 常驻模型下 Observer 不应成为后台常驻开销）。
+  let observing = false
+  const setAssignObserving = (on: boolean): void => {
+    if (on === observing) return
+    observing = on
+    try {
+      if (on) {
+        assignObserver.observe(document.body, { childList: true, subtree: true })
+        scheduleAssign()
+      } else {
+        assignObserver.disconnect()
+        if (assignRaf !== 0) {
+          cancelAnimationFrame(assignRaf)
+          assignRaf = 0
+        }
+      }
+    } catch { /* 忽略 */ }
+  }
+  setAssignObserving(getSettings().workspaceTabs)
+  let unsubAssignSetting: (() => void) | null = null
+  try {
+    unsubAssignSetting = onSettingsChanged(() => setAssignObserving(getSettings().workspaceTabs))
+  } catch { /* 忽略 */ }
 
   const style = document.createElement('style')
   style.id = STYLE_ID
@@ -1384,6 +1596,11 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
       } catch { /* 忽略 */ }
     }
     unwrap()
+    if (unsubAssignSetting) {
+      try {
+        unsubAssignSetting()
+      } catch { /* 忽略 */ }
+    }
     assignObserver.disconnect()
     if (assignRaf !== 0) cancelAnimationFrame(assignRaf)
     document.querySelectorAll('[' + WS_ASSIGN_MENU_ATTR + ']').forEach((el) => el.remove())

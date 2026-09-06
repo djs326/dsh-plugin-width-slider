@@ -21,6 +21,10 @@ export interface FeatureSettings {
   dialogResize: boolean
   /** 7 官方设置左侧 tab 栏超高滚动 */
   navScroll: boolean
+  /** 8 对话头部 Open With 胶囊按钮（收编 dsh-plugin-open-with） */
+  openWithButton: boolean
+  /** 9 Open With 设置在总控页中的分组（收编 dsh-plugin-open-with） */
+  openWithSettings: boolean
 }
 
 export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -31,6 +35,8 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   thinkMode: 'auto-collapse',
   dialogResize: true,
   navScroll: true,
+  openWithButton: true,
+  openWithSettings: true,
 }
 
 /** 白名单式合并任意来源（host 文件 / 缺键 / 未知类型）为完整配置。 */
@@ -44,5 +50,7 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     thinkMode: o.thinkMode === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse',
     dialogResize: o.dialogResize !== false,
     navScroll: o.navScroll !== false,
+    openWithButton: o.openWithButton !== false,
+    openWithSettings: o.openWithSettings !== false,
   }
 }

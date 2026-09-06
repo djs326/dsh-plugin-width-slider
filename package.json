@@ -1,8 +1,8 @@
 {
   "name": "dsh-plugin-width-slider",
-  "displayName": "Width Slider · 对话宽度与思考增强",
-  "description": "DSH 个人多功能插件：对话宽度滑块 + 思考块增强（思考/回复强制中文、思考块展开收起与 Markdown 渲染，收编 dsh-think-zh-expand）+ 界面英文中文化 + 官方设置面板补丁（弹窗调宽 / tab 滚动），全部功能独立开关。Settings-panel feature control page with a width slider, thinking-block enhancements and settings-panel UI patches — every feature has its own toggle.",
-  "version": "0.3.0",
+  "displayName": "Width Slider · 对话宽度 / 思考增强 / 打开方式",
+  "description": "DSH 个人多功能插件：对话宽度滑块 + 思考块增强（收编 dsh-think-zh-expand）+ Open With 打开方式（收编 dsh-plugin-open-with 本地修改版）+ 界面中文化 + 官方面板补丁，全部功能独立开关。Settings feature control page with width slider, thinking-block enhancements and an Open With launcher button — every feature has its own toggle.",
+  "version": "0.4.0",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.mjs",
@@ -80,7 +80,8 @@
     "@deepseek-ai/dsh-client-ui-slots": "*",
     "react": "^18.2.0",
     "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.1",
-    "dsh-md-render": "^0.1.1"
+    "dsh-md-render": "^0.1.1",
+    "@deepseek-ai/dsh-subprocess": "*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -111,6 +112,9 @@
       "optional": true
     },
     "dsh-md-render": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-subprocess": {
       "optional": true
     }
   },

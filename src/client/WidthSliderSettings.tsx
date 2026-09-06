@@ -15,10 +15,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
+import { OpenWithPanel, type LaunchTarget, type OpenWithSettingsData } from './openWith/OpenWithPanel.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
 
 export interface WidthSliderSettingsInjected {
   writeSettings: (settings: unknown) => Promise<void>
+  /** Open With（收编 dsh-plugin-open-with）host 能力桥，经 /open-with RPC。 */
+  owReadSettings: () => Promise<unknown>
+  owWriteSettings: (settings: unknown) => Promise<void>
+  owExtractIcon: (exePath: string) => Promise<string>
+  owResolvePresetPath: (target: LaunchTarget) => Promise<string>
 }
 
 export type WidthSliderSettingsProps = PropsLocale<'widthSlider'> & WidthSliderSettingsInjected
@@ -127,7 +133,14 @@ function RadioRow(props: {
 
 // ── 主组件：功能总控页 ────────────────────────────────────────────────
 
-export function WidthSliderSettings({ writeSettings, t }: WidthSliderSettingsProps): JSX.Element {
+export function WidthSliderSettings({
+  writeSettings,
+  owReadSettings,
+  owWriteSettings,
+  owExtractIcon,
+  owResolvePresetPath,
+  t,
+}: WidthSliderSettingsProps): JSX.Element {
   const [settings, setSettings] = useState<FeatureSettings>(() => getSettings())
   /** 仅本地（用户）改动触发写盘；store 外部更新（启动读回）不写。 */
   const dirtyRef = useRef(false)
@@ -238,6 +251,35 @@ export function WidthSliderSettings({ writeSettings, t }: WidthSliderSettingsPro
           checked={settings.navScroll}
           onChange={(checked) => persist({ navScroll: checked })}
         />
+      </Card>
+
+      {/* 5. 打开方式（Open With，收编 dsh-plugin-open-with） */}
+      <Card title={t('owGroupTitle')}>
+        <SwitchRow
+          id={id('enable-ow-settings')}
+          label={t('owSettingsLabel')}
+          info={t('owSettingsInfo')}
+          checked={settings.openWithSettings}
+          onChange={(checked) => persist({ openWithSettings: checked })}
+        />
+        <SwitchRow
+          id={id('enable-ow-button')}
+          label={t('owButtonLabel')}
+          info={t('owButtonInfo')}
+          checked={settings.openWithButton}
+          onChange={(checked) => persist({ openWithButton: checked })}
+        />
+        {settings.openWithSettings && (
+          <div style={{ marginTop: 2 }}>
+            <OpenWithPanel
+              t={t}
+              readSettings={async () => (await owReadSettings()) as OpenWithSettingsData | null}
+              writeSettings={owWriteSettings}
+              extractIcon={owExtractIcon}
+              resolvePresetPath={owResolvePresetPath}
+            />
+          </div>
+        )}
       </Card>
     </div>
   )

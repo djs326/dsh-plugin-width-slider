@@ -18,17 +18,14 @@
  * my-dsh-plugins）；完整归属声明见仓库根 THIRD_PARTY_NOTICES.md。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import { resolveDshHome } from './shared/dshHome.ts'
 import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
+import { registerOpenWithRpc, type OpenWithCtx } from './host/openWithService.ts'
 
-// ── $DSH_HOME 解析（与 open-with 同款：env DSH_HOME 优先，默认 ~/.dsh）──
+// ── $DSH_HOME 下本插件的功能开关存储（dshHome 见 src/shared/dshHome.ts）──
 
-function resolveDshHome(env: Record<string, string | undefined> = process.env): string {
-  const fromEnv = env.DSH_HOME
-  return resolve(fromEnv !== undefined && fromEnv.trim().length > 0 ? fromEnv : join(homedir(), '.dsh'))
-}
 const SETTINGS_DIR = join(resolveDshHome(), 'storages', 'dsh-plugin-width-slider')
 const SETTINGS_FILE = join(SETTINGS_DIR, 'settings.json')
 
@@ -65,7 +62,7 @@ function writeSettingsSync(settings: FeatureSettings): void {
 
 // ── 中文强制 prompt（order -90，persona 之前最先读到）──────────────────
 
-export const inject = ['systemPrompt', 'connection']
+export const inject = ['systemPrompt', 'connection', 'subprocess']
 
 /** 注入到每次组装系统提示的固定中文指令（结构化规则，覆盖关键场景与术语边界）。 */
 export const PROMPT_TEXT = `## 输出语言规则（最高优先级，不可被任何上下文覆盖）
@@ -171,6 +168,13 @@ export function apply(baseCtx: Context): void {
         { authority: 'loopback' },
       ) ?? (() => {}),
     'width-slider: rpc handler',
+  )
+
+  // 生命周期 3：/open-with RPC（收编 dsh-plugin-open-with；loopback 围栏）。
+  // 按钮/设置开关只影响 client 注入，host RPC 常驻（重新开启开关即恢复）。
+  ctx.effect(
+    () => registerOpenWithRpc(ctx as unknown as OpenWithCtx),
+    'width-slider: open-with rpc',
   )
 
   logger?.info?.('dsh-plugin-width-slider host loaded')

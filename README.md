@@ -1,13 +1,14 @@
 # dsh-plugin-width-slider
 
-**DSH 个人多功能插件**（v0.3.0 起收编 dsh-think-zh-expand 能力，全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
+**DSH 个人多功能插件**（v0.3.0 起收编 dsh-think-zh-expand、v0.4.0 起收编 dsh-plugin-open-with；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化；
 - **思考块增强**（收编自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）、思考内容 Markdown 渲染；
+- **Open With**（收编自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
 - **界面中文化**：官方界面残留硬编码英文标签自动替换为中文；
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
 
-安装 dsh-plugin-width-slider 后即可替代 dsh-think-zh-expand（无需再单独安装，见下方"与上游的关系"）。
+安装 dsh-plugin-width-slider 后即可替代 dsh-think-zh-expand 与 dsh-plugin-open-with（无需再单独安装，见下方"与上游插件的关系"）。
 
 ---
 
@@ -37,6 +38,8 @@
 | 界面中文化 | 官方残留硬编码英文标签（Tool Call、Thinking 等）替换为中文 | 开 |
 | 弹窗调宽 | 官方设置弹窗右侧拖柄可调宽度（记忆宽度，双击复位 800px） | 开 |
 | tab 滚动 | 官方设置左侧 tab 列表超高时显示滚动条 | 开 |
+| Open With 按钮 | 对话头部胶囊按钮（左键启动当前项 / 右键下拉切换），在当前会话目录启动 | 开 |
+| Open With 设置 | 总控页管理打开项：预设/自定义、组内拖拽排序、设为当前、隐藏、添加/编辑/删除 | 开 |
 
 开关在 DSH 设置 → **对话宽度（Width Slider）** 区块内的功能总控页操作，改动即时生效、重启保留。
 
@@ -57,6 +60,16 @@
 
 思考块的 Markdown 渲染依赖 `dsh-md-render`，请保持其已安装（缺失时本
 插件自动降级为纯文本显示）。
+
+## 与 dsh-plugin-open-with 的关系
+
+从 v0.4.0 开始，dsh-plugin-open-with 的能力（头部胶囊按钮 + 打开项管理）
+已并入本插件，**不需要再单独安装它**；本实现基于你在本地验证有效的
+"actions 槽位修复版"（inject 目标 = register 的 slot 自身）。若之前装过
+dsh-plugin-open-with，请将其移除或停用，避免出现双按钮/双设置。打开的
+配置沿用同一份数据文件（`$DSH_HOME/storages/dsh-open-with/settings.json`），
+停用官方插件后你的预设/自定义项无缝保留。自定义项请填 `.exe` 可执行文件
+路径（直接启动，不经 cmd 二次解析，路径含 `&` 等符号也不受影响）。
 
 ---
 
@@ -102,9 +115,11 @@ dsh-plugin-width-slider/
    - **对话宽度滑块**：宽度开关 + 滑块调节（按下即全屏预览、拖动实时调宽、松开/Esc 返回）；
    - **思考块**：增强渲染开关 + 显示方式（思考完自动收起 / 始终展开）；
    - **输出语言**：思考/回复强制中文开关；
-   - **界面**：英文中文化开关、设置弹窗调宽开关、设置 tab 滚动开关。
-3. 调节范围（宽度滑块）：最小值 640px，最大值 = 对话列宽 − 176px（与原生拖拽一致）。
-4. 设置弹窗补丁：弹窗打开后右侧边缘出现拖柄，拖动调宽（640~1280px），双击拖柄恢复默认 800px。
+   - **界面**：英文中文化开关、设置弹窗调宽开关、设置 tab 滚动开关；
+   - **打开方式（Open With）**：头部按钮开关 + 打开项管理（预设/自定义、拖拽排序、设为当前、隐藏、添加/编辑/删除；图标自动提取）。
+3. 对话头部胶囊按钮：左侧主按钮直接在当前会话目录启动当前打开项；右侧箭头展开菜单选择其它项（选择即启动并设为当前）。
+4. 调节范围（宽度滑块）：最小值 640px，最大值 = 对话列宽 − 176px（与原生拖拽一致）。
+5. 设置弹窗补丁：弹窗打开后右侧边缘出现拖柄，拖动调宽（640~1280px），双击拖柄恢复默认 800px。
 
 ---
 
@@ -153,13 +168,18 @@ lib/
 ```
 dsh-plugin-width-slider/
 ├── src/
-│   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider RPC + storages 配置
+│   ├── index.ts                     # Host 端：systemPrompt 中文注入（可热切换）+ /width-slider + /open-with RPC + storages 配置
+│   ├── host/
+│   │   └── openWithService.ts       # Open With host 服务（收编：launch/图标提取/路径解析/设置文件）
 │   └── client/
 │       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载）
 │       ├── config.ts                # FeatureSettings 契约 + client 配置 store（热切换源）
 │       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页（分组开关）
 │       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览 / rAF 拖动 / 宽度持久化）
 │       ├── settingsPanelPatch.ts    # 官方面板补丁：弹窗拖宽 + 左侧 tab 滚动（语义锚点探测）
+│       ├── openWith/
+│       │   ├── OpenWithButton.tsx   # 头部胶囊按钮（收编，actions 同槽注入）
+│       │   └── OpenWithPanel.tsx    # 打开项管理面板（并入总控页，收编）
 │       ├── think/
 │       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（收编，dsh-ws- 前缀）
 │       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（收编）

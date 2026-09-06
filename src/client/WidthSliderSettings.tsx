@@ -298,6 +298,13 @@ export function WidthSliderSettings({
           checked={settings.navScroll}
           onChange={(checked) => persist({ navScroll: checked })}
         />
+        <SwitchRow
+          id={id('enable-session-delete')}
+          label={t('sessionDeleteLabel')}
+          info={t('sessionDeleteInfo')}
+          checked={settings.sessionDelete}
+          onChange={(checked) => persist({ sessionDelete: checked })}
+        />
       </Card>
 
       {/* 5. 打开方式（Open With，收编 dsh-plugin-open-with） */}

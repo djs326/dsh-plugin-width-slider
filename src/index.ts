@@ -23,6 +23,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from './shared/dshHome.ts'
 import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
 import { registerOpenWithRpc, type OpenWithCtx } from './host/openWithService.ts'
+import { deleteSessionById, type SessionDeleteCtx } from './host/sessionDeleteService.ts'
 
 // ── $DSH_HOME 下本插件的功能开关存储（dshHome 见 src/shared/dshHome.ts）──
 
@@ -161,6 +162,16 @@ export function apply(baseCtx: Context): void {
             current = next
             syncChinesePrompt(next)
             return { ok: true, value: {} }
+          }
+          if (endpoint === 'sessionDelete') {
+            // v0.5.0 会话删除：永久删除（破坏性；client 端已完成二次确认）。
+            const id = body.id
+            if (typeof id !== 'string' || id.length === 0) {
+              return { ok: false, error: { code: 'invalid-id', message: 'id is required' } }
+            }
+            const result = await deleteSessionById(baseCtx as unknown as SessionDeleteCtx, id)
+            if (result.ok) return { ok: true, value: {} }
+            return { ok: false, error: { code: result.code ?? 'delete-failed', message: result.message ?? 'delete failed' } }
           }
           logger?.warn?.('[width-slider] unknown endpoint', endpoint)
           return { ok: false, error: { code: 'unknown-endpoint', message: 'unknown endpoint: ' + endpoint } }

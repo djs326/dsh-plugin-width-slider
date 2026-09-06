@@ -25,6 +25,8 @@ export interface FeatureSettings {
   openWithButton: boolean
   /** 9 Open With 设置在总控页中的分组（收编 dsh-plugin-open-with） */
   openWithSettings: boolean
+  /** 10 会话行 ⋯ 菜单"删除会话"项（克隆官方菜单项，二次确认后 host 永久删除） */
+  sessionDelete: boolean
 }
 
 export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -37,6 +39,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   navScroll: true,
   openWithButton: true,
   openWithSettings: true,
+  sessionDelete: true,
 }
 
 /** 白名单式合并任意来源（host 文件 / 缺键 / 未知类型）为完整配置。 */
@@ -52,5 +55,6 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     navScroll: o.navScroll !== false,
     openWithButton: o.openWithButton !== false,
     openWithSettings: o.openWithSettings !== false,
+    sessionDelete: o.sessionDelete !== false,
   }
 }

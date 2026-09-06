@@ -57,6 +57,8 @@ export interface WidthSliderKey {
   'settings.form.exeOnly': string
   owEmptyMenu: string
   owNoCwdTip: string
+  sessionDeleteLabel: string
+  sessionDeleteInfo: string
   resetAllLabel: string
   resetAllInfo: string
 }
@@ -118,6 +120,8 @@ const zh: Record<keyof WidthSliderKey, string> = {
   'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（直接启动，不经 cmd）',
   owEmptyMenu: '没有可见的打开项（全部已隐藏），可到设置中调整',
   owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
+  sessionDeleteLabel: '会话删除（⋯ 菜单）',
+  sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
 }
@@ -179,6 +183,8 @@ const en: Record<keyof WidthSliderKey, string> = {
   'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched directly, not through cmd)',
   owEmptyMenu: 'No visible open targets (all hidden); adjust in settings',
   owNoCwdTip: 'No folder in this session (cannot open here)',
+  sessionDeleteLabel: 'Session delete (⋯ menu)',
+  sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
 }

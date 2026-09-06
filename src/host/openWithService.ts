@@ -17,7 +17,7 @@
  * 日志文件）；client 的 log endpoint 转发到 ctx.logger。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, extname, join } from 'node:path'
 import { dshHomePath } from '../shared/dshHome.ts'
 
 // ── 设置文件存储路径：与官方/用户本地版本共用，迁移零成本 ──────────────
@@ -33,6 +33,14 @@ function readSettingsFile(): unknown {
   } catch {
     return null
   }
+}
+
+/** 原子写 open-with 设置文件（tmp + rename）。 */
+function writeOpenWithSettingsSync(settings: unknown): void {
+  mkdirSync(SETTINGS_DIR, { recursive: true })
+  const tmp = SETTINGS_FILE + '.tmp'
+  writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf-8')
+  renameSync(tmp, SETTINGS_FILE)
 }
 
 // ── RPC / 启动 最小上下文契约（运行时由 DSH 注入，宽松类型）────────────
@@ -69,19 +77,28 @@ const PRESET_TARGETS = ['code', 'cmd', 'powershell', 'explorer']
 
 // ── 启动规格 ──────────────────────────────────────────────────────────
 
-/** code 目标的可执行文件（PATH 里是 .cmd/.bat 时向上找 Code.exe）。 */
+/**
+ * code 目标的可执行文件（PATH 里是 .cmd/.bat 时向上找 Code.exe）。
+ * 路径解析用 node:path 的 dirname/extname（避免手写切片在无扩展名/
+ * 无分隔符路径下的退化行为）。
+ */
 async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
   const sp = ctx.subprocess
   if (!sp) throw new Error('subprocess service unavailable')
   const resolvedPath = await sp.resolveExecutable('code')
-  const ext = resolvedPath.slice(resolvedPath.lastIndexOf('.')).toLowerCase()
+  const ext = extname(resolvedPath).toLowerCase()
   if (ext === '.cmd' || ext === '.bat') {
-    const binDir = resolvedPath.slice(0, resolvedPath.lastIndexOf('\\'))
-    const vsCodeDir = binDir.slice(0, binDir.lastIndexOf('\\'))
+    const binDir = dirname(resolvedPath)
+    const vsCodeDir = dirname(binDir)
     const exePath = join(vsCodeDir, 'Code.exe')
     if (existsSync(exePath)) return exePath
   }
   return resolvedPath
+}
+
+/** 给进入 cmd.exe 上下文的字符串加双引号（内部双引号转义为 ""）。 */
+function quoteForCmd(value: string): string {
+  return '"' + value.replace(/"/g, '""') + '"'
 }
 
 /** 预设目标的 argv 组装（cmd start / 直接 argv 两种形态）。 */
@@ -90,15 +107,13 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
   switch (target) {
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
-      return { argv: ['cmd', '/c', exe, cwd], useSpawnCwd: false }
+      // cwd 会经 cmd.exe 二次解析：整体加引号，含 & | % 等元字符也不分叉。
+      return { argv: ['cmd', '/c', exe, quoteForCmd(cwd)], useSpawnCwd: false }
     }
     case 'cmd': {
       const cmdPath = windir + '\\System32\\cmd.exe'
-      const escapedCwd = cwd.includes(' ') ? '"' + cwd + '"' : cwd
-      return {
-        argv: ['cmd', '/c', 'start', '"' + cmdPath + '"', 'cmd', '/K', 'title ' + cmdPath + ' && cd /d ' + escapedCwd],
-        useSpawnCwd: false,
-      }
+      const inner = 'title ' + quoteForCmd(cmdPath) + ' && cd /d ' + quoteForCmd(cwd)
+      return { argv: ['cmd', '/c', 'start', quoteForCmd(cmdPath), 'cmd', '/K', inner], useSpawnCwd: false }
     }
     case 'powershell': {
       const psPath = windir + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
@@ -236,16 +251,31 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
     const { settings } = body
     if (settings === undefined) return fail('invalid-settings', 'settings is required')
     try {
-      mkdirSync(SETTINGS_DIR, { recursive: true })
-      const tmp = SETTINGS_FILE + '.tmp'
-      writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf-8')
-      renameSync(tmp, SETTINGS_FILE)
+      writeOpenWithSettingsSync(settings)
       ctx.logger?.info?.('settings saved', { file: SETTINGS_FILE })
       return ok({})
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       ctx.logger?.error?.('writeSettings failed', err)
       return fail('write-failed', message)
+    }
+  }
+  if (endpoint === 'setCurrent') {
+    // 胶囊按钮选择项后写回 currentId（与设置面板的"设为当前"同源）。
+    const { id } = body
+    if (typeof id !== 'string' || id.length === 0) return fail('invalid-id', 'id is required')
+    try {
+      const raw = readSettingsFile() as { currentId?: string; items?: Array<{ id: string }> } | null
+      if (!raw || !Array.isArray(raw.items) || !raw.items.some((it) => it.id === id)) {
+        return fail('invalid-id', 'item not found: ' + id)
+      }
+      writeOpenWithSettingsSync({ ...raw, currentId: id })
+      ctx.logger?.info?.('current set', { id })
+      return ok({})
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      ctx.logger?.error?.('setCurrent failed', err)
+      return fail('set-current-failed', message)
     }
   }
   if (endpoint !== 'launch') {
@@ -268,8 +298,10 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
       const settings = readSettingsFile() as { items?: Array<{ id: string; preset?: boolean; path?: string }> } | null
       const item = settings?.items?.find((it) => it.id === targetStr)
       if (!item || item.preset || !item.path) return fail('invalid-target', 'custom item not found: ' + targetStr)
+      // 自定义项直接 spawn 可执行文件（不经 cmd 二次解析，避免路径中的
+      // cmd 元字符如 & | % 被解释）；设置面板限定 .exe 路径。
       const handle = sp.spawn({
-        argv: ['cmd', '/c', 'start', '', item.path],
+        argv: [item.path],
         cwd,
         stdio: { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
         graceMs: 5e3,

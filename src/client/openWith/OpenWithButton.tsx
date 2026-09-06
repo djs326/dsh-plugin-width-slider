@@ -66,6 +66,10 @@ export interface OpenWithButtonInjected {
   log: (level: 'info' | 'warn' | 'error', message: string, extra?: unknown) => void
   readHiddenIds: () => Promise<string[]>
   readCapsuleItems: () => Promise<CapsuleItem[]>
+  /** 读设置文件中的当前项 id（设置面板"设为当前"的同源值）。 */
+  readCurrentId: () => Promise<string | null>
+  /** 选择项后写回 currentId（与设置面板的"设为当前"同源）。 */
+  setCurrent: (id: string) => Promise<unknown>
 }
 
 export interface OpenWithButtonProps extends OpenWithButtonInjected {
@@ -100,7 +104,9 @@ function useLaunchFlow(
   return { run }
 }
 
-export function OpenWithButton({ sessionId, launch, getCwd, log, readHiddenIds, readCapsuleItems, t }: OpenWithButtonProps) {
+export function OpenWithButton({
+  sessionId, launch, getCwd, log, readHiddenIds, readCapsuleItems, readCurrentId, setCurrent, t,
+}: OpenWithButtonProps) {
   const [target, setTarget] = useState('code')
   const [open, setOpen] = useState(false)
   const [hiddenIds, setHiddenIds] = useState<string[]>([])
@@ -119,14 +125,24 @@ export function OpenWithButton({ sessionId, launch, getCwd, log, readHiddenIds, 
     return () => document.removeEventListener('pointerdown', onDown)
   }, [open])
 
-  // 初始装载胶囊项；当前项失效时落到第一项。
+  // 初始装载：胶囊项 + 隐藏项 + 当前项（设置面板"设为当前"同源）。
+  // 初载 target = currentId（有效时），否则落第一项；卸载后不再 setState。
   useEffect(() => {
-    readCapsuleItems().then((items) => {
-      setCapsuleItems(items)
-      if (items.length > 0 && !items.find((it) => it.id === target)) setTarget(items[0].id)
-    }).catch(() => {})
-    readHiddenIds().then(setHiddenIds).catch(() => {})
-  }, [readCapsuleItems, readHiddenIds]) // eslint-disable-line react-hooks/exhaustive-deps
+    let alive = true
+    Promise.all([readCapsuleItems(), readHiddenIds(), readCurrentId()])
+      .then(([items, hidden, currentId]) => {
+        if (!alive) return
+        setCapsuleItems(items)
+        setHiddenIds(hidden)
+        const wanted = currentId !== null && items.some((it) => it.id === currentId)
+          ? currentId
+          : (items[0]?.id ?? 'code')
+        setTarget(wanted)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readCapsuleItems, readHiddenIds, readCurrentId])
 
   const { run } = useLaunchFlow(target, sessionId, launch, getCwd, log)
 
@@ -173,6 +189,10 @@ export function OpenWithButton({ sessionId, launch, getCwd, log, readHiddenIds, 
       return
     }
     log('info', 'picker selected launch', { sessionId, target: next, cwd })
+    // 写回 currentId（host setCurrent），与设置面板"设为当前"同源。
+    setCurrent(next).catch((err) => {
+      log('warn', 'setCurrent failed', err)
+    })
     launch(cwd, next).then((result) => {
       if (result.ok) log('info', 'RPC result', result)
       else log('warn', 'RPC returned error', result)
@@ -269,6 +289,8 @@ export function OpenWithButton({ sessionId, launch, getCwd, log, readHiddenIds, 
             right: 0,
             minWidth: '168px',
             maxWidth: 'min(320px, calc(100vw - 32px))',
+            maxHeight: 'min(320px, calc(100vh - 120px))',
+            overflowY: 'auto',
             background: menuBgVar,
             backdropFilter: 'saturate(180%) blur(20px)',
             WebkitBackdropFilter: 'saturate(180%) blur(20px)',

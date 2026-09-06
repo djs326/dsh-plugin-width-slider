@@ -68,7 +68,8 @@
 "actions 槽位修复版"（inject 目标 = register 的 slot 自身）。若之前装过
 dsh-plugin-open-with，请将其移除或停用，避免出现双按钮/双设置。打开的
 配置沿用同一份数据文件（`$DSH_HOME/storages/dsh-open-with/settings.json`），
-停用官方插件后你的预设/自定义项无缝保留。
+停用官方插件后你的预设/自定义项无缝保留。自定义项请填 `.exe` 可执行文件
+路径（直接启动，不经 cmd 二次解析，路径含 `&` 等符号也不受影响）。
 
 ---
 

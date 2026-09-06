@@ -116,7 +116,7 @@ function installOpenWithButton(ctx: RpcClientContext): Disposer {
   }
 
   /** 读 open-with 设置对象（items/hiddenIds/currentId）；失败返回 null。 */
-  const readSettingsObj = async (): Promise<{ items?: CapsuleItem[]; hiddenIds?: string[] } | null> => {
+  const readSettingsObj = async (): Promise<{ items?: CapsuleItem[]; hiddenIds?: string[]; currentId?: string } | null> => {
     try {
       const result = await rpcOpenWith(ctx, 'readSettings', {})
       if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
@@ -140,6 +140,17 @@ function installOpenWithButton(ctx: RpcClientContext): Disposer {
     const settings = await readSettingsObj()
     if (!settings || !Array.isArray(settings.hiddenIds)) return []
     return settings.hiddenIds.filter((id: unknown) => typeof id === 'string')
+  }
+
+  /** 读设置中的当前项 id（host setCurrent 的反向读取，同源 currentId）。 */
+  const readCurrentId = async (): Promise<string | null> => {
+    const settings = await readSettingsObj()
+    return settings && typeof settings.currentId === 'string' ? settings.currentId : null
+  }
+
+  /** 写回当前项 id（host /open-with setCurrent endpoint）。 */
+  const setCurrent = async (id: string): Promise<unknown> => {
+    return rpcOpenWith(ctx, 'setCurrent', { id })
   }
 
   const launch = async (cwd: string, target: string) => {
@@ -175,7 +186,7 @@ function installOpenWithButton(ctx: RpcClientContext): Disposer {
         id: 'open-with',
         order: 10,
         locale: NS,
-        inject: () => ({ launch, getCwd, log, readHiddenIds, readCapsuleItems }),
+        inject: () => ({ launch, getCwd, log, readHiddenIds, readCapsuleItems, readCurrentId, setCurrent }),
       },
       OpenWithButton,
     ),

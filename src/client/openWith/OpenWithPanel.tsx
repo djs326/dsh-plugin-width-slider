@@ -103,6 +103,29 @@ function InsertionLine({ color }: { color: string }) {
   )
 }
 
+/** 拖拽把手（六点 grip，SVG）。 */
+function GripIcon() {
+  return (
+    <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor" aria-hidden="true">
+      <circle cx="2" cy="2" r="1.3" />
+      <circle cx="6" cy="2" r="1.3" />
+      <circle cx="2" cy="6" r="1.3" />
+      <circle cx="6" cy="6" r="1.3" />
+      <circle cx="2" cy="10" r="1.3" />
+      <circle cx="6" cy="10" r="1.3" />
+    </svg>
+  )
+}
+
+/** 对勾（当前项徽标，SVG）。 */
+function CheckIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
 /** 可见性切换图标（SVG，避免 emoji）。hidden=true 表示"已隐藏"（眼睛带斜杠）。 */
 function EyeIcon({ hidden }: { hidden: boolean }) {
   return (
@@ -146,6 +169,7 @@ function RowIconButton(props: {
       type="button"
       onClick={onClick}
       title={title}
+      aria-label={title}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: '26px', height: '24px', padding: 0, border: 'none', borderRadius: '4px',
@@ -179,28 +203,41 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
   settingsRef.current = settings
   // 防止重复提取预设图标
   const extractedPresets = useRef<Set<string>>(new Set())
+  // 卸载守卫：开关关闭/设置页关闭时组件可被直接卸载，异步 .then 不再 setState
+  const aliveRef = useRef(true)
+  useEffect(() => () => { aliveRef.current = false }, [])
 
   // 挂载时解析所有预设项的实际路径
   useEffect(() => {
     const targets: LaunchTarget[] = ['code', 'cmd', 'powershell', 'explorer']
     for (const target of targets) {
-      resolvePresetPath(target).then((presetPath: string) => {
-        if (presetPath) setResolvedPaths((prev) => ({ ...prev, [target]: presetPath }))
-      })
+      resolvePresetPath(target)
+        .then((presetPath: string) => {
+          if (!aliveRef.current || !presetPath) return
+          setResolvedPaths((prev) => ({ ...prev, [target]: presetPath }))
+        })
+        .catch(() => {})
     }
   }, [resolvePresetPath])
 
-  // 挂载时从 host 端加载持久化设置（确保预设项始终存在）
+  // 挂载时从 host 端加载持久化设置（确保预设项始终存在；结构校验防损坏文件）
   useEffect(() => {
-    readSettings().then((loaded) => {
-      if (loaded && loaded.currentId && loaded.items) {
-        const items = [...loaded.items]
-        for (const preset of PRESET_ITEMS) {
-          if (!items.find((it) => it.id === preset.id)) items.push(preset)
+    readSettings()
+      .then((loaded) => {
+        if (!aliveRef.current) return
+        if (loaded && typeof loaded.currentId === 'string' && Array.isArray(loaded.items)) {
+          const items = [...loaded.items]
+          for (const preset of PRESET_ITEMS) {
+            if (!items.find((it) => it.id === preset.id)) items.push(preset)
+          }
+          setSettings({
+            currentId: loaded.currentId,
+            items,
+            hiddenIds: Array.isArray(loaded.hiddenIds) ? loaded.hiddenIds : [],
+          })
         }
-        setSettings({ currentId: loaded.currentId, items, hiddenIds: loaded.hiddenIds ?? [] })
-      }
-    })
+      })
+      .catch(() => {})
   }, [readSettings])
 
   const persist = useCallback((next: OpenWithSettingsData) => {
@@ -217,10 +254,9 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
       if (!exePath) continue
       extractedPresets.current.add(p.id)
       extractIcon(exePath).then((icon) => {
-        if (!icon) return
+        if (!aliveRef.current || !icon) return
         const cur = settingsRef.current
-        const nextItems = cur.items.map((it) => (it.id === p.id ? { ...it, icon } : it))
-        persist({ ...cur, items: nextItems })
+        persist({ ...cur, items: cur.items.map((it) => (it.id === p.id ? { ...it, icon } : it)) })
       }).catch(() => {})
     }
   }, [resolvedPaths, settings.items, extractIcon, writeSettings]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -342,7 +378,7 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
       persist({ currentId: settings.currentId, items: [...settings.items, newItem], hiddenIds: settings.hiddenIds })
       closeForm()
       extractIcon(path).then((icon) => {
-        if (!icon) return
+        if (!aliveRef.current || !icon) return
         const cur = settingsRef.current
         persist({ ...cur, items: cur.items.map((it) => (it.id === newId ? { ...it, icon } : it)) })
       }).catch(() => {})
@@ -359,7 +395,7 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
       if (pathChanged) {
         const editId = formItemId
         extractIcon(path).then((icon) => {
-          if (!icon) return
+          if (!aliveRef.current || !icon) return
           const cur = settingsRef.current
           persist({ ...cur, items: cur.items.map((it) => (it.id === editId ? { ...it, icon } : it)) })
         }).catch(() => {})
@@ -408,7 +444,13 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
           onClick={() => selectCurrent(item)}
           onDragStart={(e) => onDragStart(e, item.id, group)}
           onDragEnd={onDragEnd}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectCurrent(item) } }}
+          // 键盘只响应卡片自身（内部按钮的 Enter 冒泡不触发 selectCurrent）
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+              e.preventDefault()
+              selectCurrent(item)
+            }
+          }}
           style={{
             display: 'flex', alignItems: 'center', gap: '10px',
             padding: '8px 12px',
@@ -424,20 +466,26 @@ export function OpenWithPanel({ extractIcon, resolvePresetPath, readSettings, wr
         >
           <span
             style={{
-              display: 'flex', alignItems: 'center', color: tertiaryColor, fontSize: '13px',
-              cursor: 'grab', userSelect: 'none', flexShrink: 0, lineHeight: 1,
+              display: 'flex', alignItems: 'center', color: tertiaryColor,
+              cursor: 'grab', userSelect: 'none', flexShrink: 0, lineHeight: 1, padding: '0 2px',
             }}
             title={t('settings.dragTip')}
           >
-            ⋮⋮
+            <GripIcon />
           </span>
           <ItemIcon src={item.icon} size={20} />
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
             <span style={{ fontSize: '13px', fontWeight: 500, lineHeight: 1.3 }}>
               {item.name}
               {isActive && (
-                <span style={{ fontSize: '10px', color: brandColor, marginLeft: '6px', fontWeight: 600 }}>
-                  ✓ {t('settings.current.title')}
+                <span
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    fontSize: '10px', color: brandColor, marginLeft: '6px', fontWeight: 600,
+                  }}
+                >
+                  <CheckIcon />
+                  {t('settings.current.title')}
                 </span>
               )}
             </span>

@@ -24,7 +24,9 @@ const PLATFORM_MODULES = [
   '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
-const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES]
+// dsh-md-render：跨插件运行时模块（dsh.client.external 声明，ModuleLoader
+// 保证其先于本插件加载）；构建时保持裸 require，不打进 bundle。
+const CLIENT_EXTERNALS: readonly string[] = ['dsh-md-render', ...PLATFORM_MODULES]
 
 /** Host-side externals: cordis resolves at runtime from the dsh profile tree. */
 const HOST_EXTERNALS: readonly (string | RegExp)[] = [

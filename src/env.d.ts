@@ -40,3 +40,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 declare module '@deepseek-ai/dsh-client-ui-primitives' {
   // 当前未使用，但声明存在避免 tsc 报错
 }
+// __ModuleLoader__ factory 注入的模块加载器（见 thinkView.tsx 运行时
+// require('dsh-md-render')；tsdown CJS 产物运行于 factory 作用域内）。
+declare const require: (id: string) => any

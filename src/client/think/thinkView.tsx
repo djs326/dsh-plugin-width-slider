@@ -271,14 +271,16 @@ function renderBlocks(
 export interface AssistantStepViewProps {
   node?: { data?: { status?: string; blocks?: unknown[] } } | null
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode
+  /** true=思考完自动收起（默认）；false=始终展开（上游语义）。 */
+  collapseAfterRun?: boolean
 }
 
-export function AssistantStepView({ node, renderMessageImages }: AssistantStepViewProps) {
+export function AssistantStepView({ node, renderMessageImages, collapseAfterRun = true }: AssistantStepViewProps) {
   const data = node && node.data ? node.data : null
   if (!data || !Array.isArray(data.blocks)) return null
   const streaming = data.status === 'running'
   const interrupted = data.status === 'interrupted'
-  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages)
+  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun)
   if (interrupted) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">已停止</span>)
   }

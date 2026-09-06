@@ -43,15 +43,28 @@ const HANDLE_HIDE_CSS = `
 
 // ── 各功能安装器（返回 disposer，与 config 开关一一对应）──────────────
 
-/** 注入隐藏原生手柄的样式（宽度滑块开关=开时）。 */
-function installHandleHide(): Disposer {
+/**
+ * 宽度滑块功能安装器（开关=开时）：
+ * - 注入隐藏原生手柄的样式；
+ * - 卸载时（开关关闭）除移除样式外，清除插件写在各对话根上的内联
+ *   --dsh-chat-user-width——让对话宽度立即回到官方默认/其自身持久值，
+ *   无需等对话切换重渲染才恢复。
+ */
+function installWidthFeature(): Disposer {
   const style = document.createElement('style')
   style.id = 'dsh-plugin-width-slider-hide-handles'
   style.textContent = HANDLE_HIDE_CSS
   // 幂等：热重载/重复实例时先清掉旧同 id 样式，避免开关只移除自己那份。
   document.getElementById(style.id)?.remove()
   document.head.appendChild(style)
-  return () => { style.remove() }
+  return () => {
+    style.remove()
+    try {
+      document.querySelectorAll<HTMLElement>('[data-phase]').forEach((el) => {
+        el.style.removeProperty('--dsh-chat-user-width')
+      })
+    } catch { /* 忽略 */ }
+  }
 }
 
 /** 注入思考块样式 + 注册 assistant-step 渲染器（思考块增强=开时）。 */
@@ -266,7 +279,7 @@ export function apply(ctx: RpcClientContext): void {
 
     const sync = (): void => {
       const s = getSettings()
-      ensure('handle', s.widthSlider, () => installHandleHide())
+      ensure('handle', s.widthSlider, () => installWidthFeature())
       ensure('think', s.thinkRender, () => installThinkRenderer(ctx))
       ensure('localize', s.uiLocalize, () => installLocalize())
       ensure('resize', s.dialogResize, () => installDialogResizePatch())

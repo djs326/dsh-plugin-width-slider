@@ -123,7 +123,8 @@ export function installNavScrollPatch(): () => void {
   return () => {
     observer.disconnect()
     probe.dispose()
-    // 开关关闭/插件卸载：还原已 patch 的 navList 内联样式（关闭即回到官方）。
+    // 开关关闭/插件卸载：还原已 patch 的 navList 内联样式并清 WeakSet，
+    // 同一 dialog（仍开着）再次开启开关时能重新 patch（否则要等 dialog 重建）。
     for (const navList of patchedNavListEls) {
       navList.style.flex = ''
       navList.style.minHeight = ''
@@ -131,6 +132,7 @@ export function installNavScrollPatch(): () => void {
       navList.style.paddingRight = ''
       const nav = navList.parentElement
       if (nav) nav.style.minHeight = ''
+      patchedNavLists.delete(navList)
     }
     patchedNavListEls.clear()
   }
@@ -289,6 +291,7 @@ export function installDialogResizePatch(): () => void {
     if (dialog && dialog.isConnected) {
       dialog.querySelector('[' + RESIZE_HANDLE_ATTR + ']')?.remove()
       dialog.style.width = ''
+      patchedDialogs.delete(dialog)
     }
     clearStoredWidth()
   }

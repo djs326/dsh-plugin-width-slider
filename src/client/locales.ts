@@ -61,6 +61,11 @@ export interface WidthSliderKey {
   owNoCwdTip: string
   sessionDeleteLabel: string
   sessionDeleteInfo: string
+  groupWorkspace: string
+  enableWsTabs: string
+  enableWsTabsInfo: string
+  enableAssign: string
+  enableAssignInfo: string
   resetAllLabel: string
   resetAllInfo: string
 }
@@ -126,6 +131,11 @@ const zh: Record<keyof WidthSliderKey, string> = {
   owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
   sessionDeleteLabel: '会话删除（⋯ 菜单）',
   sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
+  groupWorkspace: '工作区分页',
+  enableWsTabs: '启用工作区分页（页签栏）',
+  enableWsTabsInfo: '侧栏原“工作区”标题位置改为分页页签：第一个“工作区”页签保留完整列表，其余每个工作区一个页签；右键页签可重命名或删除，删除后会话与文件夹保留，会话回到默认容器（未分组）。',
+  enableAssign: '分配工作区（⋯ 菜单）',
+  enableAssignInfo: '会话 "⋯" 菜单在"删除会话"上方新增四字项"分配工作区"：选择目标工作区后把该会话移入对应分页。',
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
 }
@@ -191,6 +201,11 @@ const en: Record<keyof WidthSliderKey, string> = {
   owNoCwdTip: 'No folder in this session (cannot open here)',
   sessionDeleteLabel: 'Session delete (⋯ menu)',
   sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
+  groupWorkspace: 'Workspace tabs',
+  enableWsTabs: 'Enable workspace tabs',
+  enableWsTabsInfo: 'Replaces the sidebar "Workspaces" heading with tab pages: the first "Workspaces" tab keeps the full list, then one tab per workspace. Right-click a tab to rename or delete; deleting keeps folders and sessions, which return to the default container (Ungrouped).',
+  enableAssign: 'Assign workspace (⋯ menu)',
+  enableAssignInfo: 'Adds the four-character "Assign workspace" item above "Delete session" in the session "⋯" menu: pick a target workspace to move the session into it.',
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
 }

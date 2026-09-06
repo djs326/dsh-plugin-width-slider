@@ -25,6 +25,8 @@ import { installUiLocalize } from './think/uiLocalize.ts'
 import { applySavedWidth } from './widthPrefs.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { installSessionDelete } from './sessionDelete.ts'
+import { installWorkspaceTabs } from './workspaceTabs.tsx'
+import { installAssignWorkspace } from './assignSession.ts'
 import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
 import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
@@ -269,7 +271,7 @@ async function rpcWriteSettings(ctx: RpcClientContext, settings: unknown): Promi
   await ctx.connection.rpc.call('/width-slider', 'writeSettings', { settings })
 }
 
-export const inject = ['slots', 'locale', 'connection', 'sessions']
+export const inject = ['slots', 'locale', 'connection', 'sessions', 'workspaces']
 
 export function apply(ctx: RpcClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'width-slider: dictionaries')
@@ -282,7 +284,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel'
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel' | 'wsTabs' | 'assignWs'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -302,13 +304,15 @@ export function apply(ctx: RpcClientContext): void {
       ensure('nav', s.navScroll, () => installNavScrollPatch())
       ensure('owButton', s.openWithButton, () => installOpenWithButton(ctx))
       ensure('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
+      ensure('wsTabs', s.workspaceTabs, () => installWorkspaceTabs(ctx as never))
+      ensure('assignWs', s.assignWorkspace, () => installAssignWorkspace(ctx as never))
     }
 
     const unsubscribe = onSettingsChanged(sync)
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel', 'wsTabs', 'assignWs'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

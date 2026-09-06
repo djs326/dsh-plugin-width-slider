@@ -323,7 +323,25 @@ export function WidthSliderSettings({
         />
       </Card>
 
-      {/* 5. 打开方式（Open With，整合自 dsh-plugin-open-with） */}
+      {/* 5. 工作区分页（v0.6.0） */}
+      <Card title={t('groupWorkspace')}>
+        <SwitchRow
+          id={id('enable-ws-tabs')}
+          label={t('enableWsTabs')}
+          info={t('enableWsTabsInfo')}
+          checked={settings.workspaceTabs}
+          onChange={(checked) => persist({ workspaceTabs: checked })}
+        />
+        <SwitchRow
+          id={id('enable-assign-ws')}
+          label={t('enableAssign')}
+          info={t('enableAssignInfo')}
+          checked={settings.assignWorkspace}
+          onChange={(checked) => persist({ assignWorkspace: checked })}
+        />
+      </Card>
+
+      {/* 6. 打开方式（Open With，整合自 dsh-plugin-open-with） */}
       <Card title={t('owGroupTitle')}>
         <SwitchRow
           id={id('enable-ow-settings')}

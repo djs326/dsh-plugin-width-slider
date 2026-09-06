@@ -29,6 +29,10 @@ export interface FeatureSettings {
   openWithSettings: boolean
   /** 10 会话行 ⋯ 菜单"删除会话"项（克隆官方菜单项，二次确认后 host 永久删除） */
   sessionDelete: boolean
+  /** 11 工作区分页 tab 栏（官方标题行原位替换为 工作区+各工作区 页签；右键页签改名/删除；删除后会话落入默认容器） */
+  workspaceTabs: boolean
+  /** 12 会话行 ⋯ 菜单"分配工作区"项（把会话移入指定工作区） */
+  assignWorkspace: boolean
 }
 
 export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -43,6 +47,8 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   openWithButton: true,
   openWithSettings: true,
   sessionDelete: true,
+  workspaceTabs: true,
+  assignWorkspace: true,
 }
 
 /** 白名单式合并任意来源（host 文件 / 缺键 / 未知类型）为完整配置。 */
@@ -60,5 +66,7 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     openWithButton: o.openWithButton !== false,
     openWithSettings: o.openWithSettings !== false,
     sessionDelete: o.sessionDelete !== false,
+    workspaceTabs: o.workspaceTabs !== false,
+    assignWorkspace: o.assignWorkspace !== false,
   }
 }

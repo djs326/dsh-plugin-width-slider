@@ -270,7 +270,7 @@ async function rpcWriteSettings(ctx: RpcClientContext, settings: unknown): Promi
   await ctx.connection.rpc.call('/width-slider', 'writeSettings', { settings })
 }
 
-export const inject = ['slots', 'locale', 'connection', 'sessions']
+export const inject = ['slots', 'locale', 'connection', 'sessions', 'workspaces']
 
 export function apply(ctx: RpcClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'width-slider: dictionaries')

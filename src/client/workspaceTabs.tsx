@@ -233,6 +233,13 @@ function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
 }
 
 async function loadGroups(): Promise<void> {
+  // 先用本地缓存同步给出与上次一致的分组视图，避免「先全量→读回后重排」的闪动。
+  const firstCache = cacheRead()
+  if (firstCache.length > 0) {
+    groups = firstCache
+    groupReady = true
+    emitGroups()
+  }
   if (!rpcCall) {
     const cached = cacheRead()
     if (cached.length > 0) groups = cached
@@ -1233,8 +1240,10 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   let synced = false
   let timer = 0
 
-  // 替换官方槽组件后主动刷新工作区基线，让官方树立即以新组件重渲染
-  // （否则要等官方下一次自发刷新，开关后就出现几秒延迟）。
+  // 替换官方槽组件后立即让渲染器重读 sidebar.workspaces 条目：
+  // 1) 刷新工作区基线（store 通知驱动已挂载的官方组件）；
+  // 2) 瞬时注册+移除一条无害空条目，触发官方 slots 变更通知，渲染器随即
+  //    以新条目（我们的 wrapper / 还原的官方组件）重渲染，开关不再等数秒。
   const kickRender = (): void => {
     try {
       const w = ctx.get?.<{ refresh?: () => unknown }>('workspaces')
@@ -1244,6 +1253,19 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
             w.refresh?.()
           } catch { /* 忽略 */ }
         })
+      }
+    } catch { /* 忽略 */ }
+    try {
+      const registerFn = ctx.slots?.register
+      if (typeof registerFn === 'function') {
+        const dispose = registerFn({ name: 'sidebar.footer.action', id: 'ws-tabs-ping', order: 9999 }, () => null)
+        if (typeof dispose === 'function') {
+          queueMicrotask(() => {
+            try {
+              dispose()
+            } catch { /* 忽略 */ }
+          })
+        }
       }
     } catch { /* 忽略 */ }
   }

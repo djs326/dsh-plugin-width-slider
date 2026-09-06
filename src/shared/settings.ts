@@ -25,7 +25,7 @@ export interface FeatureSettings {
   openWithButton: boolean
   /** 9 Open With 设置在总控页中的分组（收编 dsh-plugin-open-with） */
   openWithSettings: boolean
-  /** 10 会话行悬停删除按钮（官方会话树 DOM 补丁，host 永久删除） */
+  /** 10 会话行 ⋯ 菜单"删除会话"项（克隆官方菜单项，二次确认后 host 永久删除） */
   sessionDelete: boolean
 }
 

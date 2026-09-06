@@ -8,8 +8,9 @@
  *   文件夹里放“被分配”过来的工作区；
  * - 工作区唯一归属：它同一时间只属于一个位置（默认或某个文件夹）。把工作区
  *   勾进某文件夹 = 自动从原位置移过来；删除文件夹 = 其中工作区自动回到默认；
- * - 会话级「分配工作区」（把会话移进另一官方工作区）在 assignSession.ts，
- *   与本页签功能相互独立、互不影响。
+ * - 工作区行（组头）的操作菜单里有四字项「分配标签」：把该工作区放进任意
+ *   页签或移回默认（唯一归属，删除页签自动回默认）；
+ * - 会话级「分配工作区」已按用户确认废除（assignSession.ts 已删除）。
  *
  * 实现要点：
  * - 不移动官方数据：分组只是“显示作用域”。官方树经过滤后的
@@ -350,16 +351,14 @@ const I = {
 // ── 工作区行菜单「分配工作区」（把工作区分配到某个页签/默认）──────────────
 const WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'
 const ASSIGN_TAB_EVENT = 'dsh:ws-tab-assign'
-const ASSIGN_TAB_DIALOG_ID = 'ws-assign-tab-dialog'
-const OVERLAY_SLOT = 'shell.overlay'
 const ASSIGN_ICON_PATH =
   '<path transform="translate(9.52 2.52)" d="M3.55246 0L3.55246 2.44252L6 2.44252L6 3.55748L3.55246 3.55748L3.55246 6L2.43834 6L2.43834 3.55748L0 3.55748L0 2.44252L2.43834 2.44252L2.43834 0L3.55246 0Z" fill="currentColor"/>' +
   '<path transform="translate(0.3496 2.35)" d="M4.76367 0C5.36861 1.80598e-05 5.93113 0.310294 6.25488 0.821289L6.78027 1.64941C6.79685 1.67558 6.81791 1.69775 6.83887 1.71973C6.72186 2.15521 6.65702 2.61192 6.65137 3.08301C6.25601 2.96045 5.90909 2.70478 5.68164 2.3457L5.15723 1.5166C5.07183 1.38189 4.92318 1.3008 4.76367 1.30078L2.32422 1.30078C1.7589 1.30078 1.30078 1.7589 1.30078 2.32422L1.30078 10.1338C1.30078 10.6991 1.7589 11.1572 2.32422 11.1572L11.9766 11.1572C12.5419 11.1572 13 10.6991 13 10.1338L13 8.58398C13.4545 8.5135 13.8903 8.38748 14.3008 8.21289L14.3008 10.1338C14.3008 11.4171 13.2598 12.458 11.9766 12.458L2.32422 12.458C1.04093 12.458 0 11.4171 0 10.1338L0 2.32422C0 1.04093 1.04093 0 2.32422 0L4.76367 0Z" fill="currentColor"/>'
 
 const T_WS = {
-  'menu.assign': ['分配工作区', 'Assign workspace'],
-  'dlg.title': ['分配工作区', 'Assign workspace'],
-  'dlg.desc': ['把「{name}」分配到哪个页签？', 'Move "{name}" into which tab?'],
+  'menu.assign': ['分配标签', 'Assign tag'],
+  'dlg.title': ['分配标签', 'Assign tag'],
+  'dlg.desc': ['为「{name}」选择标签（默认或某个页签）', 'Choose a tag for "{name}" (Default or a tab)'],
   'dlg.cur': ['当前所在', 'Current'],
   'dlg.done': ['已分配', 'Assigned'],
   'dlg.noWs': ['该工作区已不存在。', 'This workspace no longer exists.'],
@@ -481,36 +480,23 @@ function assignWsToTab(wsId: string, targetGroupId: string | null): void {
   })
 }
 
-/** 分配目标选择框（官方 Modal，注册 shell.overlay）：目标 = 默认 / 各页签。 */
-function AssignWorkspaceToTabDialog(): ReactNode {
-  const gs = useGroups()
-  const [target, setTarget] = useState<{ workspaceId: string | null; title: string; done: boolean } | null>(null)
-  const [doneName, setDoneName] = useState('')
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const d = (e as CustomEvent).detail ?? {}
-      const workspaceId = typeof d.workspaceId === 'string' && d.workspaceId !== '' ? d.workspaceId : null
-      setTarget({ workspaceId, title: String(d.title ?? ''), done: false })
-      setDoneName('')
-    }
-    window.addEventListener(ASSIGN_TAB_EVENT, handler)
-    return () => window.removeEventListener(ASSIGN_TAB_EVENT, handler)
-  }, [])
-
-  if (!target) return null
+/** 分配目标选择（官方 Modal；由侧栏壳组件状态驱动，事件经窗口事件桥送达）。 */
+function AssignTabPicker(props: {
+  workspaceId: string
+  title: string
+  currentOwner: string | undefined
+  groupNames: { id: string; name: string }[]
+  onDone: () => void
+}): ReactNode {
+  const { workspaceId, title, currentOwner, groupNames, onDone } = props
+  const [doneName, setDoneName] = useState<string | null>(null)
   const Modal = primitives().Modal
   if (!Modal) return null
 
-  const owner = target.workspaceId ? membershipOf(target.workspaceId) : undefined
-  const close = () => setTarget(null)
   const pick = (groupId: string | null, label: string) => {
-    if (!target.workspaceId) return
-    assignWsToTab(target.workspaceId, groupId)
+    assignWsToTab(workspaceId, groupId)
     setDoneName(label)
-    setTarget({ ...target, done: true })
   }
-
   const option = (groupId: string | null, name: string): ReactNode =>
     h(
       'button',
@@ -541,7 +527,7 @@ function AssignWorkspaceToTabDialog(): ReactNode {
       },
       [
         h('span', { key: 'n', style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
-        owner === groupId || (owner === undefined && groupId === null)
+        currentOwner === groupId || (currentOwner === undefined && groupId === null)
           ? h('span', { key: 'c', style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary,#a8abb3)' } }, ttw('dlg.cur'))
           : null,
       ],
@@ -551,32 +537,23 @@ function AssignWorkspaceToTabDialog(): ReactNode {
     Modal,
     {
       open: true,
-      onClose: close,
+      onClose: onDone,
       title: ttw('dlg.title'),
       closeLabel: tt('cancel'),
-      footer: [h('button', { key: 'ok', type: 'button', onClick: close, style: btnStyle({ primary: true }, false) }, tt('done'))],
+      footer: [h('button', { key: 'ok', type: 'button', onClick: onDone, style: btnStyle({ primary: true }, false) }, tt('done'))],
     },
     h('div', null, [
-      target.workspaceId === null
-        ? h('div', { style: { padding: '8px 4px', fontSize: 12, color: 'var(--dsw-alias-label-secondary,#a8abb3)' } }, ttw('dlg.noWs'))
-        : target.done
-          ? h('div', { style: { padding: '8px 4px', fontSize: 13, color: 'var(--dsw-alias-state-success-primary,#3fb950)' } }, ttw('dlg.done') + '：' + doneName)
-          : h('div', null, [
-              h('div', { key: 'd', style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary,#a8abb3)', marginBottom: 8 } }, ttw('dlg.desc', { name: target.title || '' })),
-              h('div', { key: 'l', style: { display: 'flex', flexDirection: 'column', gap: 1 } }, [
-                option(null, tt('tab.default')),
-                ...gs.groups.map((g) => option(g.id, g.name)),
-              ]),
+      doneName !== null
+        ? h('div', { style: { padding: '8px 4px', fontSize: 13, color: 'var(--dsw-alias-state-success-primary,#3fb950)' } }, ttw('dlg.done') + '：' + doneName)
+        : h('div', null, [
+            h('div', { key: 'd', style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary,#a8abb3)', marginBottom: 8 } }, ttw('dlg.desc', { name: title || '' })),
+            h('div', { key: 'l', style: { display: 'flex', flexDirection: 'column', gap: 1 } }, [
+              option(null, tt('tab.default')),
+              ...groupNames.map((g) => option(g.id, g.name)),
             ]),
+          ]),
     ]),
   )
-}
-
-function membershipOf(wsId: string): string | undefined {
-  for (const g of groups) {
-    if (g.workspaceIds.includes(wsId)) return g.id
-  }
-  return undefined
 }
 
 // ── 页签栏（Portal 进官方 header 行）───────────────────────────────────
@@ -997,6 +974,18 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
   const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string } | null>(null)
+  // 工作区行菜单「分配标签」事件桥 → 本地弹窗（Shell 一定挂载，比 overlay 桥更可靠）。
+  const [assignTarget, setAssignTarget] = useState<{ workspaceId: string; title: string } | null>(null)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail ?? {}
+      const workspaceId = typeof d.workspaceId === 'string' && d.workspaceId !== '' ? d.workspaceId : ''
+      if (!workspaceId) return
+      setAssignTarget({ workspaceId, title: String(d.title ?? '') })
+    }
+    window.addEventListener(ASSIGN_TAB_EVENT, handler)
+    return () => window.removeEventListener(ASSIGN_TAB_EVENT, handler)
+  }, [])
 
   // 全量官方数据（只读用途：计算作用域）。
   const listState = (useSessions ? useSessions((s: unknown) => s) : null) as SessionListState | null
@@ -1173,6 +1162,15 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
       dialog && dialog.kind === 'delete' && dialogGroup
         ? h(DeleteDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
         : null,
+      assignTarget
+        ? h(AssignTabPicker, {
+            workspaceId: assignTarget.workspaceId,
+            title: assignTarget.title,
+            currentOwner: membership.get(assignTarget.workspaceId),
+            groupNames: groupList.map((g) => ({ id: g.id, name: g.name })),
+            onDone: () => setAssignTarget(null),
+          })
+        : null,
     ],
   )
 }
@@ -1192,23 +1190,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
   }
   void loadGroups()
 
-  // 工作区行菜单「分配工作区」注入 + 目标选择框（shell.overlay）。
-  const overlayDispose = (() => {
-    try {
-      const slots = ctx.slots
-      const injectFn = slots?.inject
-      const registerFn = slots?.register
-      if (injectFn && registerFn) {
-        return injectFn(OVERLAY_SLOT, () =>
-          registerFn(
-            { name: OVERLAY_SLOT, id: ASSIGN_TAB_DIALOG_ID, order: 100 },
-            AssignWorkspaceToTabDialog,
-          ),
-        )
-      }
-    } catch { /* 忽略 */ }
-    return () => {}
-  })()
+  // 工作区行菜单「分配标签」注入；选择框由侧栏壳组件本地渲染。
   ensureWorkspaceAssignMenuItem()
   let assignRaf = 0
   const scheduleAssign = () => {
@@ -1300,9 +1282,6 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     unwrap()
     assignObserver.disconnect()
     if (assignRaf !== 0) cancelAnimationFrame(assignRaf)
-    try {
-      overlayDispose()
-    } catch { /* 忽略 */ }
     document.querySelectorAll('[' + WS_ASSIGN_MENU_ATTR + ']').forEach((el) => el.remove())
     style.remove()
     rpcCall = null

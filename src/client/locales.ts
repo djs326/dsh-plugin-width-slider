@@ -33,6 +33,25 @@ export interface WidthSliderKey {
   owPickerAria: string
   owMenuAria: string
   owTargetCode: string
+  owGroupTitle: string
+  owSettingsLabel: string
+  owSettingsInfo: string
+  owButtonLabel: string
+  owButtonInfo: string
+  'settings.preset.title': string
+  'settings.current.title': string
+  'settings.dragTip': string
+  'settings.hide': string
+  'settings.show': string
+  'settings.custom.title': string
+  'settings.custom.add': string
+  'settings.custom.namePlaceholder': string
+  'settings.custom.pathPlaceholder': string
+  'settings.noCustom': string
+  'settings.edit': string
+  'settings.delete': string
+  'settings.cancel': string
+  'settings.save': string
 }
 
 const zh: Record<keyof WidthSliderKey, string> = {
@@ -64,10 +83,29 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableNavScroll: '设置左侧 tab 栏超高滚动',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
-  owTooltip: '用其他应用打开当前目录',
-  owPickerAria: '选择打开方式',
-  owMenuAria: '打开方式菜单',
-  owTargetCode: 'VS Code',
+  owTooltip: '在 VS Code、终端或文件管理器中打开工作区',
+  owPickerAria: '选择要用来打开工作区的应用',
+  owMenuAria: '打开方式',
+  owTargetCode: '打开 VS Code',
+  owGroupTitle: '打开方式',
+  owSettingsLabel: 'Open With 设置',
+  owSettingsInfo: '管理预设/自定义打开项：排序、设为当前、隐藏、添加/编辑/删除（写入本机设置）。',
+  owButtonLabel: '启用头部打开按钮',
+  owButtonInfo: '对话头部显示胶囊按钮（当前打开项 + 下拉切换），点击在当前会话目录启动。',
+  'settings.preset.title': '预设项',
+  'settings.current.title': '当前项',
+  'settings.dragTip': '拖动以调整排序',
+  'settings.hide': '在胶囊中隐藏',
+  'settings.show': '在胶囊中显示',
+  'settings.custom.title': '自定义',
+  'settings.custom.add': '添加',
+  'settings.custom.namePlaceholder': '应用名称',
+  'settings.custom.pathPlaceholder': '可执行文件路径 (.exe)',
+  'settings.noCustom': '暂无自定义项',
+  'settings.edit': '编辑',
+  'settings.delete': '删除',
+  'settings.cancel': '取消',
+  'settings.save': '保存',
 }
 
 const en: Record<keyof WidthSliderKey, string> = {
@@ -99,10 +137,29 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableNavScroll: 'Scrollable settings nav when tabs overflow',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
-  owTooltip: 'Open current folder with another app',
-  owPickerAria: 'Choose how to open',
-  owMenuAria: 'Open-with menu',
-  owTargetCode: 'VS Code',
+  owTooltip: 'Open the workspace in VS Code, terminal or file manager',
+  owPickerAria: 'Choose an application to open the workspace',
+  owMenuAria: 'Open with',
+  owTargetCode: 'Open VS Code',
+  owGroupTitle: 'Open With',
+  owSettingsLabel: 'Open With settings',
+  owSettingsInfo: 'Manage preset/custom open targets: reorder, set current, hide, add/edit/delete (persisted on this machine).',
+  owButtonLabel: 'Enable header open button',
+  owButtonInfo: 'Shows the capsule button in the conversation header (current target + dropdown), launching in the current session folder.',
+  'settings.preset.title': 'Presets',
+  'settings.current.title': 'Current',
+  'settings.dragTip': 'Drag to reorder',
+  'settings.hide': 'Hide from capsule',
+  'settings.show': 'Show in capsule',
+  'settings.custom.title': 'Custom',
+  'settings.custom.add': 'Add',
+  'settings.custom.namePlaceholder': 'App name',
+  'settings.custom.pathPlaceholder': 'Executable path (.exe)',
+  'settings.noCustom': 'No custom items yet',
+  'settings.edit': 'Edit',
+  'settings.delete': 'Delete',
+  'settings.cancel': 'Cancel',
+  'settings.save': 'Save',
 }
 
 export { zh, en }

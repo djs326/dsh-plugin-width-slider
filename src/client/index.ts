@@ -291,8 +291,45 @@ export function apply(ctx: RpcClientContext): void {
         label: 'Width Slider',
         locale: NS,
         // 单一读源：client 入口启动时经 config load 拉取一次；总控页只写。
+        // open-with 桥：/open-with RPC（host 见 src/host/openWithService.ts）。
         inject: () => ({
           writeSettings: (settings: unknown) => rpcWriteSettings(ctx, settings),
+          owReadSettings: async () => {
+            try {
+              const result = await rpcOpenWith(ctx, 'readSettings', {})
+              if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
+                return (result as { value?: { settings?: unknown } }).value?.settings ?? null
+              }
+              return null
+            } catch {
+              return null
+            }
+          },
+          owWriteSettings: async (settings: unknown) => {
+            await rpcOpenWith(ctx, 'writeSettings', { settings })
+          },
+          owExtractIcon: async (exePath: string) => {
+            try {
+              const result = await rpcOpenWith(ctx, 'extractIcon', { exePath })
+              if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
+                return String((result as { value?: { icon?: unknown } }).value?.icon ?? '')
+              }
+              return ''
+            } catch {
+              return ''
+            }
+          },
+          owResolvePresetPath: async (target: string) => {
+            try {
+              const result = await rpcOpenWith(ctx, 'resolvePresetPath', { target })
+              if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
+                return String((result as { value?: { path?: unknown } }).value?.path ?? '')
+              }
+              return ''
+            } catch {
+              return ''
+            }
+          },
         }),
       },
       WidthSliderSettings,

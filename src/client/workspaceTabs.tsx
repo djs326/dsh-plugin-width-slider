@@ -785,6 +785,7 @@ function TabStrip(props: {
       'button',
       {
         type: 'button',
+        role: 'menuitem',
         onClick: (e: { stopPropagation: () => void }) => {
           e.stopPropagation()
           setCtx(null)
@@ -852,6 +853,7 @@ function TabStrip(props: {
               'div',
               {
                 key: 'ctx-menu',
+                role: 'menu',
                 'data-dsh-ws-ctx-menu': '',
                 onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
                 style: {

@@ -123,12 +123,13 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
 
 // ── 动效（整合自 dsh-client-ui-custom）────────────────────────────────
 
+/** 会话账本不可用的告警只打一次（getState 会被频繁调用）。 */
+let ledgerWarned = false
+
 /**
  * 从 config store + 会话账本派生引擎状态；空白会话决定新建对话入场是否播放。
  * @param ctx - client 上下文（读会话账本的 current/blank）。
  */
-let ledgerWarned = false
-
 function motionStateOf(ctx: RpcClientContext): MotionEngineState {
   const settings = getSettings()
   // 会话账本读取失败不应让动效整块失效：退化为"非空白会话"（不播放新建

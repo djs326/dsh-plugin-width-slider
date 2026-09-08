@@ -168,36 +168,39 @@ async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
 // lpCurrentDirectory，不经命令行解析），路径作为独立 argv 元素原样传递。
 
 /**
- * 预设目标的 spawn 规格（全部不经 cmd 文本承载用户路径）：
- * - code：exe 直启，argv=[exe, 目录]（目录作为 VS Code CLI 参数，libuv 自动引号）；
- * - cmd/powershell：argv 固定（含窗口标题参数），会话目录由 useSpawnCwd+cwd 承载，
- *   子进程（及它派生的新控制台窗口）启动目录即会话目录；
- * - explorer：exe 直启 + 目录参数。
+ * 预设目标的 spawn 规格。
+ *
+ * 关键：dsh 的 subprocess 服务对所有子进程强制 `windowsHide: true`
+ * （见 @deepseek-ai/dsh-subprocess-local 的 spawnSubprocess），直接 spawn 的
+ * GUI/控制台程序虽然进程起来了，但窗口不会显示（实测 VS Code 主进程
+ * MainWindowHandle=0）。因此统一经 `cmd.exe /c start "" <program> <args...>`
+ * 启动：start 创建的是一个不受父进程隐藏标志约束的独立进程，窗口正常显示。
+ * 空标题 "" 必须保留，否则 start 会把第一个带引号的参数当窗口标题。
  */
 async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Promise<{ argv: string[]; useSpawnCwd: boolean }> {
   const windir = process.env.windir ?? 'C:\\Windows'
+  const cmdExe = windir + '\\System32\\cmd.exe'
+  /** 经 cmd start 启动，使目标进程脱离 DSH 子进程的 windowsHide 约束。 */
+  const viaStart = (program: string, args: string[]): string[] => [cmdExe, '/c', 'start', '', program, ...args]
   switch (target) {
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
-      // VS Code CLI 必须带目录参数才会打开该目录（只设 cwd 只会开空窗口或
-      // 上次窗口）；--new-window 保证窗口真正弹到前台——只传目录时，若已有
-      // 实例在运行，VS Code 只把请求转给后台窗口，用户看不到任何反应。
-      // 目录作为独立 argv 元素交给 libuv 自动引号。
-      return { argv: [exe, '--new-window', cwd], useSpawnCwd: true }
+      // VS Code CLI 必须带目录参数才会打开该目录；--new-window 保证窗口弹到
+      // 前台（已有实例时否则只把请求转给后台窗口）。
+      return { argv: viaStart(exe, ['--new-window', cwd]), useSpawnCwd: true }
     }
     case 'cmd': {
       const cmdPath = windir + '\\System32\\cmd.exe'
-      // title 参数用无空格单词，避免经 libuv 引号包裹后 cmd 解析歧义。
-      return { argv: [cmdPath, '/K', 'title width-slider-cmd'], useSpawnCwd: true }
+      // title 参数用无空格单词，避免经引号包裹后 cmd 解析歧义。
+      return { argv: viaStart(cmdPath, ['/K', 'title width-slider-cmd']), useSpawnCwd: true }
     }
     case 'powershell': {
       const psPath = windir + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-      return { argv: [psPath, '-NoExit'], useSpawnCwd: true }
+      return { argv: viaStart(psPath, ['-NoExit']), useSpawnCwd: true }
     }
     case 'explorer':
-      // explorer.exe 无参数默认打开"快速访问"，目录必须显式作为参数传入
-      //（libuv 自动引号，安全）。
-      return { argv: ['explorer.exe', cwd], useSpawnCwd: false }
+      // explorer.exe 无参数默认打开"快速访问"，目录必须显式作为参数传入。
+      return { argv: viaStart('explorer.exe', [cwd]), useSpawnCwd: false }
     default:
       throw new Error('unknown launch target: ' + String(target))
   }

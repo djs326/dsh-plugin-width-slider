@@ -79,11 +79,19 @@ function isValidOpenWithSettings(raw: unknown): raw is { currentId: string; item
   return ids.has(o.currentId)
 }
 
-/** 自定义启动项路径校验：本地绝对路径、.exe/.com、存在、非 UNC。 */
+/**
+ * cmd 元字符：出现在未经引号包裹的命令行参数里会被 cmd.exe 解释
+ * （libuv 只在参数含空格时加引号，`C:\a&b\proj` 这类路径会被截断并执行）。
+ * 括号不在列表内：`C:\Program Files (x86)\…` 含空格必然被引号包裹，放行。
+ */
+const CMD_METACHAR_RE = /[&|<>^%"!\r\n\t]/
+
+/** 自定义启动项路径校验：本地绝对路径、.exe/.com、存在、非 UNC、无 cmd 元字符。 */
 function isValidLaunchPath(p: string): boolean {
   if (typeof p !== 'string' || p.length === 0 || p.length > 1024) return false
   if (!isAbsolute(p)) return false
   if (p.startsWith('\\')) return false // 拒绝 UNC（NTLM/SMB 出站面）
+  if (CMD_METACHAR_RE.test(p)) return false // 拒绝会被 cmd 解释的路径
   const ext = extname(p).toLowerCase()
   if (ext !== '.exe' && ext !== '.com') return false
   try {
@@ -96,6 +104,14 @@ function isValidLaunchPath(p: string): boolean {
 function statIsFile(p: string): boolean {
   try {
     return statSync(p).isFile()
+  } catch {
+    return false
+  }
+}
+
+function statIsDirectory(p: string): boolean {
+  try {
+    return statSync(p).isDirectory()
   } catch {
     return false
   }
@@ -164,11 +180,14 @@ async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
 
 // 注意：argv 一律不手工预包引号——libuv/Node 在 Windows 组装命令行时会
 // 二次转义（内部引号变 \" 再整体外包），预引号会与 cmd.exe 引号剥离规则叠加
-// 导致逃逸或失败。目录一律经 spawn 的 cwd 承载（CreateProcess
-// lpCurrentDirectory，不经命令行解析），路径作为独立 argv 元素原样传递。
+// 导致逃逸或失败。
+// 目录同样不经命令行承载：一律用相对路径 `.`（实际目录由 spawn 的 cwd /
+// CreateProcess lpCurrentDirectory 决定）。把用户可控的绝对路径拼进 cmd 命令行
+// 会引入注入面——libuv 只在参数含空格时加引号，`C:\a&b\proj` 会被 cmd 截断
+// 并把 `b\proj` 当命令执行（已实证）。
 
 /**
- * 预设目标的 spawn 规格。
+ * 预设目标的启动规格。
  *
  * 关键：dsh 的 subprocess 服务对所有子进程强制 `windowsHide: true`
  * （见 @deepseek-ai/dsh-subprocess-local 的 spawnSubprocess），直接 spawn 的
@@ -185,25 +204,48 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
   switch (target) {
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
-      // VS Code CLI 必须带目录参数才会打开该目录；--new-window 保证窗口弹到
-      // 前台（已有实例时否则只把请求转给后台窗口）。
-      return { argv: viaStart(exe, ['--new-window', cwd]), useSpawnCwd: true }
+      // VS Code CLI 必须带路径参数才会打开文件夹；`.` 由进程工作目录解析。
+      // --new-window 保证窗口弹到前台（已有实例时否则只把请求转给后台窗口）。
+      return { argv: viaStart(exe, ['--new-window', '.']), useSpawnCwd: true }
     }
     case 'cmd': {
-      const cmdPath = windir + '\\System32\\cmd.exe'
       // title 参数用无空格单词，避免经引号包裹后 cmd 解析歧义。
-      return { argv: viaStart(cmdPath, ['/K', 'title width-slider-cmd']), useSpawnCwd: true }
+      return { argv: viaStart(cmdExe, ['/K', 'title width-slider-cmd']), useSpawnCwd: true }
     }
     case 'powershell': {
       const psPath = windir + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
       return { argv: viaStart(psPath, ['-NoExit']), useSpawnCwd: true }
     }
-    case 'explorer':
-      // explorer.exe 无参数默认打开"快速访问"，目录必须显式作为参数传入。
-      return { argv: viaStart('explorer.exe', [cwd]), useSpawnCwd: false }
+    case 'explorer': {
+      // explorer.exe 无参数默认打开"快速访问"，必须显式传目录；`.` 由进程
+      // 工作目录解析，因此 useSpawnCwd 必须为 true。
+      return { argv: viaStart(resolvePresetPath('explorer'), ['.']), useSpawnCwd: true }
+    }
     default:
       throw new Error('unknown launch target: ' + String(target))
   }
+}
+
+/**
+ * 经 cmd start 启动并等待 cmd 退出（start 立即返回，不等目标进程）。
+ * 返回 cmd 的退出码与 stderr：目标程序不存在/无法启动时 cmd 以非零码退出，
+ * 调用方据此报错——只 spawn 的话 `cmd.exe` 必然存在，错误会被静默吞掉。
+ */
+async function spawnViaStart(
+  sp: NonNullable<OpenWithCtx['subprocess']>,
+  argv: string[],
+  cwd: string,
+): Promise<{ pid: unknown; exitCode: number | null; stderr: string }> {
+  const handle = sp.spawn({
+    argv,
+    cwd,
+    stdio: { stdin: 'ignore', stdout: { maxBytes: 64 * 1024 }, stderr: { maxBytes: 64 * 1024 } },
+    graceMs: 5e3,
+  }) as SpawnHandle
+  const outcome = (await handle.done) as { exitCode?: number | null } | null
+  const exitCode = outcome !== null && outcome !== undefined && typeof outcome.exitCode === 'number' ? outcome.exitCode : null
+  const stderr = handle.collected?.stderr?.readFrom(0)?.text ?? ''
+  return { pid: handle.pid, exitCode, stderr }
 }
 
 // ── 图标提取（PowerShell System.Drawing）────────────────────────────
@@ -394,12 +436,27 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
     ctx.logger?.warn?.('cwd missing or invalid', { cwd })
     return fail('invalid-cwd', 'cwd is required')
   }
+  // 与 isValidLaunchPath 同一条本地路径策略：绝对路径、非 UNC、目录真实存在。
+  // UNC 会话目录会让 Open With 发起 SMB 连接（NTLM 出站面），直接拒绝。
+  if (!isAbsolute(cwd) || cwd.startsWith('\\\\')) {
+    ctx.logger?.warn?.('cwd is not a local absolute path', { cwd })
+    return fail('invalid-cwd', 'cwd must be a local absolute path')
+  }
+  if (!statIsDirectory(cwd)) {
+    ctx.logger?.warn?.('cwd is not an existing directory', { cwd })
+    return fail('invalid-cwd', 'cwd is not an existing directory')
+  }
   const targetStr = typeof target === 'string' && target.length > 0 ? target : 'code'
   const isPreset = PRESET_TARGETS.includes(targetStr)
   const sp = ctx.subprocess
   if (!sp) return fail('launch-failed', 'subprocess service unavailable')
+  const windir = process.env.windir ?? 'C:\\Windows'
+  const cmdExe = windir + '\\System32\\cmd.exe'
   try {
-    if (!isPreset) {
+    let spec: { argv: string[]; useSpawnCwd: boolean }
+    if (isPreset) {
+      spec = await buildSpawnSpec(ctx, targetStr, cwd)
+    } else {
       // 自定义项：从设置文件取 id → path（preset=false 且带 path）。
       const settings = readSettingsFile()
       if (!isValidOpenWithSettings(settings)) return fail('invalid-target', 'settings structure invalid')
@@ -408,33 +465,19 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
       if (!item || item.preset || !item.path || !isValidLaunchPath(item.path)) {
         return fail('invalid-target', 'custom item not found or not launchable: ' + targetStr)
       }
-      // 自定义项直接 spawn 可执行文件（不经 cmd 二次解析，避免路径中的
-      // cmd 元字符如 & | % 被解释）；设置面板限定 .exe 路径。
-      const handle = sp.spawn({
-        argv: [item.path],
-        cwd,
-        stdio: { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
-        graceMs: 5e3,
-      }) as SpawnHandle
-      ctx.logger?.info?.('spawned custom item', { target: targetStr, path: item.path, pid: handle.pid })
-      Promise.resolve(handle.done).catch((err: unknown) => ctx.logger?.error?.('process exited with error', err))
-      return ok({ launched: true, target: targetStr, pid: handle.pid })
+      // 自定义项同样经 cmd start 启动：直接 spawn 的 GUI 程序窗口不显示
+      // （subprocess 服务的 windowsHide 约束）。路径已由 isValidLaunchPath
+      // 拒绝 cmd 元字符，并以独立 argv 元素传递（libuv 按需引号）。
+      spec = { argv: [cmdExe, '/c', 'start', '', item.path], useSpawnCwd: true }
     }
-    const resolvedTarget = isPreset ? targetStr : 'code'
-    if (resolvedTarget === 'code') {
-      const exe = await resolveCodeExecutable(ctx)
-      ctx.logger?.info?.('resolved code ->', exe)
+    const result = await spawnViaStart(sp, spec.argv, spec.useSpawnCwd ? cwd : process.cwd())
+    if (result.exitCode !== null && result.exitCode !== 0) {
+      const detail = result.stderr.trim()
+      ctx.logger?.error?.('launch target failed', { target: targetStr, exitCode: result.exitCode, stderr: detail })
+      return fail('launch-failed', 'start exited with code ' + result.exitCode + (detail !== '' ? ': ' + detail : ''))
     }
-    const spec = await buildSpawnSpec(ctx, resolvedTarget, cwd)
-    const handle = sp.spawn({
-      argv: [...spec.argv],
-      cwd: spec.useSpawnCwd ? cwd : process.cwd(),
-      stdio: { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
-      graceMs: 5e3,
-    }) as SpawnHandle
-    ctx.logger?.info?.('spawned', { target: resolvedTarget, argv: spec.argv, pid: handle.pid })
-    Promise.resolve(handle.done).catch((err: unknown) => ctx.logger?.error?.('process exited with error', err))
-    return ok({ launched: true, target: resolvedTarget, pid: handle.pid })
+    ctx.logger?.info?.('spawned', { target: targetStr, argv: spec.argv, pid: result.pid })
+    return ok({ launched: true, target: targetStr, pid: result.pid })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     ctx.logger?.error?.('launch failed', err)

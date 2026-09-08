@@ -57,6 +57,7 @@ export interface WidthSliderKey {
   'settings.form.exeOnly': string
   owEmptyMenu: string
   owNoCwdTip: string
+  owLaunchFailed: string
   sessionDeleteLabel: string
   sessionDeleteInfo: string
   groupWorkspace: string
@@ -120,9 +121,10 @@ const zh: Record<keyof WidthSliderKey, string> = {
   'settings.save': '保存',
   'settings.form.nameRequired': '请输入应用名称',
   'settings.form.pathRequired': '请输入可执行文件路径',
-  'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（直接启动，不经 cmd）',
+  'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（经 cmd start 启动，窗口正常显示）',
   owEmptyMenu: '没有可见的打开项（全部已隐藏），可到设置中调整',
   owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
+  owLaunchFailed: '启动失败，请检查目标程序',
   sessionDeleteLabel: '会话删除（⋯ 菜单）',
   sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
   groupWorkspace: '工作区分页',
@@ -186,9 +188,10 @@ const en: Record<keyof WidthSliderKey, string> = {
   'settings.save': 'Save',
   'settings.form.nameRequired': 'Please enter an app name',
   'settings.form.pathRequired': 'Please enter an executable path',
-  'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched directly, not through cmd)',
+  'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched via cmd start so the window shows)',
   owEmptyMenu: 'No visible open targets (all hidden); adjust in settings',
   owNoCwdTip: 'No folder in this session (cannot open here)',
+  owLaunchFailed: 'Launch failed - check the target application',
   sessionDeleteLabel: 'Session delete (⋯ menu)',
   sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
   groupWorkspace: 'Workspace tabs',

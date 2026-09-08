@@ -82,29 +82,37 @@ export interface OpenWithButtonProps extends OpenWithButtonInjected {
   t: (key: string) => string
 }
 
-/** 启动流程：取会话目录 → RPC launch → 结果日志。 */
+/** 启动流程：取会话目录 → RPC launch → 结果日志 + 失败回调（供界面提示）。 */
 function useLaunchFlow(
   target: string,
   sessionId: string,
   launch: OpenWithButtonInjected['launch'],
   getCwd: OpenWithButtonInjected['getCwd'],
   log: OpenWithButtonInjected['log'],
+  onResult?: (ok: boolean, message?: string) => void,
 ) {
   const run = useCallback(async () => {
     try {
       const cwd = getCwd(sessionId)
       if (cwd === undefined || cwd.length === 0) {
         log('warn', 'cwd not found for session', { sessionId })
+        onResult?.(false)
         return
       }
       log('info', 'button clicked', { sessionId, target, cwd })
       const result = await launch(cwd, target)
-      if (result.ok) log('info', 'RPC result', result)
-      else log('warn', 'RPC returned error', result)
+      if (result.ok) {
+        log('info', 'RPC result', result)
+        onResult?.(true)
+      } else {
+        log('warn', 'RPC returned error', result)
+        onResult?.(false, result.error?.message)
+      }
     } catch (err) {
       log('error', 'button click failed', err)
+      onResult?.(false)
     }
-  }, [target, sessionId, launch, getCwd, log])
+  }, [target, sessionId, launch, getCwd, log, onResult])
   return { run }
 }
 
@@ -158,7 +166,20 @@ export function OpenWithButton({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readCapsuleItems, readHiddenIds, readCurrentId])
 
-  const { run } = useLaunchFlow(target, sessionId, launch, getCwd, log)
+  // 启动失败提示：host 返回 launch-failed 时按钮短暂显示「启动失败」（4s 后
+  // 恢复），避免用户只看到「什么都没发生」。
+  const [launchFailed, setLaunchFailed] = useState(false)
+  const failTimer = useRef<number | null>(null)
+  const onLaunchResult = useCallback((ok: boolean) => {
+    if (ok) return
+    setLaunchFailed(true)
+    if (failTimer.current !== null) window.clearTimeout(failTimer.current)
+    failTimer.current = window.setTimeout(() => setLaunchFailed(false), 4000)
+  }, [])
+  useEffect(() => () => {
+    if (failTimer.current !== null) window.clearTimeout(failTimer.current)
+  }, [])
+  const { run } = useLaunchFlow(target, sessionId, launch, getCwd, log, onLaunchResult)
 
   // 会话切换（sessionId 变化）后重算目录可用性。
   useEffect(() => {
@@ -168,7 +189,7 @@ export function OpenWithButton({
 
   const currentItem = capsuleItems.find((it) => it.id === target)
   const label = currentItem?.name ?? t('owTargetCode')
-  const title = noCwd ? t('owNoCwdTip') : t('owTooltip')
+  const title = noCwd ? t('owNoCwdTip') : launchFailed ? t('owLaunchFailed') : t('owTooltip')
   const visibleItems = capsuleItems.filter((it) => !hiddenIds.includes(it.id))
 
   const hoverVar = 'var(--dsw-hover, rgba(0,0,0,0.05))'
@@ -217,10 +238,15 @@ export function OpenWithButton({
         log('warn', 'setCurrent failed', err)
       })
     launch(cwd, next).then((result) => {
-      if (result.ok) log('info', 'RPC result', result)
-      else log('warn', 'RPC returned error', result)
+      if (result.ok) {
+        log('info', 'RPC result', result)
+      } else {
+        log('warn', 'RPC returned error', result)
+        onLaunchResult(false)
+      }
     }).catch((err) => {
       log('error', 'picker launch failed', err)
+      onLaunchResult(false)
     })
   }
 
@@ -265,7 +291,9 @@ export function OpenWithButton({
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
         <PngIcon src={currentItem?.icon ?? ''} size={14} />
-        <span style={{ whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ whiteSpace: 'nowrap', color: launchFailed ? 'var(--dsw-alias-state-error-primary)' : 'inherit' }}>
+          {launchFailed ? t('owLaunchFailed') : label}
+        </span>
       </button>
       <span aria-hidden="true" style={{ width: '1px', height: '100%', background: borderVar, flex: '0 0 auto' }} />
       <button

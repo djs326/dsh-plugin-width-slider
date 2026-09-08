@@ -3,8 +3,8 @@
  *
  * 职责（全部挂独立开关，默认开、热生效，见 config.ts FeatureSettings）：
  * 1. 对话宽度滑块设置区块 —— 总控页（WidthSliderSettings）；
- * 2. 思考块增强渲染（assistant-step 覆盖，整合自 dsh-think-zh-expand），
- *    含 Markdown 渲染子开关（thinkMarkdown，可让位给其它渲染插件）；
+ * 2. 思考块增强渲染（assistant-step 覆盖，整合自 dsh-think-zh-expand）：
+ *    只为思考块提供展开/收起，文本渲染走官方 MarkdownText（不接管围栏渲染）；
  * 3. 界面硬编码英文中文化；
  * 4. 隐藏官方原生宽度拖拽手柄（跟随「宽度滑块」开关联动）。
  *
@@ -91,8 +91,7 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
   document.getElementById(style.id)?.remove()
   document.head.appendChild(style)
   disposers.push(() => { style.remove() })
-  // 渲染回调每次读最新 thinkMode / thinkMarkdown：模式与 Markdown 渲染开关
-  // 切换无需重建注册，下次渲染即生效。
+  // 渲染回调每次读最新 thinkMode：显示方式切换无需重建注册，下次渲染即生效。
   const disposeInject = ctx.slots.inject('conversation.chat.node', () =>
     ctx.slots.register(
       {
@@ -106,7 +105,6 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
           node: props.node as never,
           renderMessageImages: props.renderMessageImages as never,
           collapseAfterRun: getSettings().thinkMode === 'auto-collapse',
-          markdown: getSettings().thinkMarkdown,
         }),
     ),
   )

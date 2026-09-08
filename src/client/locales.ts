@@ -12,8 +12,6 @@ export interface WidthSliderKey {
   groupThink: string
   enableThink: string
   enableThinkInfo: string
-  thinkMarkdownLabel: string
-  thinkMarkdownInfo: string
   thinkModeLabel: string
   thinkModeAuto: string
   thinkModeAutoInfo: string
@@ -80,9 +78,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableWidthInfo: '关闭后恢复官方原生宽度拖拽手柄（手柄隐藏样式联动停用）。',
   groupThink: '思考块',
   enableThink: '思考块增强渲染',
-  enableThinkInfo: '思考块展开/收起与正文渲染的总开关。Markdown 渲染可经下方子开关单独关闭；关闭本项回退官方默认的单行折叠显示。',
-  thinkMarkdownLabel: 'Markdown 渲染',
-  thinkMarkdownInfo: '思考块正文与回复文本用 Markdown 渲染（代码块/表格/公式，依赖 dsh-md-render，需保持安装）。已接入其它 Markdown 渲染插件时可关闭本项，避免两套渲染叠加冲突；关闭后相关内容以纯文本显示。',
+  enableThinkInfo: '思考块展开/收起交互的总开关；正文与思考内容走官方 Markdown 渲染（不接管围栏，genui / mermaid 等插件照常工作）。关闭本项回退官方默认的单行折叠显示。',
   thinkModeLabel: '思考块显示方式',
   thinkModeAuto: '思考完自动收起',
   thinkModeAutoInfo: '生成中强制展开，思考结束自动收起为单行摘要，点击可再展开。',
@@ -148,9 +144,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableWidthInfo: 'Turning off restores the native width drag handles (handle-hiding style is removed too).',
   groupThink: 'Thinking blocks',
   enableThink: 'Enhanced thinking block rendering',
-  enableThinkInfo: 'Master toggle for thinking block expand/collapse and body rendering. Markdown rendering can be turned off separately below; off here falls back to the built-in single-line collapsed view.',
-  thinkMarkdownLabel: 'Markdown rendering',
-  thinkMarkdownInfo: 'Renders thinking content and reply text as Markdown (code blocks/tables/formulas, requires dsh-md-render to stay installed). Turn this off when another Markdown renderer plugin is in charge, to avoid double rendering; related text then shows as plain text.',
+  enableThinkInfo: 'Master toggle for thinking block expand/collapse. Body and thinking text render through the official Markdown pipeline (fences are left to genui / mermaid plugins). Off falls back to the built-in single-line collapsed view.',
   thinkModeLabel: 'Thinking block mode',
   thinkModeAuto: 'Collapse after generation',
   thinkModeAutoInfo: 'Force-expanded while streaming; auto-collapses to a one-line summary when generation finishes; click to expand again.',

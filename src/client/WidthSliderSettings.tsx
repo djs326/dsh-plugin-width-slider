@@ -241,13 +241,6 @@ export function WidthSliderSettings({
         />
         {settings.thinkRender && (
           <>
-            <SwitchRow
-              id={id('enable-think-markdown')}
-              label={t('thinkMarkdownLabel')}
-              info={t('thinkMarkdownInfo')}
-              checked={settings.thinkMarkdown}
-              onChange={(checked) => persist({ thinkMarkdown: checked })}
-            />
             <div style={{ margin: '2px 0 6px' }}>
               <div
                 style={{

@@ -6,14 +6,14 @@
  * 1. TSX + tsdown 工程（上游为 React.createElement 手写拼接 parts）；
  * 2. 类名前缀 dsh-ws-（与上游 dsh-think-zh-expand- 互不干扰）；
  * 3. 行为默认「思考中展开、思考完自动收起」（上游为始终默认展开）；
- * 4. MarkdownView 经运行时 require('dsh-md-render') 解析（dsh.client.external
- *    声明保证其先加载），缺失时降级纯文本 pre-wrap，不抛错；
- * 5. 总控页「Markdown 渲染」开关（thinkMarkdown）可关掉 MarkdownView 调用，
- *    让用户接入的其它渲染插件渲染，避免两套 Markdown 渲染叠加冲突。
+ * 4. 文本一律走官方 primitives 的 MarkdownText 渲染（官方 DOM 结构），
+ *    本插件不自带 Markdown 渲染实现、不接管围栏渲染——围栏交给
+ *    genui / dsh-mermaid-render 等专门插件处理；MarkdownText 缺失时降级纯文本。
  *
- * 渲染契约：替换官方 conversation.chat.node 的 assistant-step 渲染器——
- * text 块与 reasoning 块统一走 MarkdownView；image 块相邻分组复用宿主
- * renderMessageImages；tool-call 块由独立节点渲染（返回 null）。
+ * 渲染契约：替换官方 conversation.chat.node 的 assistant-step 渲染器，只为
+ * 思考块提供展开/收起交互——text 块与 reasoning 块经官方 MarkdownText 渲染；
+ * image 块相邻分组复用宿主 renderMessageImages；tool-call 块由独立节点渲染
+ * （返回 null）。
  */
 
 import { memo, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
@@ -22,7 +22,7 @@ import { pickText } from '../lang.ts'
 // ── 思考块与 assistant 容器样式（DSH 语义 token，随激活注入）──────────
 // 视觉基线：与官方 ReasoningRow 一致（头部 DisclosureRow 结构：leading
 // 图标区 + 标题 + separator + 摘要；正文 tertiary 色、22px 缩进）。
-// 思考正文经 MarkdownView 渲染后颜色跟随其官方默认（与正式回复一致）。
+// 思考正文经官方 MarkdownText 渲染后颜色跟随其官方默认（与正式回复一致）。
 export const THINK_STYLES = `
 .dsh-ws-assistant{display:flex;flex-direction:column;color:var(--dsw-alias-label-primary);font-size:16px;line-height:28px}
 .dsh-ws-assistant-body{display:flex;flex-direction:column;gap:16px}
@@ -42,31 +42,30 @@ export const THINK_STYLES = `
 .dsh-ws-stopped{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);border-radius:6px;align-self:flex-start;padding:0 6px;font-size:11px;line-height:18px}
 `
 
-// ── MarkdownView 运行时解析（dsh-md-render 缺失时降级，不静态 import）──
+// ── 官方 MarkdownText 运行时解析（primitive 外部模块，不静态 import）──
+// 正文与思考正文一律走官方渲染管线：产出官方 md-code-block 结构，让
+// genui / dsh-mermaid-render 等 DOM 渲染插件能正常扫描并接管围栏。
 
-type MarkdownViewComponent = ComponentType<{ text: string }>
+type MarkdownTextComponent = ComponentType<{ text: string; streaming?: boolean }>
 
-let resolvedMdView: MarkdownViewComponent | null | undefined
+let resolvedMdText: MarkdownTextComponent | null | undefined
 
-/** 解析一次并缓存 dsh-md-render 的 MarkdownView；缺失/异常返回 null。 */
-function resolveMarkdownView(): MarkdownViewComponent | null {
-  if (resolvedMdView !== undefined) return resolvedMdView
+/** 解析一次并缓存 primitives.MarkdownText；缺失/异常返回 null。 */
+function resolveMarkdownText(): MarkdownTextComponent | null {
+  if (resolvedMdText !== undefined) return resolvedMdText
   try {
     // require 来自 __ModuleLoader__ factory 注入的模块加载器（见 env.d.ts 声明）。
-    const mod = (require('dsh-md-render') as {
-      MarkdownView?: MarkdownViewComponent
-      default?: { MarkdownView?: MarkdownViewComponent }
-    })
-    const view = mod?.MarkdownView ?? mod?.default?.MarkdownView ?? null
-    resolvedMdView = view
-    if (view === null) {
-      console.warn('[width-slider] dsh-md-render 未导出 MarkdownView，思考块降级为纯文本')
+    const mod = require('@deepseek-ai/dsh-client-ui-primitives') as {
+      MarkdownText?: MarkdownTextComponent
     }
+    const view = mod?.MarkdownText ?? null
+    resolvedMdText = view
+    if (view === null) console.warn('[width-slider] primitives 未导出 MarkdownText，文本降级为纯文本')
   } catch (err) {
-    resolvedMdView = null
-    console.warn('[width-slider] 未找到 dsh-md-render（思考块 Markdown 渲染降级为纯文本）', err)
+    resolvedMdText = null
+    console.warn('[width-slider] 未找到 @deepseek-ai/dsh-client-ui-primitives.MarkdownText（文本降级为纯文本）', err)
   }
-  return resolvedMdView
+  return resolvedMdText
 }
 
 // ── 官方图标（对齐官方 ReasoningRow 的 14×14 fill 风格 path）─────────
@@ -127,22 +126,18 @@ function sanitizeMarkdownUrls(text: string): string {
   })
 }
 
-// ── 文本渲染（Markdown 或纯文本）────────────────────────────────────
+// ── 文本渲染（官方 MarkdownText）────────────────────────────────────
 // memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
-// MarkdownView 重解析，减少每帧全量工作。
-// markdown=false（总控页「Markdown 渲染」开关关闭）：不调用 MarkdownView，
-// 内容以纯文本显示——把 Markdown 渲染完全让给用户接入的其它渲染插件，
-// 避免两套渲染叠加冲突（与 dsh-md-render 缺失时的既有降级路径一致）。
+// MarkdownText 重解析，减少每帧全量工作。
 const TextRenderer = memo(function TextRenderer({
   text,
   sanitizeUrls = false,
-  markdown = true,
-}: { text: string; sanitizeUrls?: boolean; markdown?: boolean }) {
+  streaming = false,
+}: { text: string; sanitizeUrls?: boolean; streaming?: boolean }) {
   const cleanText = stripControlTags(text)
   const finalText = sanitizeUrls ? sanitizeMarkdownUrls(cleanText) : cleanText
-  if (!markdown) return <div className="dsh-ws-plain">{finalText}</div>
-  const MarkdownView = resolveMarkdownView()
-  if (MarkdownView !== null) return <MarkdownView text={finalText} />
+  const MarkdownText = resolveMarkdownText()
+  if (MarkdownText !== null) return <MarkdownText text={finalText} streaming={streaming} />
   return <div className="dsh-ws-plain">{finalText}</div>
 })
 
@@ -158,11 +153,9 @@ export interface ThinkBlockProps {
   running: boolean
   /** true=思考完自动收起（默认）；false=上游语义（默认展开、可手动收起）。 */
   collapseAfterRun?: boolean
-  /** true=正文走 Markdown 渲染（默认）；false=纯文本（总控页 Markdown 渲染开关关闭）。 */
-  markdown?: boolean
 }
 
-export function ThinkBlock({ text, running, collapseAfterRun = true, markdown = true }: ThinkBlockProps) {
+export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBlockProps) {
   const cleanText = stripControlTags(text)
   // 初始态与模式对齐：auto-collapse（默认）初始收起——历史/非生成中的
   // 思考块以折叠摘要呈现，生成中由 open=expanded||running 强制展开、结束
@@ -218,7 +211,7 @@ export function ThinkBlock({ text, running, collapseAfterRun = true, markdown = 
       {open && (
         <div className="dsh-ws-think-body">
           {/* 思考通道做 URL scheme 净化（正式回复文本块不走这里）。 */}
-          <TextRenderer text={cleanText} sanitizeUrls markdown={markdown} />
+          <TextRenderer text={cleanText} sanitizeUrls streaming={running} />
         </div>
       )}
     </div>
@@ -257,12 +250,11 @@ function renderBlock(
   last: number,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
-  markdown?: boolean,
 ): ReactNode {
   const block = blocks[i] as { kind?: string; text?: unknown } | null | undefined
   if (!block) return null
   if (block.kind === 'text' && typeof block.text === 'string') {
-    return <TextRenderer key={'t' + i} text={block.text} markdown={markdown} />
+    return <TextRenderer key={'t' + i} text={block.text} streaming={streaming && i === last} />
   }
   if (block.kind === 'reasoning' && typeof block.text === 'string') {
     return (
@@ -271,7 +263,6 @@ function renderBlock(
         text={block.text}
         running={streaming && i === last}
         collapseAfterRun={collapseAfterRun}
-        markdown={markdown}
       />
     )
   }
@@ -289,14 +280,13 @@ function renderBlocks(
   streaming: boolean,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
-  markdown?: boolean,
 ): ReactNode[] {
   const last = blocks.length - 1
   const rendered: ReactNode[] = []
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i] as { kind?: string } | null | undefined
     if (!block) continue
-    const el = renderBlock(blocks, i, streaming, last, renderMessageImages, collapseAfterRun, markdown)
+    const el = renderBlock(blocks, i, streaming, last, renderMessageImages, collapseAfterRun)
     if (el === null || el === undefined) continue
     if (block.kind === 'image') i = imageGroupEnd(blocks, i)
     rendered.push(el)
@@ -310,16 +300,14 @@ export interface AssistantStepViewProps {
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode
   /** true=思考完自动收起（默认）；false=始终展开（上游语义）。 */
   collapseAfterRun?: boolean
-  /** true=文本/思考正文走 Markdown 渲染（默认）；false=纯文本（Markdown 渲染开关）。 */
-  markdown?: boolean
 }
 
-export function AssistantStepView({ node, renderMessageImages, collapseAfterRun = true, markdown = true }: AssistantStepViewProps) {
+export function AssistantStepView({ node, renderMessageImages, collapseAfterRun = true }: AssistantStepViewProps) {
   const data = node && node.data ? node.data : null
   if (!data || !Array.isArray(data.blocks)) return null
   const streaming = data.status === 'running'
   const interrupted = data.status === 'interrupted'
-  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun, markdown)
+  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun)
   if (interrupted) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)
   }

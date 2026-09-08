@@ -11,10 +11,8 @@ export interface FeatureSettings {
   widthSlider: boolean
   /** 2 思考/回复强制中文（host 端 systemPrompt 注入） */
   chinesePrompt: boolean
-  /** 3 思考块增强渲染（assistant-step 覆盖） */
+  /** 3 思考块增强渲染（assistant-step 覆盖；文本渲染走官方 MarkdownText） */
   thinkRender: boolean
-  /** 3a 思考块/回复文本 Markdown 渲染（依赖 dsh-md-render；关闭后纯文本，供接入其它渲染插件） */
-  thinkMarkdown: boolean
   /** 4 界面硬编码英文中文化 */
   uiLocalize: boolean
   /** 5 思考块模式：思考完自动收起 / 保持展开（上游语义） */
@@ -37,7 +35,6 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   widthSlider: true,
   chinesePrompt: true,
   thinkRender: true,
-  thinkMarkdown: true,
   uiLocalize: true,
   thinkMode: 'auto-collapse',
   dialogResize: true,
@@ -55,7 +52,6 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     widthSlider: o.widthSlider !== false,
     chinesePrompt: o.chinesePrompt !== false,
     thinkRender: o.thinkRender !== false,
-    thinkMarkdown: o.thinkMarkdown !== false,
     uiLocalize: o.uiLocalize !== false,
     thinkMode: o.thinkMode === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse',
     dialogResize: o.dialogResize !== false,

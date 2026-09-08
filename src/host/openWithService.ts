@@ -180,8 +180,10 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
       // VS Code CLI 必须带目录参数才会打开该目录（只设 cwd 只会开空窗口或
-      // 上次窗口）；目录作为独立 argv 元素交给 libuv 自动引号。
-      return { argv: [exe, cwd], useSpawnCwd: true }
+      // 上次窗口）；--new-window 保证窗口真正弹到前台——只传目录时，若已有
+      // 实例在运行，VS Code 只把请求转给后台窗口，用户看不到任何反应。
+      // 目录作为独立 argv 元素交给 libuv 自动引号。
+      return { argv: [exe, '--new-window', cwd], useSpawnCwd: true }
     }
     case 'cmd': {
       const cmdPath = windir + '\\System32\\cmd.exe'

@@ -204,11 +204,16 @@ async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
  * 启动：start 创建的是一个不受父进程隐藏标志约束的独立进程，窗口正常显示。
  * 空标题 "" 必须保留，否则 start 会把第一个带引号的参数当窗口标题。
  */
-async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Promise<{ argv: string[]; useSpawnCwd: boolean }> {
+async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Promise<string[]> {
   const windir = process.env.windir ?? 'C:\\Windows'
   const cmdExe = windir + '\\System32\\cmd.exe'
   /** 经 cmd start 启动，使目标进程脱离 DSH 子进程的 windowsHide 约束。 */
   const viaStart = (program: string, args: string[]): string[] => {
+    // 启动前预检：程序不存在时 start 会弹出（被 windowsHide 隐掉的）错误对话框
+    // 并阻塞不退出，调用方 await done 会永久挂起。宁可在进入 cmd 前就失败。
+    if (program !== 'explorer.exe' && !existsSync(program)) {
+      throw new Error('program not found: ' + program)
+    }
     assertCmdSafe([program, ...args])
     return [cmdExe, '/c', 'start', '', program, ...args]
   }
@@ -217,30 +222,35 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
       const exe = await resolveCodeExecutable(ctx)
       // VS Code CLI 必须带绝对路径才会打开目标文件夹（相对路径在「转接给
       // 已有实例」时会按对方工作目录解析）；--new-window 保证窗口弹到前台。
-      return { argv: viaStart(exe, ['--new-window', cwd]), useSpawnCwd: true }
+      return viaStart(exe, ['--new-window', cwd])
     }
     case 'cmd': {
-      // title 参数用无空格单词，避免经引号包裹后 cmd 解析歧义。
-      return { argv: viaStart(cmdExe, ['/K', 'title width-slider-cmd']), useSpawnCwd: true }
+      // title 值含空格（libuv 会引号包裹），cmd 只把它当窗口标题。
+      return viaStart(cmdExe, ['/K', 'title width-slider-cmd'])
     }
     case 'powershell': {
-      const psPath = windir + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-      return { argv: viaStart(psPath, ['-NoExit']), useSpawnCwd: true }
+      return viaStart(resolvePresetPath('powershell'), ['-NoExit'])
     }
     case 'explorer': {
       // explorer.exe 无参数默认打开"快速访问"，必须显式传目录；`.` 由进程
-      // 工作目录解析，因此 useSpawnCwd 必须为 true。
-      return { argv: viaStart(resolvePresetPath('explorer'), ['.']), useSpawnCwd: true }
+      // 工作目录（spawn cwd）解析。
+      return viaStart(resolvePresetPath('explorer'), ['.'])
     }
     default:
       throw new Error('unknown launch target: ' + String(target))
   }
 }
 
+/** start 成功时 cmd 实测 0.1–0.5s 内退出；超过此时间视为已把请求转交出去。 */
+const START_SETTLE_MS = 2_000
+
 /**
  * 经 cmd start 启动并等待 cmd 退出（start 立即返回，不等目标进程）。
- * 返回 cmd 的退出码与 stderr：目标程序不存在/无法启动时 cmd 以非零码退出，
- * 调用方据此报错——只 spawn 的话 `cmd.exe` 必然存在，错误会被静默吞掉。
+ *
+ * 返回 cmd 的退出码与 stderr：目标程序无法启动时 cmd 会弹错误对话框（被
+ * windowsHide 隐掉）并**阻塞不退出**，此时 handle.done 永不 settle，直接
+ * await 会让 launch RPC 永久挂起。因此用超时兜底：超时即认为请求已转交，
+ * 按成功返回（此时 done 未 settle、collector 未封口，不读 stderr）。
  */
 async function spawnViaStart(
   sp: NonNullable<OpenWithCtx['subprocess']>,
@@ -253,10 +263,13 @@ async function spawnViaStart(
     stdio: { stdin: 'ignore', stdout: { maxBytes: 64 * 1024 }, stderr: { maxBytes: 64 * 1024 } },
     graceMs: 5e3,
   }) as SpawnHandle
-  const outcome = (await handle.done) as { exitCode?: number | null } | null
-  const exitCode = outcome !== null && outcome !== undefined && typeof outcome.exitCode === 'number' ? outcome.exitCode : null
-  const stderr = handle.collected?.stderr?.readFrom(0)?.text ?? ''
-  return { pid: handle.pid, exitCode, stderr }
+  const outcome = (await Promise.race([
+    Promise.resolve(handle.done),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), START_SETTLE_MS)),
+  ])) as { exitCode?: number | null } | null
+  if (outcome === null) return { pid: handle.pid, exitCode: null, stderr: '' }
+  const exitCode = typeof outcome.exitCode === 'number' ? outcome.exitCode : null
+  return { pid: handle.pid, exitCode, stderr: handle.collected?.stderr?.readFrom(0)?.text ?? '' }
 }
 
 // ── 图标提取（PowerShell System.Drawing）────────────────────────────
@@ -464,9 +477,9 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
   const windir = process.env.windir ?? 'C:\\Windows'
   const cmdExe = windir + '\\System32\\cmd.exe'
   try {
-    let spec: { argv: string[]; useSpawnCwd: boolean }
+    let argv: string[]
     if (isPreset) {
-      spec = await buildSpawnSpec(ctx, targetStr, cwd)
+      argv = await buildSpawnSpec(ctx, targetStr, cwd)
     } else {
       // 自定义项：从设置文件取 id → path（preset=false 且带 path）。
       const settings = readSettingsFile()
@@ -479,16 +492,15 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
       // 自定义项同样经 cmd start 启动：直接 spawn 的 GUI 程序窗口不显示
       // （subprocess 服务的 windowsHide 约束）。路径已由 isValidLaunchPath
       // 拒绝 cmd 元字符，并以独立 argv 元素传递（libuv 按需引号）。
-      assertCmdSafe([item.path])
-      spec = { argv: [cmdExe, '/c', 'start', '', item.path], useSpawnCwd: true }
+      argv = [cmdExe, '/c', 'start', '', item.path]
     }
-    const result = await spawnViaStart(sp, spec.argv, spec.useSpawnCwd ? cwd : process.cwd())
+    const result = await spawnViaStart(sp, argv, cwd)
     if (result.exitCode !== null && result.exitCode !== 0) {
       const detail = result.stderr.trim()
       ctx.logger?.error?.('launch target failed', { target: targetStr, exitCode: result.exitCode, stderr: detail })
       return fail('launch-failed', 'start exited with code ' + result.exitCode + (detail !== '' ? ': ' + detail : ''))
     }
-    ctx.logger?.info?.('spawned', { target: targetStr, argv: spec.argv, pid: result.pid })
+    ctx.logger?.info?.('spawned', { target: targetStr, argv, pid: result.pid })
     return ok({ launched: true, target: targetStr, pid: result.pid })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

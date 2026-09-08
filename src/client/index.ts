@@ -127,6 +127,8 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
  * 从 config store + 会话账本派生引擎状态；空白会话决定新建对话入场是否播放。
  * @param ctx - client 上下文（读会话账本的 current/blank）。
  */
+let ledgerWarned = false
+
 function motionStateOf(ctx: RpcClientContext): MotionEngineState {
   const settings = getSettings()
   // 会话账本读取失败不应让动效整块失效：退化为"非空白会话"（不播放新建
@@ -140,7 +142,11 @@ function motionStateOf(ctx: RpcClientContext): MotionEngineState {
     }).sessions.list.getSnapshot()
     blank = snapshot.current !== undefined && snapshot.byId[snapshot.current]?.blank === true
   } catch (err) {
-    console.warn('[width-slider] motion: session ledger unavailable', err)
+    // getState 会被频繁调用；账本持续不可用时只提示一次。
+    if (!ledgerWarned) {
+      ledgerWarned = true
+      console.warn('[width-slider] motion: session ledger unavailable', err)
+    }
   }
   return {
     transcript: settings.motionEnabled,
@@ -390,20 +396,33 @@ export function apply(ctx: RpcClientContext): void {
       }
     }
 
+    /**
+     * 单个功能安装/卸载失败只影响它自己：异常若逃出 effect setup，cordis 会
+     * 丢弃整条 cleanup 链，已安装的其它功能将无法卸载，还可能让插件整体
+     * 被判为加载失败。
+     */
+    const ensureSafe = (slot: Slot, want: boolean, installer: () => Disposer): void => {
+      try {
+        ensure(slot, want, installer)
+      } catch (err) {
+        console.warn('[width-slider] feature lifecycle failed: ' + slot, err)
+      }
+    }
+
     const sync = (): void => {
       const s = getSettings()
-      ensure('handle', s.widthSlider, () => installWidthFeature())
-      ensure('think', s.thinkRender, () => installThinkRenderer(ctx))
-      ensure('localize', s.uiLocalize, () => installLocalize())
-      ensure('resize', s.dialogResize, () => installDialogResizePatch())
-      ensure('nav', s.navScroll, () => installNavScrollPatch())
-      ensure('owButton', s.openWithButton, () => installOpenWithButton(ctx))
-      ensure('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
+      ensureSafe('handle', s.widthSlider, () => installWidthFeature())
+      ensureSafe('think', s.thinkRender, () => installThinkRenderer(ctx))
+      ensureSafe('localize', s.uiLocalize, () => installLocalize())
+      ensureSafe('resize', s.dialogResize, () => installDialogResizePatch())
+      ensureSafe('nav', s.navScroll, () => installNavScrollPatch())
+      ensureSafe('owButton', s.openWithButton, () => installOpenWithButton(ctx))
+      ensureSafe('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
       // 工作区分页：组件常驻（启动即包裹一次），开关只切换 wrapper 内 enabled
       // 状态（显示标签/过滤），不再反复安装/卸载组件——开关即时生效。
-      ensure('wsTabs', true, () => installWorkspaceTabs(ctx as never))
+      ensureSafe('wsTabs', true, () => installWorkspaceTabs(ctx as never))
       // 动效：任一开关开启即安装引擎（引擎内部再按各开关分别门控）。
-      ensure('motion', s.motionEnabled || s.sidebarMotionEnabled || s.newChatMotionEnabled || s.settingsMotionEnabled,
+      ensureSafe('motion', s.motionEnabled || s.sidebarMotionEnabled || s.newChatMotionEnabled || s.settingsMotionEnabled,
         () => installMotionFeature(ctx))
     }
 

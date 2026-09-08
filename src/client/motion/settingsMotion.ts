@@ -288,8 +288,11 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     if (innerLayerOpen(dialog)) return
     event.preventDefault()
     event.stopImmediatePropagation()
+    // 快照遮罩元素：退出动画期间引擎可能被卸载（detach 会把 mask 置空），
+    // 关闭动作仍要落到用户点的那一层上。
+    const maskEl = mask
     closeWithAnimation(() => {
-      if (onMask) mask?.click()
+      if (onMask) maskEl?.click()
       else button?.click()
     })
   }

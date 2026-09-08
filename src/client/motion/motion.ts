@@ -380,6 +380,10 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
     pending = []
   }
 
+  /** 新建对话入场的一次性观察器/帧回调，dispose 时一并收口。 */
+  let composerObserver: MutationObserver | null = null
+  let composerRafId = 0
+
   const observer = new MutationObserver((mutations) => {
     const byParent = new Map<Element, HTMLElement[]>()
     const removedByParent = new Set<Element>()
@@ -534,18 +538,22 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
     // lands in the same microtask as the host's commit (after React's render,
     // before paint), so the content never paints at rest before the entrance
     // starts.
-    const observer = new MutationObserver(() => {
-      observer.disconnect()
+    const composerWatch = new MutationObserver(() => {
+      composerWatch.disconnect()
+      composerObserver = null
       const latest = options.getState()
       if (!latest.blank || !latest.newChat) return
       apply()
     })
-    observer.observe(composer, { childList: true, subtree: true })
+    composerObserver = composerWatch
+    composerWatch.observe(composer, { childList: true, subtree: true })
     // Fallback: the welcome dialog may already be rendered (signal arrived
     // after the commit). Gate on a fresh blank read — by next frame the session
     // ledger is settled, and ordinary switches are skipped.
-    requestAnimationFrame(() => {
-      observer.disconnect()
+    composerRafId = requestAnimationFrame(() => {
+      composerRafId = 0
+      composerWatch.disconnect()
+      composerObserver = null
       const latest = options.getState()
       if (latest.blank && latest.newChat) apply()
     })
@@ -555,6 +563,12 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
     dispose: () => {
       disposed = true
       observer.disconnect()
+      composerObserver?.disconnect()
+      composerObserver = null
+      if (composerRafId !== 0) {
+        cancelAnimationFrame(composerRafId)
+        composerRafId = 0
+      }
       unsubscribe()
       window.clearTimeout(switchTimer)
       window.clearTimeout(bootTimer)

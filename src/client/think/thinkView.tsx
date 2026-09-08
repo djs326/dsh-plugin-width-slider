@@ -117,7 +117,7 @@ function resolvePrimitives(): Primitives | null {
 // 「如何解析 <think> 标签」）保持原样——官方渲染器不做任何剥离，越少改写越好。
 const CONTROL_TAG_LINE_RE = /^[ \t]*<\s*\/?\s*(?:think|review|answer)\s*>[ \t]*\r?\n?/gim
 
-function stripControlTags(text: string): string {
+export function stripControlTags(text: string): string {
   if (typeof text !== 'string' || text === '') return text
   return text.replace(CONTROL_TAG_LINE_RE, '')
 }
@@ -194,12 +194,12 @@ export interface ThinkBlockProps {
 }
 
 /** 首行 / 末行摘要（与官方 ReasoningRow 的 firstLine / latestLine 同义）。 */
-function firstLine(text: string): string {
+export function firstLine(text: string): string {
   const nl = text.indexOf('\n')
   return nl === -1 ? text : text.slice(0, nl)
 }
 
-function latestLine(text: string): string {
+export function latestLine(text: string): string {
   const visible = text.trimEnd()
   const nl = visible.lastIndexOf('\n')
   return nl === -1 ? visible : visible.slice(nl + 1)

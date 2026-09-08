@@ -87,14 +87,14 @@ function isValidOpenWithSettings(raw: unknown): raw is { currentId: string; item
 const CMD_METACHAR_RE = /[&|<>^%"!\r\n\t]/
 
 /** 进入 cmd 命令行的参数安全校验；命中元字符即抛错（由 launch 的 catch 转成失败）。 */
-function assertCmdSafe(values: string[]): void {
+export function assertCmdSafe(values: string[]): void {
   for (const value of values) {
     if (CMD_METACHAR_RE.test(value)) throw new Error('unsafe characters for cmd in argument: ' + value)
   }
 }
 
 /** 自定义启动项路径校验：本地绝对路径、.exe/.com、存在、非 UNC、无 cmd 元字符。 */
-function isValidLaunchPath(p: string): boolean {
+export function isValidLaunchPath(p: string): boolean {
   if (typeof p !== 'string' || p.length === 0 || p.length > 1024) return false
   if (!isAbsolute(p)) return false
   if (p.startsWith('\\')) return false // 拒绝 UNC（NTLM/SMB 出站面）
@@ -204,7 +204,7 @@ async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
  * 启动：start 创建的是一个不受父进程隐藏标志约束的独立进程，窗口正常显示。
  * 空标题 "" 必须保留，否则 start 会把第一个带引号的参数当窗口标题。
  */
-async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Promise<string[]> {
+export async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Promise<string[]> {
   const windir = process.env.windir ?? 'C:\\Windows'
   const cmdExe = windir + '\\System32\\cmd.exe'
   /** 经 cmd start 启动，使目标进程脱离 DSH 子进程的 windowsHide 约束。 */

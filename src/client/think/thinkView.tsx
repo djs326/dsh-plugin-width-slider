@@ -10,22 +10,24 @@
  *    DisclosureRow + IconThinkOutline14，正文纯文本；样式逐条对齐官方
  *    ReasoningRow.module.css（折叠高度、扫描动画、字号变量、summary 跟随）。
  *    官方类名是 CSS 模块 hash、无法跨包复用，故用同名自有类 + 相同声明复刻；
- * 5. 正式回复 text 块走官方 primitives 的 MarkdownText（官方 DOM 结构），
- *    本插件不自带 Markdown 渲染、不接管围栏渲染——围栏交给
- *    genui / dsh-mermaid-render 等专门插件；组件缺失时降级纯文本。
+ * 5. 正式回复 text 块走官方 primitives 的 MarkdownText（官方 DOM 结构，
+ *    含 labels / fileMentions 透传），本插件不自带 Markdown 渲染、不接管
+ *    围栏渲染——围栏交给 genui / dsh-mermaid-render 等专门插件；组件缺失时
+ *    降级纯文本。
  *
  * 渲染契约：替换官方 conversation.chat.node 的 assistant-step 渲染器，只为
  * 思考块提供展开/收起交互；image 块相邻分组复用宿主 renderMessageImages；
  * tool-call 块由独立节点渲染（返回 null）。
  */
 
-import { memo, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
-import { pickText } from '../lang.ts'
+import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { isZhInterface, pickText } from '../lang.ts'
 
-// ── 样式（取值对齐官方 ReasoningRow.module.css，随激活注入）──────────
+// ── 样式（取值对齐官方 ReasoningRow / AssistantMarkdown 的 CSS 模块）──
 export const THINK_STYLES = `
 .dsh-ws-assistant{display:flex;flex-direction:column;color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}
 .dsh-ws-assistant-body{display:flex;flex-direction:column;gap:16px}
+.dsh-ws-assistant-body .md-table-wide{--dsh-table-spare:max(0px,calc((100cqw - var(--dsh-chat-content-width)) / 2));--dsh-table-lead:calc(var(--dsh-table-spare) + min(var(--dsh-chat-content-width),100cqw) - 100%);box-sizing:border-box;width:calc(100% + var(--dsh-table-lead) + var(--dsh-table-spare));max-width:none;margin-left:calc(-1 * var(--dsh-table-lead));padding-left:var(--dsh-table-lead)}
 .dsh-ws-think{display:flex;flex-direction:column}
 .dsh-ws-think:not([data-expanded]){contain:size layout;height:calc(24px + var(--dsh-content-font-delta,0px))}
 .dsh-ws-think-row{position:relative;overflow:hidden}
@@ -42,6 +44,7 @@ export const THINK_STYLES = `
 .dsh-ws-think-summary[data-follow-end] .dsh-ws-think-summary-text{text-align:start;text-overflow:clip;flex:none;width:max-content;min-width:100%;overflow:visible}
 .dsh-ws-think-body{padding:4px 0 4px calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;word-break:break-word}
 .dsh-ws-plain{white-space:pre-wrap;word-break:break-word}
+.dsh-ws-unknown{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--dsw-font-markdown-code-block,monospace);font-size:var(--dsh-content-font-size-secondary,13px)}
 .dsh-ws-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .dsh-ws-stopped{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);border-radius:6px;align-self:flex-start;padding:0 6px;font-size:11px;line-height:18px}
 `
@@ -108,38 +111,40 @@ function resolvePrimitives(): Primitives | null {
   return resolvedPrimitives
 }
 
-/**
- * Markdown 组件文案。必须模块级常量（引用稳定）：官方 MarkdownText 用
- * labels 引用判断流式渲染缓存是否失效，每次渲染新建对象会让流式重排。
- * 官方 renderCode 无条件读取 labels.code.copyLabel，不传 labels 会在含
- * 代码块/脚注的回复上抛错。
- */
-const MD_LABELS: MarkdownLabels = {
-  code: { copyLabel: pickText('复制', 'Copy'), copiedLabel: pickText('已复制', 'Copied') },
-  footnotes: pickText('脚注', 'Footnotes'),
-}
-
 // ── 模型控制标签剥离 ─────────────────────────────────────────────────
-// 模型输出里会出现 xml 风格控制/分段标签（<review>/<think>/<answer> 等），
-// 不属于正文，渲染前剥离标签本身、保留内部内容（不丢内容）。
-const CONTROL_TAG_RE = /<\s*\/?\s*(?:think|review|answer)\s*>/gi
+// 模型输出里会出现 xml 风格控制/分段标签（<review>/<think>/<answer> 等）独占
+// 一行的分段标记。只剥离「独占一行」的标签，正文/代码里提到的字面量（例如
+// 「如何解析 <think> 标签」）保持原样——官方渲染器不做任何剥离，越少改写越好。
+const CONTROL_TAG_LINE_RE = /^[ \t]*<\s*\/?\s*(?:think|review|answer)\s*>[ \t]*\r?\n?/gim
 
 function stripControlTags(text: string): string {
   if (typeof text !== 'string' || text === '') return text
-  return text.replace(CONTROL_TAG_RE, '')
+  return text.replace(CONTROL_TAG_LINE_RE, '')
 }
 
 // ── 文本渲染（官方 MarkdownText；缺失时降级纯文本）────────────────────
 // memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
-// MarkdownText 重解析，减少每帧全量工作。
+// MarkdownText 重解析，减少每帧全量工作。zh / fileMentions 参与比较：
+// 界面语言切换与文件提及解析变化都必须触发重渲染。
 const TextRenderer = memo(function TextRenderer({
   text,
   streaming = false,
-}: { text: string; streaming?: boolean }) {
+  zh,
+  fileMentions,
+}: { text: string; streaming?: boolean; zh: boolean; fileMentions?: unknown }) {
   const cleanText = stripControlTags(text)
+  // labels 必须引用稳定（官方以引用判断流式渲染缓存是否失效），且随界面语言
+  // 重建：DSH 切换语言只改 document.lang，模块级常量不会更新。
+  const labels = useMemo<MarkdownLabels>(
+    () => ({
+      code: { copyLabel: zh ? '复制' : 'Copy', copiedLabel: zh ? '已复制' : 'Copied' },
+      footnotes: zh ? '脚注' : 'Footnotes',
+    }),
+    [zh],
+  )
   const MarkdownText = resolvePrimitives()?.MarkdownText
   if (MarkdownText !== undefined) {
-    return <MarkdownText text={cleanText} streaming={streaming} labels={MD_LABELS} />
+    return <MarkdownText text={cleanText} streaming={streaming} labels={labels} fileMentions={fileMentions} />
   }
   return <div className="dsh-ws-plain">{cleanText}</div>
 })
@@ -253,12 +258,14 @@ function imageGroupEnd(blocks: unknown[], i: number): number {
   return end
 }
 
-/** 渲染单个 block；不认识的块（tool-call 等）返回 null（由独立节点渲染）。 */
+/** 渲染单个 block；tool-call 返回 null（由独立节点渲染）。 */
 function renderBlock(
   blocks: unknown[],
   i: number,
   streaming: boolean,
   last: number,
+  zh: boolean,
+  fileMentions?: unknown,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
 ): ReactNode {
@@ -268,7 +275,15 @@ function renderBlock(
     // 与官方不同（有意）：官方所有 text 块都传 streaming=true；这里只把流式
     // 尾块标记为 streaming，已定稿的块走 settled 渲染，避免历史消息反复
     // 重建流式渲染器。改动此处前请先确认流式观感。
-    return <TextRenderer key={'t' + i} text={block.text} streaming={streaming && i === last} />
+    return (
+      <TextRenderer
+        key={'t' + i}
+        text={block.text}
+        streaming={streaming && i === last}
+        zh={zh}
+        fileMentions={fileMentions}
+      />
+    )
   }
   if (block.kind === 'reasoning' && typeof block.text === 'string') {
     return (
@@ -285,13 +300,21 @@ function renderBlock(
     const images = (blocks.slice(i, end + 1) as ImageBlock[]).map((b) => ({ attachment: b.attachment }))
     return <div key={'img' + i}>{renderMessageImages({ images, align: 'start' })}</div>
   }
-  return null
+  if (block.kind === 'tool-call') return null
+  // 未知块：官方渲染 JsonBlock，这里降级为 JSON 文本，避免静默吞掉内容。
+  try {
+    return <pre key={'u' + i} className="dsh-ws-unknown">{JSON.stringify(block, null, 2)}</pre>
+  } catch {
+    return null
+  }
 }
 
 /** 渲染 blocks 全列表：返回元素数组；图片组只渲染一次（消费整组）。 */
 function renderBlocks(
   blocks: unknown[],
   streaming: boolean,
+  zh: boolean,
+  fileMentions?: unknown,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
 ): ReactNode[] {
@@ -300,7 +323,7 @@ function renderBlocks(
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i] as { kind?: string } | null | undefined
     if (!block) continue
-    const el = renderBlock(blocks, i, streaming, last, renderMessageImages, collapseAfterRun)
+    const el = renderBlock(blocks, i, streaming, last, zh, fileMentions, renderMessageImages, collapseAfterRun)
     if (el === null || el === undefined) continue
     if (block.kind === 'image') i = imageGroupEnd(blocks, i)
     rendered.push(el)
@@ -312,11 +335,18 @@ function renderBlocks(
 export interface AssistantStepViewProps {
   node?: { data?: { status?: string; blocks?: unknown[] } } | null
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode
+  /** 官方 slot 注入的文件提及解析器（内联代码里的文件路径变可点击链接）。 */
+  fileMentions?: unknown
   /** true=思考完自动收起（默认）；false=始终展开（上游语义）。 */
   collapseAfterRun?: boolean
 }
 
-export function AssistantStepView({ node, renderMessageImages, collapseAfterRun = true }: AssistantStepViewProps) {
+export function AssistantStepView({
+  node,
+  renderMessageImages,
+  fileMentions,
+  collapseAfterRun = true,
+}: AssistantStepViewProps) {
   const data = node && node.data ? node.data : null
   if (!data || !Array.isArray(data.blocks)) return null
   const streaming = data.status === 'running'
@@ -327,7 +357,7 @@ export function AssistantStepView({ node, renderMessageImages, collapseAfterRun 
   const blocks = data.blocks as Array<{ kind?: string } | null | undefined>
   const hasContent = blocks.some((b) => b !== null && b !== undefined && b.kind !== 'tool-call')
   if (!(streaming || interrupted === true || hasContent)) return null
-  const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun)
+  const rendered = renderBlocks(data.blocks, streaming, isZhInterface(), fileMentions, renderMessageImages, collapseAfterRun)
   if (interrupted) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)
   }

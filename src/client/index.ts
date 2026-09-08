@@ -100,10 +100,11 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
         priority: -1,
         registrant: 'dsh-plugin-width-slider',
       },
-      (props: { node?: unknown; renderMessageImages?: unknown }) =>
+      (props: { node?: unknown; renderMessageImages?: unknown; fileMentions?: unknown }) =>
         createElement(AssistantStepView, {
           node: props.node as never,
           renderMessageImages: props.renderMessageImages as never,
+          fileMentions: props.fileMentions as never,
           collapseAfterRun: getSettings().thinkMode === 'auto-collapse',
         }),
     ),

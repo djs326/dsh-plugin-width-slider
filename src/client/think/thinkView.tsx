@@ -137,7 +137,10 @@ export function stripControlTags(text: string): string {
  * assistant-step slot entry 崩溃（曾因透传错误的 fileMentions 导致整条消息
  * 连思考块一起消失）。
  */
-class BlockErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+class BlockErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode; resetKey: string },
+  { failed: boolean }
+> {
   state = { failed: false }
 
   static getDerivedStateFromError(): { failed: boolean } {
@@ -146,6 +149,11 @@ class BlockErrorBoundary extends Component<{ fallback: ReactNode; children: Reac
 
   componentDidCatch(error: unknown): void {
     console.warn('[width-slider] 文本渲染失败，已降级为纯文本', error)
+  }
+
+  componentDidUpdate(prev: { resetKey: string }): void {
+    // 内容变了就重试一次：否则流式后续内容会一直停在纯文本降级态。
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false })
   }
 
   render(): ReactNode {
@@ -171,7 +179,7 @@ const TextRenderer = memo(function TextRenderer({
   const MarkdownText = resolvePrimitives()?.MarkdownText
   if (MarkdownText !== undefined) {
     return (
-      <BlockErrorBoundary fallback={<div className="dsh-ws-plain">{cleanText}</div>}>
+      <BlockErrorBoundary resetKey={cleanText} fallback={<div className="dsh-ws-plain">{cleanText}</div>}>
         <MarkdownText text={cleanText} streaming={streaming} labels={labels} />
       </BlockErrorBoundary>
     )
@@ -247,7 +255,12 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
         open={open}
         expandable
         expandOnRowClick
-        onToggle={() => setExpanded((v) => !v)}
+        onToggle={() => {
+          // 生成中 open 恒为 true（running 优先），此时切换只会污染 expanded
+          // 状态、并与「结束自动收起」竞态，故忽略点击。
+          if (running) return
+          setExpanded((v) => !v)
+        }}
         collapsedContent={
           <>
             <span className="dsh-ws-think-separator" aria-hidden="true" />
@@ -324,9 +337,11 @@ function renderBlock(
     return <div key={'img' + i}>{renderMessageImages({ images, align: 'start' })}</div>
   }
   if (block.kind === 'tool-call') return null
-  // 未知块：官方渲染 JsonBlock，这里降级为 JSON 文本，避免静默吞掉内容。
+  // 未知块：官方渲染 JsonBlock（payload = block.block），这里降级为 JSON 文本，
+  // 避免静默吞掉内容；同样只打印内容字段，不带 kind 等元字段。
   try {
-    return <pre key={'u' + i} className="dsh-ws-unknown">{JSON.stringify(block, null, 2)}</pre>
+    const payload = (block as { block?: unknown }).block ?? block
+    return <pre key={'u' + i} className="dsh-ws-unknown">{JSON.stringify(payload, null, 2)}</pre>
   } catch {
     return null
   }

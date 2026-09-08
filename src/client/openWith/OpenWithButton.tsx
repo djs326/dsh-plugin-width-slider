@@ -291,8 +291,10 @@ export function OpenWithButton({
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
         <PngIcon src={currentItem?.icon ?? ''} size={14} />
+        {/* 文案保持短标签不变（失败文案较长会把胶囊撑宽），失败时变红 +
+            title 提示（见上方 title 计算）。 */}
         <span style={{ whiteSpace: 'nowrap', color: launchFailed ? 'var(--dsw-alias-state-error-primary)' : 'inherit' }}>
-          {launchFailed ? t('owLaunchFailed') : label}
+          {label}
         </span>
       </button>
       <span aria-hidden="true" style={{ width: '1px', height: '100%', background: borderVar, flex: '0 0 auto' }} />

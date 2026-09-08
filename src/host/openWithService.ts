@@ -82,9 +82,11 @@ function isValidOpenWithSettings(raw: unknown): raw is { currentId: string; item
 /**
  * cmd 元字符：出现在未经引号包裹的命令行参数里会被 cmd.exe 解释
  * （libuv 只在参数含空格时加引号，`C:\a&b\proj` 这类路径会被截断并执行）。
- * 括号不在列表内：`C:\Program Files (x86)\…` 含空格必然被引号包裹，放行。
+ * 故意不放行的字符：`& | < > %"` 与控制字符。放行的字符：括号与空格
+ * （`C:\Program Files (x86)\…` 含空格必然被引号包裹）、`^`（引号内为字面量）、
+ * `!`（cmd /c 默认不启用 delayed expansion）——否则大量合法路径会被误封。
  */
-const CMD_METACHAR_RE = /[&|<>^%"!\r\n\t]/
+const CMD_METACHAR_RE = /[&|<>%"\r\n\t]/
 
 /** 进入 cmd 命令行的参数安全校验；命中元字符即抛错（由 launch 的 catch 转成失败）。 */
 export function assertCmdSafe(values: string[]): void {
@@ -242,34 +244,51 @@ export async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: stri
 }
 
 /** start 成功时 cmd 实测 0.1–0.5s 内退出；超过此时间视为已把请求转交出去。 */
-const START_SETTLE_MS = 2_000
+/**
+ * cmd 等待上限：成功路径实测 0.15–0.5s；目标无法启动时 cmd 会挂在被
+ * windowsHide 隐掉的错误对话框上，实测 1.1–3.1s 且上不封顶。取 8s 既不会
+ * 误判慢机器上的成功启动，也能在合理时间内给出失败结论。
+ */
+const START_SETTLE_MS = 8_000
 
 /**
  * 经 cmd start 启动并等待 cmd 退出（start 立即返回，不等目标进程）。
  *
- * 返回 cmd 的退出码与 stderr：目标程序无法启动时 cmd 会弹错误对话框（被
- * windowsHide 隐掉）并**阻塞不退出**，此时 handle.done 永不 settle，直接
- * await 会让 launch RPC 永久挂起。因此用超时兜底：超时即认为请求已转交，
- * 按成功返回（此时 done 未 settle、collector 未封口，不读 stderr）。
+ * 目标无法启动时 cmd 弹错误对话框（被 windowsHide 隐掉）并阻塞不退出，
+ * handle.done 永不 settle，直接 await 会让 launch RPC 永久挂起。因此用超时
+ * 兜底：超时按**失败**上报并主动 terminate（否则每次失败都留下一个挂起的
+ * cmd 进程与句柄）。成功路径的 exitCode 为 0，失败为非零。
  */
-async function spawnViaStart(
+export async function spawnViaStart(
   sp: NonNullable<OpenWithCtx['subprocess']>,
   argv: string[],
   cwd: string,
-): Promise<{ pid: unknown; exitCode: number | null; stderr: string }> {
+  settleMs: number = START_SETTLE_MS,
+): Promise<{ pid: unknown; exitCode: number | null; stderr: string; timedOut: boolean }> {
   const handle = sp.spawn({
     argv,
     cwd,
     stdio: { stdin: 'ignore', stdout: { maxBytes: 64 * 1024 }, stderr: { maxBytes: 64 * 1024 } },
     graceMs: 5e3,
   }) as SpawnHandle
-  const outcome = (await Promise.race([
-    Promise.resolve(handle.done),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), START_SETTLE_MS)),
-  ])) as { exitCode?: number | null } | null
-  if (outcome === null) return { pid: handle.pid, exitCode: null, stderr: '' }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), settleMs)
+  })
+  let outcome: { exitCode?: number | null } | null
+  try {
+    outcome = (await Promise.race([Promise.resolve(handle.done), timeout])) as { exitCode?: number | null } | null
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+  if (outcome === null) {
+    try {
+      ;(handle as { terminate?: () => void }).terminate?.()
+    } catch { /* 终止失败不影响上报 */ }
+    return { pid: handle.pid, exitCode: null, stderr: '', timedOut: true }
+  }
   const exitCode = typeof outcome.exitCode === 'number' ? outcome.exitCode : null
-  return { pid: handle.pid, exitCode, stderr: handle.collected?.stderr?.readFrom(0)?.text ?? '' }
+  return { pid: handle.pid, exitCode, stderr: handle.collected?.stderr?.readFrom(0)?.text ?? '', timedOut: false }
 }
 
 // ── 图标提取（PowerShell System.Drawing）────────────────────────────
@@ -495,6 +514,10 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
       argv = [cmdExe, '/c', 'start', '', item.path]
     }
     const result = await spawnViaStart(sp, argv, cwd)
+    if (result.timedOut) {
+      ctx.logger?.error?.('launch timed out', { target: targetStr, argv, settleMs: START_SETTLE_MS })
+      return fail('launch-failed', 'start did not return within ' + START_SETTLE_MS + 'ms (target likely failed to start)')
+    }
     if (result.exitCode !== null && result.exitCode !== 0) {
       const detail = result.stderr.trim()
       ctx.logger?.error?.('launch target failed', { target: targetStr, exitCode: result.exitCode, stderr: detail })

@@ -40,7 +40,7 @@
     "build": "tsdown && tsc -p tsconfig.json && node scripts/fix-dts-imports.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "tsc -p tsconfig.test.json --noEmit && vitest run"
   },
   "files": [
     "lib",

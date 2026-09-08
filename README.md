@@ -140,14 +140,14 @@ dsh-plugin-width-slider/
 ## 快速开始
 
 1. 按上述任一方式安装并重启 DSH Desktop。
-2. 打开 **设置**，在左侧导航选择 **Width Slider · 对话宽度**，进入功能总控页（本插件的全部开关与选项都在这一页）。
+2. 打开 **设置**，在左侧导航选择 **Width Slider**，进入功能总控页（本插件的全部开关与选项都在这一页）。
 3. 按需开关功能：除「跟随窗口宽度」外默认开启，改动即时生效并自动保存；页头右上角「恢复默认设置」可重置全部开关与宽度记忆。
 
 对话头部的 Open With 按钮开箱可用，默认包含 VS Code、Command Prompt、PowerShell、File Explorer 四项（按程序原名显示）。
 
 ## 配置参考
 
-所有配置位于设置面板的 **Width Slider · 对话宽度** 区块，改动即时生效、重启保留。除「跟随窗口宽度」外，各开关默认开启。
+所有配置位于设置面板的 **Width Slider** 区块，改动即时生效、重启保留。除「跟随窗口宽度」外，各开关默认开启。
 
 ### 功能开关
 
@@ -178,7 +178,7 @@ dsh-plugin-width-slider/
 | 动效 | 侧边栏样式 | 左侧滑入 / 轻柔淡入 / 纵向展开 / 自上而下 | 左侧滑入 |
 | 动效 | 新建对话样式 | 轻柔显影 / 轻柔淡入 / 柔和绽放 / 柔和缩放 | 轻柔显影 |
 | 动效 | 预设 | 流畅 / 优雅 / 极简（一次写入全部相关开关与样式） | — |
-| 通用 | 恢复默认设置 | 重置全部开关与宽度记忆并刷新页面 | — |
+| 通用 | 恢复默认设置 | 重置全部开关与宽度、设置面板尺寸记忆，并刷新页面 | — |
 
 ## 使用说明
 
@@ -281,7 +281,7 @@ dsh-plugin-width-slider/
 | [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with) | 本地修改版（上游 v1.0.0 + slot 注入修复） | v0.4.0 | 打开方式按钮与设置面板 |
 | [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom) | v0.1.0-rc.12 | v0.8.0 | 四组入场动效与三套预设 |
 
-两者同时启用时的后果：同一块界面被两个渲染器接管、出现两个按钮与两套设置，或两套动效引擎对同一批 DOM 各自动画一次导致效果叠加。
+同时启用时的后果：同一块界面被两个渲染器接管、出现两个按钮与两套设置，或两套动效引擎对同一批 DOM 各自动画一次导致效果叠加。
 
 Open With 的打开项数据存放在 `dsh-open-with` 存储目录，与官方及本地修改版共用同一文件；停用上游插件后配置无缝保留。
 
@@ -315,7 +315,8 @@ npm test           # 单元测试（含 jsdom 动效用例）
 ```
 lib/
 ├── index.mjs        # Host 端（ESM）
-└── client.js        # Client 端（CJS，含 window.__ModuleLoader__.load 握手）
+├── client.js        # Client 端（CJS，含 window.__ModuleLoader__.load 握手）
+└── types/           # 类型声明（tsc 产出）
 ```
 
 测试位于 `test/`（`openWith`、`settingsMotion`、`thinkView` 三个用例文件）；仓库内包含若干参考源码副本（`dsh-src/`、`my-dsh-plugins-main/` 等），已在 `vitest.config.ts` 中排除，不参与测试收集。
@@ -355,6 +356,8 @@ dsh-plugin-width-slider/
 │       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案
 ├── test/                            # 单元测试（含 jsdom 动效用例）
+├── scripts/fix-dts-imports.mjs      # 构建后修正 d.ts 相对导入
+├── docs/                            # DSH 相关参考文档（非本插件运行时依赖）
 ├── env.d.ts                         # 运行时模块类型桩
 ├── cordis.patch.yml                 # bundle patch：insert width-slider
 ├── tsdown.config.ts
@@ -368,7 +371,7 @@ dsh-plugin-width-slider/
 宽度偏好保存在 `localStorage`，client 启动时会立即应用；若宽度未恢复，请确认「启用对话宽度滑块」处于开启状态，且没有其它插件同时写入 `--dsh-chat-user-width`。
 
 **Q：设置里找不到本插件？**
-请确认插件已安装到 DSH 的 profile 并已重启。设置项位于 **设置 → Width Slider · 对话宽度**。
+请确认插件已安装到 DSH 的 profile 并已重启。设置项位于 **设置 → Width Slider**。
 
 **Q：和上游插件同时安装会怎样？**
 会出现两套实现争抢同一界面元素（两个按钮、两套渲染器或两套动效引擎）。请停用或卸载上游插件，见[与上游插件的关系](#与上游插件的关系)。

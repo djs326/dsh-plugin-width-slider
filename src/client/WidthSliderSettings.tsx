@@ -3,7 +3,7 @@
  *
  * 卡片分组（每个功能带独立开关，默认全开、热生效）：
  * 1. 对话宽度滑块  —— 开关 + 滑块（WidthSliderControl，关闭时隐藏并提示）
- * 2. 思考块        —— 增强渲染开关 + Markdown 渲染子开关（让位其它渲染插件）+ 显示方式（自动收起 / 始终展开）
+ * 2. 思考块        —— 增强渲染开关（外观同官方）+ 显示方式（自动收起 / 始终展开）
  * 3. 输出语言      —— 思考/回复强制中文开关（host 端 systemPrompt 注入）
  * 4. 界面          —— 英文中文化 + 弹窗调宽 + tab 滚动开关
  *
@@ -241,13 +241,6 @@ export function WidthSliderSettings({
         />
         {settings.thinkRender && (
           <>
-            <SwitchRow
-              id={id('enable-think-markdown')}
-              label={t('thinkMarkdownLabel')}
-              info={t('thinkMarkdownInfo')}
-              checked={settings.thinkMarkdown}
-              onChange={(checked) => persist({ thinkMarkdown: checked })}
-            />
             <div style={{ margin: '2px 0 6px' }}>
               <div
                 style={{

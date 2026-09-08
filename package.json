@@ -2,7 +2,7 @@
   "name": "dsh-plugin-width-slider",
   "displayName": "Width Slider · 对话宽度 / 思考增强 / 打开方式",
   "description": "DSH 个人多功能插件：对话宽度滑块 + 思考块增强（整合 dsh-think-zh-expand）+ Open With 打开方式（整合 dsh-plugin-open-with 本地修改版）+ 界面中文化 + 官方面板补丁，全部功能独立开关。Settings feature control page with width slider, thinking-block enhancements and an Open With launcher button — every feature has its own toggle.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.mjs",
@@ -33,16 +33,14 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-connection"
       ],
-      "platform": "web",
-      "external": [
-        "dsh-md-render"
-      ]
+      "platform": "web"
     }
   },
   "scripts": {
     "build": "tsdown && tsc -p tsconfig.json && node scripts/fix-dts-imports.mjs",
     "prepack": "npm run build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.test.json --noEmit && vitest run"
   },
   "files": [
     "lib",
@@ -84,10 +82,9 @@
     "@deepseek-ai/dsh-client-ui-conversation": "*",
     "@deepseek-ai/dsh-client-ui-primitives": "*",
     "@deepseek-ai/dsh-client-ui-slots": "*",
-    "react": "^18.2.0",
+    "@deepseek-ai/dsh-subprocess": "*",
     "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.1",
-    "dsh-md-render": "^0.1.1",
-    "@deepseek-ai/dsh-subprocess": "*"
+    "react": "^18.2.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -117,9 +114,6 @@
     "@deepseek-ai/dsh-system-prompt": {
       "optional": true
     },
-    "dsh-md-render": {
-      "optional": true
-    },
     "@deepseek-ai/dsh-subprocess": {
       "optional": true
     }
@@ -132,7 +126,8 @@
     "react-dom": "^18.2.0",
     "rolldown": "^1.2.6",
     "tsdown": "^0.22.14",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.0"
   },
   "author": "Lanxi",
   "repository": {

@@ -38,8 +38,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 declare module '@deepseek-ai/dsh-client-ui-primitives' {
-  // 当前未使用，但声明存在避免 tsc 报错
+  // 运行时经 __ModuleLoader__ require 取用（thinkView 的 MarkdownText /
+  // DisclosureRow / IconThinkOutline14、workspaceTabs 的 Modal），声明存在
+  // 避免 tsc 报 "Cannot find module"。
+  export const MarkdownText: $TS_FIXME
+  export const DisclosureRow: $TS_FIXME
+  export const IconThinkOutline14: $TS_FIXME
+  export const Modal: $TS_FIXME
 }
 // __ModuleLoader__ factory 注入的模块加载器（见 thinkView.tsx 运行时
-// require('dsh-md-render')；tsdown CJS 产物运行于 factory 作用域内）。
+// require('@deepseek-ai/dsh-client-ui-primitives')；tsdown CJS 产物运行于
+// factory 作用域内）。
 declare const require: (id: string) => any

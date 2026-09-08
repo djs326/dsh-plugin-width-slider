@@ -6,9 +6,10 @@
  * 1. TSX + tsdown 工程（上游为 React.createElement 手写拼接 parts）；
  * 2. 类名前缀 dsh-ws-（与上游 dsh-think-zh-expand- 互不干扰）；
  * 3. 行为默认「思考中展开、思考完自动收起」（上游为始终默认展开）；
- * 4. 思考块外观与官方一致：头部用官方 primitives 的 DisclosureRow +
- *    IconThinkOutline14，正文与官方 ReasoningRow 一样是纯文本（不渲染
- *    Markdown）；只有「生成中展开、结束自动收起」这一行为是本插件定制。
+ * 4. 思考块外观与官方 ReasoningRow 一致：头部用官方 primitives 的
+ *    DisclosureRow + IconThinkOutline14，正文纯文本；样式逐条对齐官方
+ *    ReasoningRow.module.css（折叠高度、扫描动画、字号变量、summary 跟随）。
+ *    官方类名是 CSS 模块 hash、无法跨包复用，故用同名自有类 + 相同声明复刻；
  * 5. 正式回复 text 块走官方 primitives 的 MarkdownText（官方 DOM 结构），
  *    本插件不自带 Markdown 渲染、不接管围栏渲染——围栏交给
  *    genui / dsh-mermaid-render 等专门插件；组件缺失时降级纯文本。
@@ -21,28 +22,44 @@
 import { memo, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { pickText } from '../lang.ts'
 
-// ── 思考块与 assistant 容器样式（DSH 语义 token，随激活注入）──────────
-// 头部外观完全交给官方 DisclosureRow（同组件、同图标），这里只保留正文
-// 与折叠摘要两处自有样式（官方类名是 CSS 模块 hash，跨包无法复用）。
+// ── 样式（取值对齐官方 ReasoningRow.module.css，随激活注入）──────────
 export const THINK_STYLES = `
-.dsh-ws-assistant{display:flex;flex-direction:column;color:var(--dsw-alias-label-primary);font-size:16px;line-height:28px}
+.dsh-ws-assistant{display:flex;flex-direction:column;color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size,14px);line-height:calc(24px + var(--dsh-content-font-delta,0px))}
 .dsh-ws-assistant-body{display:flex;flex-direction:column;gap:16px}
-.dsh-ws-think{display:flex;flex-direction:column;width:100%;min-width:0}
+.dsh-ws-think{display:flex;flex-direction:column}
+.dsh-ws-think:not([data-expanded]){contain:size layout;height:calc(24px + var(--dsh-content-font-delta,0px))}
+.dsh-ws-think-row{position:relative;overflow:hidden}
+.dsh-ws-think[data-state=running] .dsh-ws-think-row:after{content:"";inset-block:0;background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--dsw-alias-bg-base) 60%,transparent) 55%,transparent 100%);pointer-events:none;width:300px;animation:2.6s ease-out infinite dsh-ws-think-sweep;position:absolute;left:0}
+@keyframes dsh-ws-think-sweep{0%{left:-300px}90%,to{left:100%}}
+@media (prefers-reduced-motion:reduce){.dsh-ws-think[data-state=running] .dsh-ws-think-row:after{animation:none}}
+.dsh-ws-think-leading{flex-shrink:0}
+.dsh-ws-think-chevron{color:var(--dsw-alias-label-secondary)}
+.dsh-ws-think-title{font-weight:400}
 .dsh-ws-think-separator{background:var(--dsw-alias-label-caption);border-radius:1px;flex:none;width:2px;height:2px;margin:0 8px}
-.dsh-ws-think-summary{min-width:0;color:var(--dsw-alias-label-tertiary);text-overflow:ellipsis;white-space:nowrap;flex:auto;font-size:14px;line-height:24px;overflow:hidden}
-.dsh-ws-think-body{white-space:pre-wrap;word-break:break-word;padding:4px 0 4px 22px;font-size:14px;line-height:24px;color:var(--dsw-alias-label-tertiary)}
-.dsh-ws-think-body p{margin:0}
-.dsh-ws-think-body ul,.dsh-ws-think-body ol{margin:0;padding-left:1.4em}
-.dsh-ws-think-body pre,.dsh-ws-think-body blockquote,.dsh-ws-think-body h1,.dsh-ws-think-body h2,.dsh-ws-think-body h3,.dsh-ws-think-body h4{margin:0}
+.dsh-ws-think-summary{min-width:0;color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;flex:auto;overflow:hidden}
+.dsh-ws-think-summary-text{text-overflow:ellipsis;display:block;overflow:hidden}
+.dsh-ws-think-summary[data-follow-end]{justify-content:flex-end;display:flex}
+.dsh-ws-think-summary[data-follow-end] .dsh-ws-think-summary-text{text-align:start;text-overflow:clip;flex:none;width:max-content;min-width:100%;overflow:visible}
+.dsh-ws-think-body{padding:4px 0 4px calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;word-break:break-word}
 .dsh-ws-plain{white-space:pre-wrap;word-break:break-word}
+.dsh-ws-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .dsh-ws-stopped{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);border-radius:6px;align-self:flex-start;padding:0 6px;font-size:11px;line-height:18px}
 `
 
-// ── 官方 MarkdownText 运行时解析（primitive 外部模块，不静态 import）──
-// 正文与思考正文一律走官方渲染管线：产出官方 md-code-block 结构，让
-// genui / dsh-mermaid-render 等 DOM 渲染插件能正常扫描并接管围栏。
+// ── 官方 primitives 运行时解析（一次解析、一个缓存）────────────────────
 
-type MarkdownTextComponent = ComponentType<{ text: string; streaming?: boolean }>
+/** Markdown 组件文案（与官方 markdownLabels(t) 同构）。 */
+interface MarkdownLabels {
+  code: { copyLabel: string; copiedLabel: string }
+  footnotes: string
+}
+
+type MarkdownTextComponent = ComponentType<{
+  text: string
+  streaming?: boolean
+  labels?: MarkdownLabels
+  fileMentions?: unknown
+}>
 
 /** 官方 DisclosureRow（思考块头部：图标 + 标题 + chevron + 折叠内容）。 */
 type DisclosureRowComponent = ComponentType<{
@@ -51,58 +68,60 @@ type DisclosureRowComponent = ComponentType<{
   open?: boolean
   expandable?: boolean
   expandOnRowClick?: boolean
+  previewChevron?: boolean
+  keepContentWhenOpen?: boolean
   onToggle?: () => void
   collapsedContent?: ReactNode
   children?: ReactNode
+  className?: string
+  rowClassName?: string
+  leadingClassName?: string
+  chevronClassName?: string
+  titleClassName?: string
 }>
 
-/** 官方图标组件（size prop）。 */
-type IconComponent = ComponentType<{ size?: number }>
+/** 官方图标组件（size / className）。 */
+type IconComponent = ComponentType<{ size?: number; className?: string }>
 
 interface Primitives {
+  MarkdownText?: MarkdownTextComponent
   DisclosureRow?: DisclosureRowComponent
   IconThinkOutline14?: IconComponent
 }
 
 let resolvedPrimitives: Primitives | null | undefined
 
-/** 解析一次并缓存 primitives 的思考块组件；缺失/异常返回 null。 */
+/** 解析一次并缓存 primitives 相关组件；缺失/异常返回 null。 */
 function resolvePrimitives(): Primitives | null {
   if (resolvedPrimitives !== undefined) return resolvedPrimitives
   try {
+    // require 来自 __ModuleLoader__ factory 注入的模块加载器（见 env.d.ts 声明）。
     const mod = require('@deepseek-ai/dsh-client-ui-primitives') as Primitives
     resolvedPrimitives = mod ?? null
-    if (!mod?.DisclosureRow) console.warn('[width-slider] primitives 未导出 DisclosureRow，思考块降级纯文本')
+    if (!mod?.MarkdownText || !mod?.DisclosureRow) {
+      console.warn('[width-slider] primitives 缺少 MarkdownText/DisclosureRow，相关块降级纯文本')
+    }
   } catch (err) {
     resolvedPrimitives = null
-    console.warn('[width-slider] 未找到 @deepseek-ai/dsh-client-ui-primitives（思考块降级纯文本）', err)
+    console.warn('[width-slider] 未找到 @deepseek-ai/dsh-client-ui-primitives（文本与思考块降级纯文本）', err)
   }
   return resolvedPrimitives
 }
 
-let resolvedMdText: MarkdownTextComponent | null | undefined
-
-/** 解析一次并缓存 primitives.MarkdownText；缺失/异常返回 null。 */
-function resolveMarkdownText(): MarkdownTextComponent | null {
-  if (resolvedMdText !== undefined) return resolvedMdText
-  try {
-    // require 来自 __ModuleLoader__ factory 注入的模块加载器（见 env.d.ts 声明）。
-    const mod = require('@deepseek-ai/dsh-client-ui-primitives') as {
-      MarkdownText?: MarkdownTextComponent
-    }
-    const view = mod?.MarkdownText ?? null
-    resolvedMdText = view
-    if (view === null) console.warn('[width-slider] primitives 未导出 MarkdownText，文本降级为纯文本')
-  } catch (err) {
-    resolvedMdText = null
-    console.warn('[width-slider] 未找到 @deepseek-ai/dsh-client-ui-primitives.MarkdownText（文本降级为纯文本）', err)
-  }
-  return resolvedMdText
+/**
+ * Markdown 组件文案。必须模块级常量（引用稳定）：官方 MarkdownText 用
+ * labels 引用判断流式渲染缓存是否失效，每次渲染新建对象会让流式重排。
+ * 官方 renderCode 无条件读取 labels.code.copyLabel，不传 labels 会在含
+ * 代码块/脚注的回复上抛错。
+ */
+const MD_LABELS: MarkdownLabels = {
+  code: { copyLabel: pickText('复制', 'Copy'), copiedLabel: pickText('已复制', 'Copied') },
+  footnotes: pickText('脚注', 'Footnotes'),
 }
 
 // ── 模型控制标签剥离 ─────────────────────────────────────────────────
 // 模型输出里会出现 xml 风格控制/分段标签（<review>/<think>/<answer> 等），
-// 不属于 markdown，渲染前剥离标签本身、保留内部内容（不丢内容）。
+// 不属于正文，渲染前剥离标签本身、保留内部内容（不丢内容）。
 const CONTROL_TAG_RE = /<\s*\/?\s*(?:think|review|answer)\s*>/gi
 
 function stripControlTags(text: string): string {
@@ -110,35 +129,19 @@ function stripControlTags(text: string): string {
   return text.replace(CONTROL_TAG_RE, '')
 }
 
-/**
- * 思考通道 Markdown URL 净化：模型输出（可能受提示注入诱导）在推理里写
- * 链接/图片，只允许 http/https/锚点/相对目标；javascript: 等危险 scheme
- * 整块移除（图片）或退化为纯文本（链接）。正式回复文本不经此通道。
- */
-function sanitizeMarkdownUrls(text: string): string {
-  return text.replace(/!?\[([^\]]*)\]\(([^)]*)\)/g, (whole: string, label: string, url: string) => {
-    const u = String(url).trim()
-    const schemeMatch = u.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:/)
-    if (schemeMatch && !/^https?:$/i.test(schemeMatch[0].slice(0, -1))) {
-      return whole.startsWith('!') ? '' : String(label || '')
-    }
-    return whole
-  })
-}
-
-// ── 文本渲染（官方 MarkdownText）────────────────────────────────────
+// ── 文本渲染（官方 MarkdownText；缺失时降级纯文本）────────────────────
 // memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
 // MarkdownText 重解析，减少每帧全量工作。
 const TextRenderer = memo(function TextRenderer({
   text,
-  sanitizeUrls = false,
   streaming = false,
-}: { text: string; sanitizeUrls?: boolean; streaming?: boolean }) {
+}: { text: string; streaming?: boolean }) {
   const cleanText = stripControlTags(text)
-  const finalText = sanitizeUrls ? sanitizeMarkdownUrls(cleanText) : cleanText
-  const MarkdownText = resolveMarkdownText()
-  if (MarkdownText !== null) return <MarkdownText text={finalText} streaming={streaming} />
-  return <div className="dsh-ws-plain">{finalText}</div>
+  const MarkdownText = resolvePrimitives()?.MarkdownText
+  if (MarkdownText !== undefined) {
+    return <MarkdownText text={cleanText} streaming={streaming} labels={MD_LABELS} />
+  }
+  return <div className="dsh-ws-plain">{cleanText}</div>
 })
 
 // ── 思考块：默认「思考完收起」行为 ──────────────────────────────────
@@ -147,7 +150,7 @@ const TextRenderer = memo(function TextRenderer({
 // - 生成结束（running 变 false）自动收起为单行摘要；
 // - 非生成中可点击标题行手动展开/收起；手动展开的块不会被自动收起，
 //   直到下一次 running 结束。
-// 未来「保持展开（上游语义）」模式由 collapseAfterRun=false 提供（M2 接线）。
+// 外观（头部组件、图标、字号、缩进、摘要跟随）与官方 ReasoningRow 一致。
 export interface ThinkBlockProps {
   text: string
   running: boolean
@@ -169,7 +172,6 @@ function latestLine(text: string): string {
 
 export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBlockProps) {
   const cleanText = stripControlTags(text)
-  const finalText = sanitizeMarkdownUrls(cleanText)
   // 初始态与模式对齐：auto-collapse（默认）初始收起——历史/非生成中的
   // 思考块以折叠摘要呈现，生成中由 open=expanded||running 强制展开、结束
   // 后自动收起；keep-expanded（上游语义）初始展开、可手动收起。
@@ -184,18 +186,28 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
   }, [running, collapseAfterRun])
 
   // 摘要与官方一致：生成中跟随最后一行，结束后取第一行。
-  const summary = running ? latestLine(finalText) : firstLine(finalText)
+  const summary = running ? latestLine(cleanText) : firstLine(cleanText)
 
   const primitives = resolvePrimitives()
   const DisclosureRow = primitives?.DisclosureRow
   const ThinkIcon = primitives?.IconThinkOutline14
   // 官方组件缺失时降级：直接显示纯文本正文，不影响内容可读性。
-  if (!DisclosureRow) return <div className="dsh-ws-think-body">{finalText}</div>
+  if (DisclosureRow === undefined) return <div className="dsh-ws-think-body">{cleanText}</div>
 
   return (
-    <div className="dsh-ws-think" data-variant="think" data-state={running ? 'running' : 'ok'}>
+    <div
+      className="dsh-ws-think"
+      data-variant="think"
+      data-state={running ? 'running' : 'ok'}
+      data-expanded={open || undefined}
+    >
+      {running && <span className="dsh-ws-visually-hidden">{pickText('运行中', 'Running')}</span>}
       <DisclosureRow
-        icon={ThinkIcon ? <ThinkIcon size={14} /> : null}
+        rowClassName="dsh-ws-think-row"
+        leadingClassName="dsh-ws-think-leading"
+        titleClassName="dsh-ws-think-title"
+        chevronClassName="dsh-ws-think-chevron"
+        icon={ThinkIcon !== undefined ? <ThinkIcon size={14} /> : null}
         title={pickText('思考', 'Thinking')}
         open={open}
         expandable
@@ -204,12 +216,14 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
         collapsedContent={
           <>
             <span className="dsh-ws-think-separator" aria-hidden="true" />
-            <span className="dsh-ws-think-summary">{summary}</span>
+            <span className="dsh-ws-think-summary" data-follow-end={running || undefined}>
+              <span className="dsh-ws-think-summary-text">{summary}</span>
+            </span>
           </>
         }
       >
         {/* 正文与官方 ReasoningRow 一致：纯文本（不渲染 Markdown）。 */}
-        <div className="dsh-ws-think-body">{finalText}</div>
+        <div className="dsh-ws-think-body">{cleanText}</div>
       </DisclosureRow>
     </div>
   )
@@ -251,6 +265,9 @@ function renderBlock(
   const block = blocks[i] as { kind?: string; text?: unknown } | null | undefined
   if (!block) return null
   if (block.kind === 'text' && typeof block.text === 'string') {
+    // 与官方不同（有意）：官方所有 text 块都传 streaming=true；这里只把流式
+    // 尾块标记为 streaming，已定稿的块走 settled 渲染，避免历史消息反复
+    // 重建流式渲染器。改动此处前请先确认流式观感。
     return <TextRenderer key={'t' + i} text={block.text} streaming={streaming && i === last} />
   }
   if (block.kind === 'reasoning' && typeof block.text === 'string') {
@@ -304,6 +321,12 @@ export function AssistantStepView({ node, renderMessageImages, collapseAfterRun 
   if (!data || !Array.isArray(data.blocks)) return null
   const streaming = data.status === 'running'
   const interrupted = data.status === 'interrupted'
+  // 官方守卫（dsh-client-ui-chat AssistantMarkdown）：流式中、被中断、或含有
+  // 非 tool-call 块时才渲染；否则该节点没有可呈现的内容（工具卡片自成一行），
+  // 渲染空容器会多出 16px 间距并留下一个空的「已停止」标签。
+  const blocks = data.blocks as Array<{ kind?: string } | null | undefined>
+  const hasContent = blocks.some((b) => b !== null && b !== undefined && b.kind !== 'tool-call')
+  if (!(streaming || interrupted === true || hasContent)) return null
   const rendered = renderBlocks(data.blocks, streaming, renderMessageImages, collapseAfterRun)
   if (interrupted) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)

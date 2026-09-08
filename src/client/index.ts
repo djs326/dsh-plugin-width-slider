@@ -4,7 +4,7 @@
  * 职责（全部挂独立开关，默认开、热生效，见 config.ts FeatureSettings）：
  * 1. 对话宽度滑块设置区块 —— 总控页（WidthSliderSettings）；
  * 2. 思考块增强渲染（assistant-step 覆盖，整合自 dsh-think-zh-expand）：
- *    只为思考块提供展开/收起，文本渲染走官方 MarkdownText（不接管围栏渲染）；
+ *    只为思考块提供展开/收起（外观同官方）；正式回复走官方 MarkdownText，不接管围栏；
  * 3. 界面硬编码英文中文化；
  * 4. 隐藏官方原生宽度拖拽手柄（跟随「宽度滑块」开关联动）。
  *

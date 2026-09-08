@@ -11,7 +11,7 @@ export interface FeatureSettings {
   widthSlider: boolean
   /** 2 思考/回复强制中文（host 端 systemPrompt 注入） */
   chinesePrompt: boolean
-  /** 3 思考块增强渲染（assistant-step 覆盖；文本渲染走官方 MarkdownText） */
+  /** 3 思考块增强渲染（assistant-step 覆盖；外观同官方，仅展开/收起行为定制） */
   thinkRender: boolean
   /** 4 界面硬编码英文中文化 */
   uiLocalize: boolean

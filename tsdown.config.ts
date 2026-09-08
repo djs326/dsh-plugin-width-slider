@@ -24,7 +24,7 @@ const PLATFORM_MODULES = [
   '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
-const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES]
+const CLIENT_EXTERNALS: readonly string[] = PLATFORM_MODULES
 
 /** Host-side externals: cordis resolves at runtime from the dsh profile tree. */
 const HOST_EXTERNALS: readonly (string | RegExp)[] = [

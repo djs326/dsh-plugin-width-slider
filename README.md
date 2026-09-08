@@ -53,7 +53,7 @@
 - **宽度持久化**：宽度值写入 `localStorage` 键 `dsh.conversation.contentWidth`，重启 DSH 后保留（启动即应用）。
 - **跟随窗口宽度**：勾选后内容宽度实时等于对话列宽（窗口缩放/侧栏折叠/分栏切换均跟随，重启后同样保持）；偏好存 `dsh.conversation.contentWidthFollow`。
 - **隐藏原生手柄**：插件入口注入全局样式 `[data-width-handle]{display:none!important}`，用稳定属性选择器隐藏原生左右拖拽手柄——不像改官方 `client.js` 那样会被升级覆盖。
-- **思考块**：生成中强制展开、结束后按所选模式显示；思考内容与回复文本统一走官方 `MarkdownText` 渲染（官方 DOM 结构），代码块/表格/公式由官方管线处理，围栏渲染完全交给 genui / dsh-mermaid-render 等专门插件，不存在两套 Markdown 渲染叠加。
+- **思考块**：生成中强制展开、结束后按所选模式显示；头部用官方 `DisclosureRow`、正文纯文本（与官方 `ReasoningRow` 一致）；正式回复文本走官方 `MarkdownText` 渲染（官方 DOM 结构），代码块/表格/公式由官方管线处理，围栏渲染完全交给 genui / dsh-mermaid-render 等专门插件，不存在两套 Markdown 渲染叠加。
 - **中英双语**：内置 zh / en 两套界面文案，跟随 DSH 界面语言自动切换。
 - **滑块几何**：轨道高度 = 圆形手柄直径（面板 20px / 预览 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出；宽轨道便于鼠标点击。
 
@@ -64,10 +64,10 @@
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)），**不需要再单独安装
 它**。若之前装过，请将其移除或停用，避免两个插件同时接管同一块界面。
 
-本插件不实现自己的 Markdown 渲染，也不接管围栏渲染：正文与思考内容统一
-经官方 `MarkdownText` 渲染（官方 DOM 结构），围栏（`dsh-ui` / `mermaid` 等）
-留给 genui、dsh-mermaid-render 等专门插件扫描接管，因此不会出现两套渲染
-互相压制的冲突。
+本插件不实现自己的 Markdown 渲染，也不接管围栏渲染：正式回复文本经官方
+`MarkdownText` 渲染（官方 DOM 结构），思考块正文与官方 `ReasoningRow` 一样
+是纯文本，围栏（`dsh-ui` / `mermaid` 等）留给 genui、dsh-mermaid-render 等
+专门插件扫描接管，因此不会出现两套渲染互相压制的冲突。
 
 ## 与 dsh-plugin-open-with 的关系
 

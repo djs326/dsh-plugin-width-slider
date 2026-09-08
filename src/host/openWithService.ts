@@ -86,6 +86,13 @@ function isValidOpenWithSettings(raw: unknown): raw is { currentId: string; item
  */
 const CMD_METACHAR_RE = /[&|<>^%"!\r\n\t]/
 
+/** 进入 cmd 命令行的参数安全校验；命中元字符即抛错（由 launch 的 catch 转成失败）。 */
+function assertCmdSafe(values: string[]): void {
+  for (const value of values) {
+    if (CMD_METACHAR_RE.test(value)) throw new Error('unsafe characters for cmd in argument: ' + value)
+  }
+}
+
 /** 自定义启动项路径校验：本地绝对路径、.exe/.com、存在、非 UNC、无 cmd 元字符。 */
 function isValidLaunchPath(p: string): boolean {
   if (typeof p !== 'string' || p.length === 0 || p.length > 1024) return false
@@ -181,10 +188,11 @@ async function resolveCodeExecutable(ctx: OpenWithCtx): Promise<string> {
 // 注意：argv 一律不手工预包引号——libuv/Node 在 Windows 组装命令行时会
 // 二次转义（内部引号变 \" 再整体外包），预引号会与 cmd.exe 引号剥离规则叠加
 // 导致逃逸或失败。
-// 目录同样不经命令行承载：一律用相对路径 `.`（实际目录由 spawn 的 cwd /
-// CreateProcess lpCurrentDirectory 决定）。把用户可控的绝对路径拼进 cmd 命令行
-// 会引入注入面——libuv 只在参数含空格时加引号，`C:\a&b\proj` 会被 cmd 截断
-// 并把 `b\proj` 当命令执行（已实证）。
+// 进入 cmd 命令行的每个参数都要过 assertCmdSafe：libuv 只在参数含空格时加
+// 引号，`C:\a&b\proj` 这类路径会被 cmd 截断并把 `b\proj` 当命令执行（已实证）。
+// 目录能由 spawn 的 cwd 承载就绝不放进命令行（explorer 用 `.`）；VS Code 必须
+// 收绝对路径（它可能把请求转给已有实例，相对路径会按对方工作目录解析），故走
+// 元字符校验，含危险字符时明确报错而不是静默打开错误目录。
 
 /**
  * 预设目标的启动规格。
@@ -200,13 +208,16 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
   const windir = process.env.windir ?? 'C:\\Windows'
   const cmdExe = windir + '\\System32\\cmd.exe'
   /** 经 cmd start 启动，使目标进程脱离 DSH 子进程的 windowsHide 约束。 */
-  const viaStart = (program: string, args: string[]): string[] => [cmdExe, '/c', 'start', '', program, ...args]
+  const viaStart = (program: string, args: string[]): string[] => {
+    assertCmdSafe([program, ...args])
+    return [cmdExe, '/c', 'start', '', program, ...args]
+  }
   switch (target) {
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
-      // VS Code CLI 必须带路径参数才会打开文件夹；`.` 由进程工作目录解析。
-      // --new-window 保证窗口弹到前台（已有实例时否则只把请求转给后台窗口）。
-      return { argv: viaStart(exe, ['--new-window', '.']), useSpawnCwd: true }
+      // VS Code CLI 必须带绝对路径才会打开目标文件夹（相对路径在「转接给
+      // 已有实例」时会按对方工作目录解析）；--new-window 保证窗口弹到前台。
+      return { argv: viaStart(exe, ['--new-window', cwd]), useSpawnCwd: true }
     }
     case 'cmd': {
       // title 参数用无空格单词，避免经引号包裹后 cmd 解析歧义。
@@ -468,6 +479,7 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
       // 自定义项同样经 cmd start 启动：直接 spawn 的 GUI 程序窗口不显示
       // （subprocess 服务的 windowsHide 约束）。路径已由 isValidLaunchPath
       // 拒绝 cmd 元字符，并以独立 argv 元素传递（libuv 按需引号）。
+      assertCmdSafe([item.path])
       spec = { argv: [cmdExe, '/c', 'start', '', item.path], useSpawnCwd: true }
     }
     const result = await spawnViaStart(sp, spec.argv, spec.useSpawnCwd ? cwd : process.cwd())

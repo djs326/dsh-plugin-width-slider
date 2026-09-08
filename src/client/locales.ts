@@ -82,7 +82,7 @@ export interface WidthSliderKey {
   shortOpenWithButton: string
   owManage: string
   owCollapse: string
-  // ── v0.8.0 动效组（读写动效插件 ui-custom 命名空间）──
+  // ── v0.8.0 动效组（整合自 dsh-client-ui-custom；设置值存本插件 settings.json）──
   groupMotion: string
   motionTranscript: string
   motionSidebar: string
@@ -182,7 +182,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
   pageTitle: '宽度滑块与界面增强',
-  pageSubtitle: '11 项开关 · 改动即时生效',
+  pageSubtitle: '15 项开关 · 改动即时生效',
   groupWidthShort: '对话宽度',
   groupThinkOutput: '思考与输出',
   shortEnableWidth: '启用对话宽度滑块',
@@ -296,7 +296,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
   pageTitle: 'Width slider & interface enhancements',
-  pageSubtitle: '11 switches · changes apply instantly',
+  pageSubtitle: '15 switches · changes apply instantly',
   groupWidthShort: 'Conversation width',
   groupThinkOutput: 'Thinking & output',
   shortEnableWidth: 'Conversation width slider',

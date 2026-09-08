@@ -129,12 +129,19 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
  */
 function motionStateOf(ctx: RpcClientContext): MotionEngineState {
   const settings = getSettings()
-  const snapshot = (ctx as unknown as {
-    sessions: {
-      list: { getSnapshot: () => { current?: string; byId: Record<string, { blank?: boolean } | undefined> } }
-    }
-  }).sessions.list.getSnapshot()
-  const blank = snapshot.current !== undefined && snapshot.byId[snapshot.current]?.blank === true
+  // 会话账本读取失败不应让动效整块失效：退化为"非空白会话"（不播放新建
+  // 对话入场），其余三组动效照常。
+  let blank = false
+  try {
+    const snapshot = (ctx as unknown as {
+      sessions: {
+        list: { getSnapshot: () => { current?: string; byId: Record<string, { blank?: boolean } | undefined> } }
+      }
+    }).sessions.list.getSnapshot()
+    blank = snapshot.current !== undefined && snapshot.byId[snapshot.current]?.blank === true
+  } catch (err) {
+    console.warn('[width-slider] motion: session ledger unavailable', err)
+  }
   return {
     transcript: settings.motionEnabled,
     sidebar: settings.sidebarMotionEnabled,
@@ -155,50 +162,58 @@ function motionStateOf(ctx: RpcClientContext): MotionEngineState {
  */
 function installMotionFeature(ctx: RpcClientContext): Disposer {
   const disposers: Disposer[] = []
-
-  const style = document.createElement('style')
-  style.id = 'dsh-plugin-width-slider-motion-styles'
-  style.textContent = MOTION_CSS
-  document.getElementById(style.id)?.remove()
-  document.head.appendChild(style)
-  disposers.push(() => { style.remove() })
-
-  const engine = installConversationEntrance({
-    getState: () => motionStateOf(ctx),
-    subscribe: (listener) => {
-      const offSettings = onSettingsChanged(listener)
-      const offSessions = ctx.sessions.list.subscribe(listener)
-      return () => {
-        offSettings()
-        offSessions()
-      }
-    },
-  })
-  disposers.push(engine.dispose)
-
-  const settingsMotion = installSettingsMotion({
-    enabled: () => getSettings().settingsMotionEnabled,
-    subscribe: (listener) => onSettingsChanged(listener),
-  })
-  disposers.push(settingsMotion.dispose)
-
-  let lastSessionId: string | undefined
-  const syncSession = (): void => {
-    const current = ctx.sessions.list.getSnapshot().current
-    if (current === lastSessionId) return
-    lastSessionId = current
-    if (current !== undefined) engine.notifySessionSwitch()
-  }
-  syncSession()
-  disposers.push(ctx.sessions.list.subscribe(syncSession))
-
-  return () => {
+  const cleanup = (): void => {
     for (const dispose of disposers) {
       try {
         dispose()
       } catch { /* 清理异常忽略 */ }
     }
+    disposers.length = 0
   }
+
+  try {
+    const style = document.createElement('style')
+    style.id = 'dsh-plugin-width-slider-motion-styles'
+    style.textContent = MOTION_CSS
+    document.getElementById(style.id)?.remove()
+    document.head.appendChild(style)
+    disposers.push(() => { style.remove() })
+
+    const engine = installConversationEntrance({
+      getState: () => motionStateOf(ctx),
+      subscribe: (listener) => {
+        const offSettings = onSettingsChanged(listener)
+        const offSessions = ctx.sessions.list.subscribe(listener)
+        return () => {
+          offSettings()
+          offSessions()
+        }
+      },
+    })
+    disposers.push(engine.dispose)
+
+    const settingsMotion = installSettingsMotion({
+      enabled: () => getSettings().settingsMotionEnabled,
+      subscribe: (listener) => onSettingsChanged(listener),
+    })
+    disposers.push(settingsMotion.dispose)
+
+    let lastSessionId: string | undefined
+    const syncSession = (): void => {
+      const current = ctx.sessions.list.getSnapshot().current
+      if (current === lastSessionId) return
+      lastSessionId = current
+      if (current !== undefined) engine.notifySessionSwitch()
+    }
+    syncSession()
+    disposers.push(ctx.sessions.list.subscribe(syncSession))
+  } catch (err) {
+    // 中途失败（例如会话服务尚未就绪）不留半装的样式表/引擎。
+    cleanup()
+    throw err
+  }
+
+  return cleanup
 }
 
 /** 界面英文中文化（开关=开 且 界面语言为中文时生效）。 */

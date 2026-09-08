@@ -254,9 +254,12 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     mask?.classList.add(SETTINGS_MASK_CLOSING_CLASS)
     void whenTransitionSettles(dialog, EXIT_TIMEOUT_MS).then(() => {
       closing = false
-      // The plugin may have been disposed during the exit; replaying the close
-      // into a torn-down host would be pointless.
-      if (disposed) return
+      // The engine may have been disposed during the exit (the settings row
+      // toggles motion, which tears the engine down and rebuilds it). The
+      // close itself was already intercepted — preventDefault plus
+      // stopImmediatePropagation — so the host never saw it. Replaying it into
+      // the torn-down engine is safe: its listeners are gone, and dropping it
+      // would leave the settings panel stuck in its shrunk, unclickable state.
       // The replayed event must reach the host this time.
       bypass = true
       try {

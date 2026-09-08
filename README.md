@@ -1,6 +1,6 @@
 # dsh-plugin-width-slider
 
-**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除、v0.6.0 起内置工作区分页；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
+**DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除、v0.6.0 起内置工作区分页、v0.8.0 起整合 dsh-client-ui-custom 动效；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
 - **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）；思考块外观与官方一致（官方 DisclosureRow + 纯文本正文），正式回复走官方 Markdown 渲染，不接管围栏（genui / mermaid 等插件照常工作）；
@@ -9,8 +9,9 @@
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
 - **会话删除**（v0.5.0）：官方不支持删除会话，本插件在会话行 ⋯ 菜单补"删除会话"——二次确认后 host 执行完整删除链（停止任务/清内存/删磁盘/清投影缓存与工作区记账），不留半删残留。
 - **工作区分页**（v0.6.0）：官方侧栏「工作区」标题原位替换为页签栏——固定「默认」+ 用户自建可命名页签（文件夹）收纳工作区；工作区唯一归属（默认或某一页签），行菜单「分配标签」移动归属；删除页签时其中工作区自动回默认；在其它页签新建工作区会自动归入当前页签。
+- **入场动效**（v0.8.0，整合自 dsh-client-ui-custom）：对话内容、侧边栏、新建对话、设置面板四组入场动效，各带独立样式选择，另有流畅 / 优雅 / 极简三套一键预设。
 
-安装 dsh-plugin-width-slider 后即可替代 dsh-think-zh-expand 与 dsh-plugin-open-with（无需再单独安装，见下方"与上游插件的关系"）。
+安装 dsh-plugin-width-slider 后即可替代 dsh-think-zh-expand、dsh-plugin-open-with 与 dsh-client-ui-custom（无需再单独安装，见下方"与上游插件的关系"）。
 
 ---
 
@@ -25,7 +26,8 @@
 | 平台 | 仅 `win32` |
 
 > 验证状态：宽度滑块、思考块增强与面板补丁已在 DSH Desktop 上实测；Open With（v0.4.0 整合）主要流程已由作者真机验证；
-> 会话删除（v0.5.0）、近期修复（宽度启动恢复、Open With 即时同步）与工作区分页（v0.6.0）由作者验收中。
+> 会话删除（v0.5.0）、近期修复（宽度启动恢复、Open With 即时同步）与工作区分页（v0.6.0）由作者验收中；
+> 设置页排版重写与动效整合（v0.8.0）已通过类型检查 / 单测 / 构建，待真机验收。
 > 若你的 DSH 是自建/Web 版，机制相同（同为 Web 端注入），但以桌面版为准验证。
 
 ---
@@ -56,7 +58,7 @@
 - **隐藏原生手柄**：插件入口注入全局样式 `[data-width-handle]{display:none!important}`，用稳定属性选择器隐藏原生左右拖拽手柄——不像改官方 `client.js` 那样会被升级覆盖。
 - **思考块**：生成中强制展开、结束后按所选模式显示；头部用官方 `DisclosureRow`、正文纯文本（与官方 `ReasoningRow` 一致）；正式回复文本走官方 `MarkdownText` 渲染（官方 DOM 结构），代码块/表格/公式由官方管线处理，围栏渲染完全交给 genui / dsh-mermaid-render 等专门插件，不存在两套 Markdown 渲染叠加。
 - **中英双语**：内置 zh / en 两套界面文案，跟随 DSH 界面语言自动切换。
-- **滑块几何**：轨道高度 = 圆形手柄直径（面板 20px / 预览 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出；宽轨道便于鼠标点击。
+- **滑块几何**：轨道高度 = 圆形手柄直径（设置页行内 16px / 全屏预览 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出；宽轨道便于鼠标点击。
 
 ## 与 dsh-think-zh-expand 的关系
 
@@ -221,7 +223,7 @@ dsh-plugin-width-slider/
 | 强制中文 | host `systemPrompt.section`（order -90），开关热注销/注册 |
 | 界面中文化 | MutationObserver 精准替换「完全等于」词表的叶子文本节点（排除代码/输入区） |
 | 面板补丁 | body 观察器探测 `[role=dialog][aria-modal]` + `> nav` 语义锚点（不依赖 hash 类名），失效自动跳过 |
-| 配置 | 功能开关经 `/width-slider` RPC（loopback 围栏）读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；Open With 数据经 `/open-with` RPC 存 `$DSH_HOME/storages/dsh-open-with/settings.json`（与官方/本地修改版共用，停用即无缝保留）；client 端 config store 热切换 |
+| 配置 | 功能开关（含动效四组开关与样式）经 `/width-slider` RPC（loopback 围栏）读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；Open With 数据经 `/open-with` RPC 存 `$DSH_HOME/storages/dsh-open-with/settings.json`（与官方/本地修改版共用，停用即无缝保留）；client 端 config store 热切换 |
 | 动效 | 命令式 Web Animations（`replayEntrance`）而非 CSS @starting-style：宿主挂载行/面板时已强制过一次样式解析，声明式起始态不会生效；观察 `[data-chat-anchor-key]` 消息行与 `[role="tree"] [role="treeitem"]` 侧栏行，load 批按文档序错峰入场；设置面板动效拦截三条关闭路径，先让真实面板缩小再放行 |
 | 性能 | 列宽在 `pointerdown` 时快照；宽度更新 rAF 节流，拖动不卡顿 |
 

@@ -100,7 +100,7 @@ const SETTINGS_CSS = `
 .dsws-panel { border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 10px; padding: 4px 5px; }
 .dsws-rowline { display: flex; align-items: center; gap: 1px; flex-wrap: wrap; }
 
-.dsws-item { display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 7px; cursor: pointer; user-select: none; transition: background 140ms ease-out; }
+.dsws-item { display: flex; align-items: center; gap: 4px; min-height: 28px; padding: 5px; border-radius: 7px; cursor: pointer; user-select: none; transition: background 140ms ease-out; }
 .dsws-item:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.08)); }
 .dsws-item.is-disabled { cursor: default; opacity: .55; }
 .dsws-label { font-size: 11.5px; font-weight: 500; white-space: nowrap; }
@@ -127,7 +127,7 @@ input.dsws-sw:disabled { cursor: default; }
 .dsws-num { flex: none; font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dsws-hint { font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); padding: 0 8px; }
 
-.dsws-select { appearance: none; -webkit-appearance: none; flex: none; height: 22px; padding: 0 16px 0 6px; margin: 0 2px 0 0; font: inherit; font-size: 11px; color: var(--dsw-alias-label-primary, #e0e0e0); background-color: var(--dsw-alias-bg-base, transparent); border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 6px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 10 10' fill='none' stroke='%238a8a8a' stroke-width='1.5'%3E%3Cpath d='M2.5 4L5 6.5L7.5 4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 5px center; }
+.dsws-select { appearance: none; -webkit-appearance: none; flex: none; height: 22px; padding: 0 16px 0 6px; margin: 0 2px 0 0; font: inherit; font-size: 11px; color: var(--dsw-alias-label-primary, #e0e0e0); background-color: transparent; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 6px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 10 10' fill='none' stroke='%238a8a8a' stroke-width='1.5'%3E%3Cpath d='M2.5 4L5 6.5L7.5 4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 5px center; }
 .dsws-select:disabled { opacity: .45; cursor: default; }
 .dsws-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4f9eff); outline-offset: 1px; }
 
@@ -180,7 +180,7 @@ function SwitchItem(props: {
 function Segmented(props: {
   label: string
   value: string
-  options: { id: string; label: string }[]
+  options: { id: string; label: string; title?: string }[]
   onChange: (value: string) => void
   disabled?: boolean
 }): JSX.Element {
@@ -194,6 +194,7 @@ function Segmented(props: {
             key={option.id}
             type="button"
             className={option.id === value ? 'on' : undefined}
+            title={option.title}
             disabled={disabled}
             onClick={() => onChange(option.id)}
           >
@@ -277,7 +278,7 @@ export function WidthSliderSettings({
           <div className="dsws-page-title">{t('pageTitle')}</div>
           <div className="dsws-page-sub">{t('pageSubtitle')}</div>
         </div>
-        <button type="button" className="dsws-ghost" onClick={resetAll}>
+        <button type="button" className="dsws-ghost" title={t('resetAllInfo')} onClick={resetAll}>
           {t('resetAllLabel')}
         </button>
       </div>
@@ -320,8 +321,8 @@ export function WidthSliderSettings({
             value={settings.thinkMode}
             disabled={!settings.thinkRender}
             options={[
-              { id: 'auto-collapse', label: t('thinkModeAuto') },
-              { id: 'keep-expanded', label: t('thinkModeKeep') },
+              { id: 'auto-collapse', label: t('thinkModeAuto'), title: t('thinkModeAutoInfo') },
+              { id: 'keep-expanded', label: t('thinkModeKeep'), title: t('thinkModeKeepInfo') },
             ]}
             onChange={(value) => persist({ thinkMode: value === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse' })}
           />
@@ -341,6 +342,7 @@ export function WidthSliderSettings({
           <select
             className="dsws-select"
             title={t('motionStyleTranscriptInfo')}
+            aria-label={t('motionStyleTranscriptInfo')}
             value={settings.motionStyle}
             disabled={!settings.motionEnabled}
             onChange={(event) => persist({ motionStyle: event.target.value as MotionStyle })}
@@ -359,6 +361,7 @@ export function WidthSliderSettings({
           <select
             className="dsws-select"
             title={t('motionStyleSidebarInfo')}
+            aria-label={t('motionStyleSidebarInfo')}
             value={settings.sidebarMotionStyle}
             disabled={!settings.sidebarMotionEnabled}
             onChange={(event) => persist({ sidebarMotionStyle: event.target.value as SidebarMotionStyle })}
@@ -377,6 +380,7 @@ export function WidthSliderSettings({
           <select
             className="dsws-select"
             title={t('motionStyleNewChatInfo')}
+            aria-label={t('motionStyleNewChatInfo')}
             value={settings.newChatMotionStyle}
             disabled={!settings.newChatMotionEnabled}
             onChange={(event) => persist({ newChatMotionStyle: event.target.value as NewChatMotionStyle })}

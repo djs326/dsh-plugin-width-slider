@@ -3,7 +3,7 @@
 **DSH 个人多功能插件**（v0.3.0 起整合 dsh-think-zh-expand 能力、v0.4.0 起整合 dsh-plugin-open-with 能力、v0.5.0 起内置会话删除、v0.6.0 起内置工作区分页；全部功能带独立开关）—— 为 **DSH Desktop（Windows 桌面版）** 提供：
 
 - **对话宽度滑块**：替代原生宽度拖拽手柄的滑块调节，按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"（重启后保持）；
-- **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）；文本渲染走官方 Markdown 管线，不接管围栏渲染（genui / mermaid 等插件照常工作）；
+- **思考块增强**（整合自 dsh-think-zh-expand）：思考与回复强制中文、思考块展开/收起（默认"思考完自动收起"）；思考块外观与官方一致（官方 DisclosureRow + 纯文本正文），正式回复走官方 Markdown 渲染，不接管围栏（genui / mermaid 等插件照常工作）；
 - **Open With**（整合自 dsh-plugin-open-with）：对话头部胶囊按钮用其他应用（VS Code/终端/资源管理器/自定义项）打开当前目录；
 - **界面中文化**：官方界面残留硬编码英文标签自动替换为中文；
 - **官方面板补丁**：设置弹窗可拖拽调宽、左侧 tab 列表超高时滚动。
@@ -36,7 +36,7 @@
 |---|---|---|
 | 宽度滑块 | 滑块调节对话内容宽度：按下即全屏预览、实时调宽、宽度持久化，可切"跟随窗口宽度"模式；重启 DSH 后启动即应用上次设置（无需打开设置页）；关闭后恢复原生拖拽手柄 | 开 |
 | 强制中文 | host 注入最高优先级语言规则：思考过程与回复均使用简体中文 | 开 |
-| 思考块增强 | 思考块展开/收起交互，替换官方单行折叠；正文与思考内容走官方 Markdown 渲染（不接管围栏，genui / mermaid 等插件照常工作） | 开 |
+| 思考块增强 | 思考块展开/收起交互（默认"思考完自动收起"）；头部用官方 DisclosureRow + 官方思考图标、正文纯文本，外观与官方一致；正式回复走官方 Markdown 渲染，不接管围栏 | 开 |
 | 思考块模式 | 二选一：思考完自动收起（默认）/ 始终展开 | 自动收起 |
 | 界面中文化 | 官方残留硬编码英文标签（Tool Call、Thinking 等）替换为中文 | 开 |
 | 弹窗窗口化 | 官方设置弹窗变可拖拽窗口：右下角把手调宽高、顶部拖动移动、双击复位 800×800 居中（记忆） | 开 |
@@ -203,7 +203,7 @@ dsh-plugin-width-slider/
 | 工作区分页 | 常驻 wrapper 包裹官方 `sidebar.workspaces` 组件，把 useSessions/useWorkspaces 按当前页签作用域过滤（结果按源引用+作用域缓存、getSnapshot 引用稳定，规避 React #185 循环）；页签栏以 Portal 放进官方标题行首、隐藏原标题（官方重渲染自动重新定位）；分组（默认根 + 用户页签 + 工作区归属）经 `/width-slider` `wsGroupsRead/Write` 存 `$DSH_HOME/storages/dsh-plugin-width-slider/workspace-groups.json`，localStorage 缓存兜底 + host 写失败脏标志下次启动重试；行菜单「分配标签」克隆官方 menuitem、从工作区行 fiber 直读 workspaceId；新建工作区监测（store ready 后 diff 新出现 id）自动归入创建时停留页签 |
 | 预览模式 | `createPortal` 到 `document.body`，`position: fixed; inset: 0; z-index: 100000`；同时把 `[data-shell-overlay]` 等设置面板覆盖层设为 `opacity: 0` |
 | 隐藏手柄 | 入口注入 `<style>[data-width-handle]{display:none!important}</style>` |
-| 思考块渲染 | slots 覆盖 `conversation.chat.node` 的 `assistant-step`（priority -1），只为思考块提供展开/收起；思考块默认收起、running 强制展开、结束自动收起；文本经运行时 `require('@deepseek-ai/dsh-client-ui-primitives')` 取官方 `MarkdownText` 渲染（缺失时降级纯文本），不接管围栏 |
+| 思考块渲染 | slots 覆盖 `conversation.chat.node` 的 `assistant-step`（priority -1），只为思考块提供展开/收起；头部用官方 `DisclosureRow` + `IconThinkOutline14`、正文纯文本（与官方 `ReasoningRow` 一致）；默认收起、running 强制展开、结束自动收起；正式回复文本经官方 `MarkdownText` 渲染（缺失降级纯文本），不接管围栏 |
 | 强制中文 | host `systemPrompt.section`（order -90），开关热注销/注册 |
 | 界面中文化 | MutationObserver 精准替换「完全等于」词表的叶子文本节点（排除代码/输入区） |
 | 面板补丁 | body 观察器探测 `[role=dialog][aria-modal]` + `> nav` 语义锚点（不依赖 hash 类名），失效自动跳过 |

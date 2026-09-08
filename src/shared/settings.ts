@@ -6,6 +6,18 @@
  * 本文件无运行时依赖（纯类型 + 纯函数），tsdown 会分别打进两端 bundle。
  */
 
+import {
+  DEFAULT_MOTION_STYLE,
+  DEFAULT_NEW_CHAT_MOTION_STYLE,
+  DEFAULT_SIDEBAR_MOTION_STYLE,
+  isMotionStyle,
+  isNewChatMotionStyle,
+  isSidebarMotionStyle,
+  type MotionStyle,
+  type NewChatMotionStyle,
+  type SidebarMotionStyle,
+} from './motionSettings.ts'
+
 export interface FeatureSettings {
   /** 1 对话宽度滑块（含隐藏原生手柄） */
   widthSlider: boolean
@@ -29,6 +41,20 @@ export interface FeatureSettings {
   sessionDelete: boolean
   /** 11 工作区分页 tab 栏（官方标题行原位替换为「默认+分组文件夹」页签；工作区唯一归属默认或某页签，行菜单「分配标签」移动归属；删除页签时其中工作区自动回默认；重启后回到默认页签） */
   workspaceTabs: boolean
+  /** 12 对话入场动效（整合自 dsh-client-ui-custom） */
+  motionEnabled: boolean
+  /** 13 对话内容入场样式 */
+  motionStyle: MotionStyle
+  /** 14 侧边栏动效（初次载入 + 工作区分组展开） */
+  sidebarMotionEnabled: boolean
+  /** 15 侧边栏入场样式 */
+  sidebarMotionStyle: SidebarMotionStyle
+  /** 16 新建对话（空白会话）入场动效 */
+  newChatMotionEnabled: boolean
+  /** 17 新建对话入场样式 */
+  newChatMotionStyle: NewChatMotionStyle
+  /** 18 设置面板动效（展开/页面淡入/关闭缩回） */
+  settingsMotionEnabled: boolean
 }
 
 export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -43,6 +69,13 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   openWithSettings: true,
   sessionDelete: true,
   workspaceTabs: true,
+  motionEnabled: true,
+  motionStyle: DEFAULT_MOTION_STYLE,
+  sidebarMotionEnabled: true,
+  sidebarMotionStyle: DEFAULT_SIDEBAR_MOTION_STYLE,
+  newChatMotionEnabled: true,
+  newChatMotionStyle: DEFAULT_NEW_CHAT_MOTION_STYLE,
+  settingsMotionEnabled: true,
 }
 
 /** 白名单式合并任意来源（host 文件 / 缺键 / 未知类型）为完整配置。 */
@@ -60,5 +93,12 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     openWithSettings: o.openWithSettings !== false,
     sessionDelete: o.sessionDelete !== false,
     workspaceTabs: o.workspaceTabs !== false,
+    motionEnabled: o.motionEnabled !== false,
+    motionStyle: isMotionStyle(o.motionStyle) ? o.motionStyle : DEFAULT_MOTION_STYLE,
+    sidebarMotionEnabled: o.sidebarMotionEnabled !== false,
+    sidebarMotionStyle: isSidebarMotionStyle(o.sidebarMotionStyle) ? o.sidebarMotionStyle : DEFAULT_SIDEBAR_MOTION_STYLE,
+    newChatMotionEnabled: o.newChatMotionEnabled !== false,
+    newChatMotionStyle: isNewChatMotionStyle(o.newChatMotionStyle) ? o.newChatMotionStyle : DEFAULT_NEW_CHAT_MOTION_STYLE,
+    settingsMotionEnabled: o.settingsMotionEnabled !== false,
   }
 }

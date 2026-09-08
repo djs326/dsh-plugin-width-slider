@@ -93,6 +93,51 @@ SOFTWARE.
 
 ---
 
+## dsh-client-ui-custom
+
+- 版权：Copyright (c) 2026 Yoli-mi
+- 上游仓库：https://github.com/yoli-mi/dsh-client-ui-custom
+- 参考版本：v0.1.0-rc.12（仓库内 dsh-client-ui-custom-main 源码副本）
+- 整合用途（v0.8.0）：对话入场 / 侧边栏 / 新建对话 / 设置面板四组入场动效
+  与流畅、优雅、极简三套预设；设置项并入本插件功能总控页，设置值改存本
+  插件自己的 settings.json（不再占用上游的 ui-custom 设置命名空间）。
+- 本地转写文件（引擎逐字迁移；仅改导入路径、CSS 模块改为注入样式表、
+  设置来源改为本插件 config store）：
+  - src/client/motion/motion.ts —— 对应上游 src/client/motion/motion.ts
+  - src/client/motion/settingsMotion.ts —— 对应上游 settings-motion.ts
+  - src/client/motion/animate.ts —— 对应上游 animate.ts
+  - src/client/motion/styles.ts —— 对应上游 motion.module.css（:global() 展开）
+  - src/shared/motionSettings.ts —— 对应上游 src/shared.ts 的样式常量/默认值/预设
+  - src/client/locales.ts 中 groupMotion/motion*/style* 词条 —— 对应上游
+    motion-locales.ts
+- 上游许可全文（原文）:
+
+MIT License
+
+Copyright (c) 2026 Yoli-mi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+（以上文本复制自上游 LICENSE 文件原文）
+
+---
+
 ## dsh-archived-chats（仅作实现参考，未并入代码）
 
 - 版权：Copyright (c) 2026 Ultronen（https://github.com/Ultronen/dsh-archived-chats，MIT）

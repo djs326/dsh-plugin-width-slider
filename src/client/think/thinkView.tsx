@@ -38,6 +38,9 @@ export const THINK_STYLES = `
 .dsh-ws-think-separator{background:var(--dsw-alias-label-caption);border-radius:1px;flex:none;width:2px;height:2px;margin:0 8px}
 .dsh-ws-think-summary{min-width:0;color:var(--dsw-alias-label-tertiary);text-overflow:ellipsis;white-space:nowrap;flex:auto;font-size:14px;line-height:24px;overflow:hidden}
 .dsh-ws-think-body{white-space:pre-wrap;word-break:break-word;padding:4px 0 4px 22px;font-size:14px;line-height:24px;color:var(--dsw-alias-label-tertiary)}
+.dsh-ws-think-body p{margin:0}
+.dsh-ws-think-body ul,.dsh-ws-think-body ol{margin:0;padding-left:1.4em}
+.dsh-ws-think-body pre,.dsh-ws-think-body blockquote,.dsh-ws-think-body h1,.dsh-ws-think-body h2,.dsh-ws-think-body h3,.dsh-ws-think-body h4{margin:0}
 .dsh-ws-plain{white-space:pre-wrap;word-break:break-word}
 .dsh-ws-stopped{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);border-radius:6px;align-self:flex-start;padding:0 6px;font-size:11px;line-height:18px}
 `

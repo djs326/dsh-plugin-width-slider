@@ -179,7 +179,9 @@ async function buildSpawnSpec(ctx: OpenWithCtx, target: string, cwd: string): Pr
   switch (target) {
     case 'code': {
       const exe = await resolveCodeExecutable(ctx)
-      return { argv: [exe], useSpawnCwd: true }
+      // VS Code CLI 必须带目录参数才会打开该目录（只设 cwd 只会开空窗口或
+      // 上次窗口）；目录作为独立 argv 元素交给 libuv 自动引号。
+      return { argv: [exe, cwd], useSpawnCwd: true }
     }
     case 'cmd': {
       const cmdPath = windir + '\\System32\\cmd.exe'

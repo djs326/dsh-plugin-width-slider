@@ -1,11 +1,12 @@
 /**
- * WidthSliderSettings: settings-panel section — 功能总控页（v0.3.0）。
+ * WidthSliderSettings: settings-panel section — 功能总控页。
  *
- * 卡片分组（每个功能带独立开关，默认全开、热生效）：
- * 1. 对话宽度滑块  —— 开关 + 滑块（WidthSliderControl，关闭时隐藏并提示）
- * 2. 思考块        —— 增强渲染开关（外观同官方）+ 显示方式（自动收起 / 始终展开）
- * 3. 输出语言      —— 思考/回复强制中文开关（host 端 systemPrompt 注入）
- * 4. 界面          —— 英文中文化 + 弹窗调宽 + tab 滚动开关
+ * 布局（v0.7.0 排版重写）：每个分组只占一行，开关与控件横向排布，逐条
+ * 长说明收进悬停提示（title），子面板（Open With）默认折叠。
+ *   1. 对话宽度   —— 启用开关 + 跟随窗口 + 宽度滑块（WidthSliderControl）
+ *   2. 思考与输出 —— 思考块增强 + 强制中文 + 显示方式（分段控件）
+ *   3. 界面       —— 中文化 / 弹窗拖拽 / tab 滚动 / 会话删除 / 工作区分页
+ *   4. 打开方式   —— Open With 设置 + 头部按钮 + 折叠的管理面板
  *
  * 数据流（单一读源）：
  * - 读取只发生在 client 入口启动时（一次 readSettings → config store）；
@@ -18,6 +19,57 @@ import { WidthSliderControl } from './WidthSliderControl.tsx'
 import { OpenWithPanel, type LaunchTarget, type OpenWithSettingsData } from './openWith/OpenWithPanel.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
+import type { WidthSliderKey } from './locales.ts'
+import {
+  MOTION_PRESETS,
+  MOTION_STYLES,
+  NEW_CHAT_MOTION_STYLES,
+  SIDEBAR_MOTION_STYLES,
+  type MotionPresetId,
+  type MotionStyle,
+  type NewChatMotionStyle,
+  type SidebarMotionStyle,
+} from '../shared/motionSettings.ts'
+
+/** 三组样式 id → 文案键（取值与动效插件一致）。 */
+const TRANSCRIPT_STYLE_LABELS: Record<MotionStyle, keyof WidthSliderKey> = {
+  'fade-up': 'styleFadeUp',
+  fade: 'styleFade',
+  'rise-scale': 'styleRiseScale',
+  'slide-in': 'styleSlideIn',
+  'blur-in': 'styleBlurIn',
+  'scale-in': 'styleScaleIn',
+}
+
+/** 侧边栏样式 id → 文案键。 */
+const SIDEBAR_STYLE_LABELS: Record<SidebarMotionStyle, keyof WidthSliderKey> = {
+  'slide-left': 'styleSlideLeft',
+  fade: 'styleFade',
+  expand: 'styleExpand',
+  'slide-down': 'styleSlideDown',
+}
+
+/** 新建对话样式 id → 文案键。 */
+const NEW_CHAT_STYLE_LABELS: Record<NewChatMotionStyle, keyof WidthSliderKey> = {
+  reveal: 'styleReveal',
+  fade: 'styleFade',
+  bloom: 'styleBloom',
+  zoom: 'styleZoom',
+}
+
+/** 预设 id → 按钮文案键。 */
+const PRESET_LABELS: Record<MotionPresetId, keyof WidthSliderKey> = {
+  fluid: 'motionPresetFluid',
+  elegant: 'motionPresetElegant',
+  minimal: 'motionPresetMinimal',
+}
+
+/** 预设 id → 悬停说明文案键。 */
+const PRESET_INFO: Record<MotionPresetId, keyof WidthSliderKey> = {
+  fluid: 'motionPresetFluidInfo',
+  elegant: 'motionPresetElegantInfo',
+  minimal: 'motionPresetMinimalInfo',
+}
 
 export interface WidthSliderSettingsInjected {
   writeSettings: (settings: unknown) => Promise<void>
@@ -30,105 +82,126 @@ export interface WidthSliderSettingsInjected {
 
 export type WidthSliderSettingsProps = PropsLocale<'widthSlider'> & WidthSliderSettingsInjected
 
-// ── 小组件（沿用官方语义 token 与现有 inline 风格）────────────────────
+// ── 样式（.dsws- 前缀，只作用于本区块）─────────────────────────────────
 
-/** 一行开关：checkbox + 标题 + 说明。 */
-function SwitchRow(props: {
+const SETTINGS_CSS = `
+.dsws-root { color: var(--dsw-alias-label-primary, #e0e0e0); font-size: 13px; line-height: 1.5; }
+.dsws-root * { box-sizing: border-box; }
+.dsws-contents { display: contents; }
+
+.dsws-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); margin-bottom: 16px; }
+.dsws-page-title { font-size: 15px; font-weight: 600; }
+.dsws-page-sub { font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); margin-top: 2px; }
+.dsws-ghost { flex: none; height: 26px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary, #999); font: inherit; font-size: 11.5px; cursor: pointer; transition: color 160ms ease-out, border-color 160ms ease-out; }
+.dsws-ghost:hover { color: var(--dsw-alias-label-primary, #e0e0e0); border-color: var(--dsw-alias-label-secondary, #999); }
+
+.dsws-group { margin-bottom: 14px; }
+.dsws-group-title { font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-caption, #888); margin-bottom: 6px; }
+.dsws-panel { border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 10px; padding: 4px 5px; }
+.dsws-rowline { display: flex; align-items: center; gap: 1px; flex-wrap: wrap; }
+
+.dsws-item { display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 7px; cursor: pointer; user-select: none; transition: background 140ms ease-out; }
+.dsws-item:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.08)); }
+.dsws-item.is-disabled { cursor: default; opacity: .55; }
+.dsws-label { font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+
+input.dsws-sw { appearance: none; -webkit-appearance: none; flex: none; width: 26px; height: 15px; margin: 0; border-radius: 999px; background: var(--dsw-alias-border-l2, rgba(127,127,127,.35)); position: relative; cursor: pointer; transition: background 180ms ease-out; }
+input.dsws-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--dsw-alias-bg-base, #fff); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform 180ms ease-out; }
+input.dsws-sw:checked { background: var(--dsw-alias-state-business-primary, #4f9eff); }
+input.dsws-sw:checked::after { transform: translateX(11px); }
+input.dsws-sw:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4f9eff); outline-offset: 2px; }
+input.dsws-sw:disabled { cursor: default; }
+
+.dsws-seg-inline { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.dsws-seg-label { font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); white-space: nowrap; }
+.dsws-seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.12)); }
+.dsws-seg button { font: inherit; font-size: 11px; padding: 3px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary, #999); cursor: pointer; white-space: nowrap; }
+.dsws-seg button.on { background: var(--dsw-alias-state-business-primary, #4f9eff); color: #fff; font-weight: 600; }
+.dsws-seg.is-disabled { opacity: .45; pointer-events: none; }
+
+.dsws-slider-inline { flex: 1 1 170px; min-width: 150px; display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.dsws-slider-inline.is-disabled { opacity: .55; pointer-events: none; }
+.dsws-track { position: relative; flex: 1 1 auto; height: 16px; border-radius: 999px; background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.2)); cursor: col-resize; user-select: none; touch-action: none; }
+.dsws-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; background: var(--dsw-alias-state-business-primary, #4f9eff); opacity: .9; pointer-events: none; }
+.dsws-knob { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-state-business-primary, #4f9eff); box-shadow: 0 1px 3px rgba(0,0,0,.3); pointer-events: none; }
+.dsws-num { flex: none; font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dsws-hint { font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); padding: 0 8px; }
+
+.dsws-select { appearance: none; -webkit-appearance: none; flex: none; height: 22px; padding: 0 16px 0 6px; margin: 0 2px 0 0; font: inherit; font-size: 11px; color: var(--dsw-alias-label-primary, #e0e0e0); background-color: var(--dsw-alias-bg-base, transparent); border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 6px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 10 10' fill='none' stroke='%238a8a8a' stroke-width='1.5'%3E%3Cpath d='M2.5 4L5 6.5L7.5 4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 5px center; }
+.dsws-select:disabled { opacity: .45; cursor: default; }
+.dsws-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4f9eff); outline-offset: 1px; }
+
+.dsws-fold-inline { margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.dsws-mini { font: inherit; font-size: 11px; padding: 3px 9px; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary, #999); cursor: pointer; }
+.dsws-mini:hover { color: var(--dsw-alias-label-primary, #e0e0e0); }
+.dsws-ow-body { padding: 2px 8px 6px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); margin-top: 4px; }
+
+@media (max-width: 560px) { .dsws-seg-inline, .dsws-fold-inline { margin-left: 0; } }
+`
+
+// ── 小组件 ────────────────────────────────────────────────────────────
+
+/** 分组：小标题 + 单行面板。 */
+function Group({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+  return (
+    <section className="dsws-group">
+      <div className="dsws-group-title">{title}</div>
+      <div className="dsws-panel">{children}</div>
+    </section>
+  )
+}
+
+/** 行内开关项：标签在左、开关在右；完整说明走 title 悬停提示。 */
+function SwitchItem(props: {
   id: string
   label: string
-  info: string
+  title: string
   checked: boolean
   onChange: (checked: boolean) => void
   disabled?: boolean
-}) {
-  const { id, label, info, checked, onChange, disabled } = props
+}): JSX.Element {
+  const { id, label, title, checked, onChange, disabled = false } = props
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.checked)}
-          style={{
-            margin: 0,
-            width: 15,
-            height: 15,
-            accentColor: 'var(--dsw-alias-state-business-primary, #4f9eff)',
-            cursor: disabled ? 'default' : 'pointer',
-          }}
-        />
-        <label htmlFor={id} style={{ cursor: disabled ? 'default' : 'pointer', userSelect: 'none', fontWeight: 500 }}>
-          {label}
-        </label>
-      </div>
-      <div style={{ marginTop: 4, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-caption, #888)' }}>
-        {info}
-      </div>
-    </div>
-  )
-}
-
-/** 分组卡片。 */
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          lineHeight: '20px',
-          marginBottom: 10,
-          paddingBottom: 6,
-          borderBottom: '1px solid var(--dsw-alias-interactive-bg-hover, #333)',
-          color: 'var(--dsw-alias-label-primary, #e0e0e0)',
-        }}
-      >
-        {title}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-/** 单选行（思考块显示方式）。 */
-function RadioRow(props: {
-  id: string
-  name: string
-  label: string
-  info: string
-  checked: boolean
-  onChange: () => void
-  disabled?: boolean
-}) {
-  const { id, name, label, info, checked, onChange, disabled } = props
-  return (
-    <label
-      htmlFor={id}
-      style={{
-        display: 'flex',
-        gap: 8,
-        alignItems: 'flex-start',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.55 : 1,
-        marginBottom: 8,
-      }}
-    >
+    <label className={'dsws-item' + (disabled ? ' is-disabled' : '')} title={title}>
+      <span className="dsws-label">{label}</span>
       <input
         id={id}
-        name={name}
-        type="radio"
+        className="dsws-sw"
+        type="checkbox"
         checked={checked}
         disabled={disabled}
-        onChange={onChange}
-        style={{ margin: '3px 0 0', accentColor: 'var(--dsw-alias-state-business-primary, #4f9eff)' }}
+        onChange={(event) => onChange(event.target.checked)}
       />
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span style={{ fontSize: 13, lineHeight: '20px', fontWeight: 500, userSelect: 'none' }}>{label}</span>
-        <span style={{ fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-caption, #888)' }}>{info}</span>
-      </span>
     </label>
+  )
+}
+
+/** 行内分段控件（右对齐）。 */
+function Segmented(props: {
+  label: string
+  value: string
+  options: { id: string; label: string }[]
+  onChange: (value: string) => void
+  disabled?: boolean
+}): JSX.Element {
+  const { label, value, options, onChange, disabled = false } = props
+  return (
+    <div className="dsws-seg-inline">
+      <span className="dsws-seg-label">{label}</span>
+      <div className={'dsws-seg' + (disabled ? ' is-disabled' : '')}>
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={option.id === value ? 'on' : undefined}
+            disabled={disabled}
+            onClick={() => onChange(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -143,6 +216,8 @@ export function WidthSliderSettings({
   t,
 }: WidthSliderSettingsProps): JSX.Element {
   const [settings, setSettings] = useState<FeatureSettings>(() => getSettings())
+  /** Open With 管理面板展开状态（默认折叠，保持整页单行紧凑）。 */
+  const [owOpen, setOwOpen] = useState(false)
   /** 仅本地（用户）改动触发写盘；store 外部更新（启动读回）不写。 */
   const dirtyRef = useRef(false)
 
@@ -176,175 +251,234 @@ export function WidthSliderSettings({
     window.location.reload()
   }, [writeSettings])
 
-  const id = (k: string): string => 'dsh-plugin-width-slider-' + k
+  /** 当前动效取值与某套预设完全一致时，该预设按钮高亮。 */
+  const matchesPreset = (presetId: MotionPresetId): boolean => {
+    const preset = MOTION_PRESETS.find((entry) => entry.id === presetId)
+    if (preset === undefined) return false
+    const config = preset.config
+    return settings.motionEnabled === config.motionEnabled
+      && settings.motionStyle === config.motionStyle
+      && settings.sidebarMotionEnabled === config.sidebarMotionEnabled
+      && settings.sidebarMotionStyle === config.sidebarMotionStyle
+      && settings.newChatMotionEnabled === config.newChatMotionEnabled
+      && settings.newChatMotionStyle === config.newChatMotionStyle
+      && settings.settingsMotionEnabled === config.settingsMotionEnabled
+  }
+
+  const id = (key: string): string => 'dsh-plugin-width-slider-' + key
 
   return (
-    <div style={{ padding: '4px 0' }}>
-      {/* 顶部：总说明 + 恢复默认 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          marginBottom: 12,
-          fontSize: 12,
-          lineHeight: '18px',
-          color: 'var(--dsw-alias-label-caption, #888)',
-        }}
-      >
-        <span>{t('resetAllInfo')}</span>
-        <button
-          type="button"
-          onClick={resetAll}
-          style={{
-            flex: 'none',
-            height: 26,
-            padding: '0 10px',
-            border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.08))',
-            borderRadius: 6,
-            background: 'transparent',
-            color: 'var(--dsw-alias-label-secondary, #888)',
-            cursor: 'pointer',
-            fontSize: 12,
-          }}
-        >
+    <div className="dsws-root">
+      <style>{SETTINGS_CSS}</style>
+
+      {/* 页头：标题 + 恢复默认 */}
+      <div className="dsws-page-head">
+        <div>
+          <div className="dsws-page-title">{t('pageTitle')}</div>
+          <div className="dsws-page-sub">{t('pageSubtitle')}</div>
+        </div>
+        <button type="button" className="dsws-ghost" onClick={resetAll}>
           {t('resetAllLabel')}
         </button>
       </div>
-      {/* 1. 对话宽度滑块 */}
-      <Card title={t('groupWidth')}>
-        <SwitchRow
-          id={id('enable-width')}
-          label={t('enableWidth')}
-          info={t('enableWidthInfo')}
-          checked={settings.widthSlider}
-          onChange={(checked) => persist({ widthSlider: checked })}
-        />
-        {settings.widthSlider ? (
-          <WidthSliderControl t={t} />
-        ) : (
-          <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-caption, #888)' }}>
-            {t('disabledHint')}
-          </div>
-        )}
-      </Card>
 
-      {/* 2. 思考块 */}
-      <Card title={t('groupThink')}>
-        <SwitchRow
-          id={id('enable-think')}
-          label={t('enableThink')}
-          info={t('enableThinkInfo')}
-          checked={settings.thinkRender}
-          onChange={(checked) => persist({ thinkRender: checked })}
-        />
-        {settings.thinkRender && (
-          <>
-            <div style={{ margin: '2px 0 6px' }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  lineHeight: '18px',
-                  color: 'var(--dsw-alias-label-secondary, #bbb)',
-                  marginBottom: 8,
-                }}
-              >
-                {t('thinkModeLabel')}
-              </div>
-              <RadioRow
-                id={id('think-mode-auto')}
-                name="width-slider-think-mode"
-                label={t('thinkModeAuto')}
-                info={t('thinkModeAutoInfo')}
-                checked={settings.thinkMode === 'auto-collapse'}
-                onChange={() => persist({ thinkMode: 'auto-collapse' })}
-              />
-              <RadioRow
-                id={id('think-mode-keep')}
-                name="width-slider-think-mode"
-                label={t('thinkModeKeep')}
-                info={t('thinkModeKeepInfo')}
-                checked={settings.thinkMode === 'keep-expanded'}
-                onChange={() => persist({ thinkMode: 'keep-expanded' })}
-              />
+      {/* 1. 对话宽度 */}
+      <Group title={t('groupWidthShort')}>
+        <div className="dsws-rowline">
+          <SwitchItem
+            id={id('enable-width')}
+            label={t('shortEnableWidth')}
+            title={t('enableWidthInfo')}
+            checked={settings.widthSlider}
+            onChange={(checked) => persist({ widthSlider: checked })}
+          />
+          {settings.widthSlider
+            ? <WidthSliderControl t={t} />
+            : <span className="dsws-hint">{t('disabledHint')}</span>}
+        </div>
+      </Group>
+
+      {/* 2. 思考与输出 */}
+      <Group title={t('groupThinkOutput')}>
+        <div className="dsws-rowline">
+          <SwitchItem
+            id={id('enable-think')}
+            label={t('shortThink')}
+            title={t('enableThinkInfo')}
+            checked={settings.thinkRender}
+            onChange={(checked) => persist({ thinkRender: checked })}
+          />
+          <SwitchItem
+            id={id('enable-chinese')}
+            label={t('shortChinese')}
+            title={t('enableChineseInfo')}
+            checked={settings.chinesePrompt}
+            onChange={(checked) => persist({ chinesePrompt: checked })}
+          />
+          <Segmented
+            label={t('thinkModeLabel')}
+            value={settings.thinkMode}
+            disabled={!settings.thinkRender}
+            options={[
+              { id: 'auto-collapse', label: t('thinkModeAuto') },
+              { id: 'keep-expanded', label: t('thinkModeKeep') },
+            ]}
+            onChange={(value) => persist({ thinkMode: value === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse' })}
+          />
+        </div>
+      </Group>
+
+      {/* 3. 动效（整合自 dsh-client-ui-custom；读写本插件自己的设置契约） */}
+      <Group title={t('groupMotion')}>
+        <div className="dsws-rowline">
+          <SwitchItem
+            id={id('motion-transcript')}
+            label={t('motionTranscript')}
+            title={t('motionTranscriptInfo')}
+            checked={settings.motionEnabled}
+            onChange={(checked) => persist({ motionEnabled: checked })}
+          />
+          <select
+            className="dsws-select"
+            title={t('motionStyleTranscriptInfo')}
+            value={settings.motionStyle}
+            disabled={!settings.motionEnabled}
+            onChange={(event) => persist({ motionStyle: event.target.value as MotionStyle })}
+          >
+            {MOTION_STYLES.map((style) => (
+              <option key={style} value={style}>{t(TRANSCRIPT_STYLE_LABELS[style])}</option>
+            ))}
+          </select>
+          <SwitchItem
+            id={id('motion-sidebar')}
+            label={t('motionSidebar')}
+            title={t('motionSidebarInfo')}
+            checked={settings.sidebarMotionEnabled}
+            onChange={(checked) => persist({ sidebarMotionEnabled: checked })}
+          />
+          <select
+            className="dsws-select"
+            title={t('motionStyleSidebarInfo')}
+            value={settings.sidebarMotionStyle}
+            disabled={!settings.sidebarMotionEnabled}
+            onChange={(event) => persist({ sidebarMotionStyle: event.target.value as SidebarMotionStyle })}
+          >
+            {SIDEBAR_MOTION_STYLES.map((style) => (
+              <option key={style} value={style}>{t(SIDEBAR_STYLE_LABELS[style])}</option>
+            ))}
+          </select>
+          <SwitchItem
+            id={id('motion-new-chat')}
+            label={t('motionNewChat')}
+            title={t('motionNewChatInfo')}
+            checked={settings.newChatMotionEnabled}
+            onChange={(checked) => persist({ newChatMotionEnabled: checked })}
+          />
+          <select
+            className="dsws-select"
+            title={t('motionStyleNewChatInfo')}
+            value={settings.newChatMotionStyle}
+            disabled={!settings.newChatMotionEnabled}
+            onChange={(event) => persist({ newChatMotionStyle: event.target.value as NewChatMotionStyle })}
+          >
+            {NEW_CHAT_MOTION_STYLES.map((style) => (
+              <option key={style} value={style}>{t(NEW_CHAT_STYLE_LABELS[style])}</option>
+            ))}
+          </select>
+          <SwitchItem
+            id={id('motion-settings')}
+            label={t('motionSettings')}
+            title={t('motionSettingsInfo')}
+            checked={settings.settingsMotionEnabled}
+            onChange={(checked) => persist({ settingsMotionEnabled: checked })}
+          />
+          <div className="dsws-seg-inline">
+            <span className="dsws-seg-label">{t('motionPreset')}</span>
+            <div className="dsws-seg">
+              {MOTION_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={matchesPreset(preset.id) ? 'on' : undefined}
+                  title={t(PRESET_INFO[preset.id])}
+                  onClick={() => persist({ ...preset.config })}
+                >
+                  {t(PRESET_LABELS[preset.id])}
+                </button>
+              ))}
             </div>
-          </>
-        )}
-      </Card>
-
-      {/* 3. 输出语言 */}
-      <Card title={t('groupLanguage')}>
-        <SwitchRow
-          id={id('enable-chinese')}
-          label={t('enableChinese')}
-          info={t('enableChineseInfo')}
-          checked={settings.chinesePrompt}
-          onChange={(checked) => persist({ chinesePrompt: checked })}
-        />
-      </Card>
+          </div>
+        </div>
+      </Group>
 
       {/* 4. 界面 */}
-      <Card title={t('groupUi')}>
-        <SwitchRow
-          id={id('enable-localize')}
-          label={t('enableLocalize')}
-          info={t('enableLocalizeInfo')}
-          checked={settings.uiLocalize}
-          onChange={(checked) => persist({ uiLocalize: checked })}
-        />
-        <SwitchRow
-          id={id('enable-resize')}
-          label={t('enableResize')}
-          info={t('enableResizeInfo')}
-          checked={settings.dialogResize}
-          onChange={(checked) => persist({ dialogResize: checked })}
-        />
-        <SwitchRow
-          id={id('enable-nav-scroll')}
-          label={t('enableNavScroll')}
-          info={t('enableNavScrollInfo')}
-          checked={settings.navScroll}
-          onChange={(checked) => persist({ navScroll: checked })}
-        />
-        <SwitchRow
-          id={id('enable-session-delete')}
-          label={t('sessionDeleteLabel')}
-          info={t('sessionDeleteInfo')}
-          checked={settings.sessionDelete}
-          onChange={(checked) => persist({ sessionDelete: checked })}
-        />
-      </Card>
+      <Group title={t('groupUi')}>
+        <div className="dsws-rowline">
+          <SwitchItem
+            id={id('enable-localize')}
+            label={t('shortLocalize')}
+            title={t('enableLocalizeInfo')}
+            checked={settings.uiLocalize}
+            onChange={(checked) => persist({ uiLocalize: checked })}
+          />
+          <SwitchItem
+            id={id('enable-resize')}
+            label={t('shortResize')}
+            title={t('enableResizeInfo')}
+            checked={settings.dialogResize}
+            onChange={(checked) => persist({ dialogResize: checked })}
+          />
+          <SwitchItem
+            id={id('enable-nav-scroll')}
+            label={t('shortNavScroll')}
+            title={t('enableNavScrollInfo')}
+            checked={settings.navScroll}
+            onChange={(checked) => persist({ navScroll: checked })}
+          />
+          <SwitchItem
+            id={id('enable-session-delete')}
+            label={t('shortSessionDelete')}
+            title={t('sessionDeleteInfo')}
+            checked={settings.sessionDelete}
+            onChange={(checked) => persist({ sessionDelete: checked })}
+          />
+          <SwitchItem
+            id={id('enable-ws-tabs')}
+            label={t('shortWorkspaceTabs')}
+            title={t('enableWsTabsInfo')}
+            checked={settings.workspaceTabs}
+            onChange={(checked) => persist({ workspaceTabs: checked })}
+          />
+        </div>
+      </Group>
 
-      {/* 5. 工作区分页（v0.6.0） */}
-      <Card title={t('groupWorkspace')}>
-        <SwitchRow
-          id={id('enable-ws-tabs')}
-          label={t('enableWsTabs')}
-          info={t('enableWsTabsInfo')}
-          checked={settings.workspaceTabs}
-          onChange={(checked) => persist({ workspaceTabs: checked })}
-        />
-      </Card>
-
-      {/* 6. 打开方式（Open With，整合自 dsh-plugin-open-with） */}
-      <Card title={t('owGroupTitle')}>
-        <SwitchRow
-          id={id('enable-ow-settings')}
-          label={t('owSettingsLabel')}
-          info={t('owSettingsInfo')}
-          checked={settings.openWithSettings}
-          onChange={(checked) => persist({ openWithSettings: checked })}
-        />
-        <SwitchRow
-          id={id('enable-ow-button')}
-          label={t('owButtonLabel')}
-          info={t('owButtonInfo')}
-          checked={settings.openWithButton}
-          onChange={(checked) => persist({ openWithButton: checked })}
-        />
-        {settings.openWithSettings && (
-          <div style={{ marginTop: 2 }}>
+      {/* 5. 打开方式（Open With，整合自 dsh-plugin-open-with） */}
+      <Group title={t('owGroupTitle')}>
+        <div className="dsws-rowline">
+          <SwitchItem
+            id={id('enable-ow-settings')}
+            label={t('shortOpenWithSettings')}
+            title={t('owSettingsInfo')}
+            checked={settings.openWithSettings}
+            onChange={(checked) => persist({ openWithSettings: checked })}
+          />
+          <SwitchItem
+            id={id('enable-ow-button')}
+            label={t('shortOpenWithButton')}
+            title={t('owButtonInfo')}
+            checked={settings.openWithButton}
+            onChange={(checked) => persist({ openWithButton: checked })}
+          />
+          {settings.openWithSettings && (
+            <div className="dsws-fold-inline">
+              <button type="button" className="dsws-mini" onClick={() => setOwOpen((open) => !open)}>
+                {owOpen ? t('owCollapse') : t('owManage')}
+              </button>
+            </div>
+          )}
+        </div>
+        {settings.openWithSettings && owOpen && (
+          <div className="dsws-ow-body">
             <OpenWithPanel
               t={t}
               readSettings={async () => (await owReadSettings()) as OpenWithSettingsData | null}
@@ -354,7 +488,7 @@ export function WidthSliderSettings({
             />
           </div>
         )}
-      </Card>
+      </Group>
     </div>
   )
 }

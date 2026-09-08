@@ -65,6 +65,55 @@ export interface WidthSliderKey {
   enableWsTabsInfo: string
   resetAllLabel: string
   resetAllInfo: string
+  // ── v0.7.0 紧凑单行排版 ──
+  pageTitle: string
+  pageSubtitle: string
+  groupWidthShort: string
+  groupThinkOutput: string
+  shortEnableWidth: string
+  shortThink: string
+  shortChinese: string
+  shortLocalize: string
+  shortResize: string
+  shortNavScroll: string
+  shortSessionDelete: string
+  shortWorkspaceTabs: string
+  shortOpenWithSettings: string
+  shortOpenWithButton: string
+  owManage: string
+  owCollapse: string
+  // ── v0.8.0 动效组（读写动效插件 ui-custom 命名空间）──
+  groupMotion: string
+  motionTranscript: string
+  motionSidebar: string
+  motionNewChat: string
+  motionSettings: string
+  motionTranscriptInfo: string
+  motionSidebarInfo: string
+  motionNewChatInfo: string
+  motionSettingsInfo: string
+  motionStyleTranscriptInfo: string
+  motionStyleSidebarInfo: string
+  motionStyleNewChatInfo: string
+  motionPreset: string
+  motionPresetFluid: string
+  motionPresetElegant: string
+  motionPresetMinimal: string
+  motionPresetFluidInfo: string
+  motionPresetElegantInfo: string
+  motionPresetMinimalInfo: string
+  styleFadeUp: string
+  styleFade: string
+  styleRiseScale: string
+  styleSlideIn: string
+  styleBlurIn: string
+  styleScaleIn: string
+  styleSlideLeft: string
+  styleExpand: string
+  styleSlideDown: string
+  styleReveal: string
+  styleBloom: string
+  styleZoom: string
 }
 
 const zh: Record<keyof WidthSliderKey, string> = {
@@ -132,6 +181,53 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableWsTabsInfo: '侧栏「工作区」标题位置改为分组页签：固定「默认」显示未分组的直属工作区与官方未分组会话；点右侧＋新建分组页签（文件夹）并命名；工作区行的操作菜单新增四字项「分配标签」，可把该工作区放进任意页签或移回默认；在其他页签新建工作区会自动归入当前页签；删除页签时其中工作区自动回到默认。',
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
+  pageTitle: '宽度滑块与界面增强',
+  pageSubtitle: '11 项开关 · 改动即时生效',
+  groupWidthShort: '对话宽度',
+  groupThinkOutput: '思考与输出',
+  shortEnableWidth: '启用对话宽度滑块',
+  shortThink: '思考块增强渲染',
+  shortChinese: '思考/回复强制中文',
+  shortLocalize: '界面中文化',
+  shortResize: '弹窗可拖拽',
+  shortNavScroll: 'tab 栏滚动',
+  shortSessionDelete: '会话删除',
+  shortWorkspaceTabs: '工作区分页',
+  shortOpenWithSettings: 'Open With 设置',
+  shortOpenWithButton: '头部打开按钮',
+  owManage: '管理',
+  owCollapse: '收起',
+  groupMotion: '动效',
+  motionTranscript: '对话入场',
+  motionSidebar: '侧边栏',
+  motionNewChat: '新建对话',
+  motionSettings: '设置界面',
+  motionTranscriptInfo: '载入或切换对话时，消息以动效出现而不是瞬间跳出；关闭后恢复原生表现。',
+  motionSidebarInfo: '打开 Web 时侧边栏树逐项出现，展开工作区时对话框浮现。',
+  motionNewChatInfo: '新建对话时，欢迎界面和输入区淡入出现。',
+  motionSettingsInfo: '打开设置时面板从设置按钮处展开，切换左侧标签时页面内容淡入，关闭时面板缩回。',
+  motionStyleTranscriptInfo: '对话内容的出现方式。',
+  motionStyleSidebarInfo: '侧边栏会话树的出现方式，与对话动效独立选择。',
+  motionStyleNewChatInfo: '新建对话时欢迎界面的出现方式。',
+  motionPreset: '预设',
+  motionPresetFluid: '流畅',
+  motionPresetElegant: '优雅',
+  motionPresetMinimal: '极简',
+  motionPresetFluidInfo: '层叠上浮与滑动，明快活泼。',
+  motionPresetElegantInfo: '柔和模糊与绽放，安静高级。',
+  motionPresetMinimalInfo: '仅保留轻微淡入，近乎无感。',
+  styleFadeUp: '淡入上浮',
+  styleFade: '轻柔淡入',
+  styleRiseScale: '上浮放大',
+  styleSlideIn: '右侧滑入',
+  styleBlurIn: '模糊显影',
+  styleScaleIn: '轻盈缩放',
+  styleSlideLeft: '左侧滑入',
+  styleExpand: '纵向展开',
+  styleSlideDown: '自上而下',
+  styleReveal: '轻柔显影',
+  styleBloom: '柔和绽放',
+  styleZoom: '柔和缩放',
 }
 
 const en: Record<keyof WidthSliderKey, string> = {
@@ -199,6 +295,53 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableWsTabsInfo: 'Turns the sidebar Workspaces heading into group tabs: a fixed Default tab shows direct workspaces and ungrouped sessions; use ＋ to create named group tabs (folders); each workspace row menu gains a four-character Assign tag item to move it into any tab or back to Default; a workspace created while on another tab joins that tab automatically; deleting a tab moves its workspaces back to Default.',
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
+  pageTitle: 'Width slider & interface enhancements',
+  pageSubtitle: '11 switches · changes apply instantly',
+  groupWidthShort: 'Conversation width',
+  groupThinkOutput: 'Thinking & output',
+  shortEnableWidth: 'Conversation width slider',
+  shortThink: 'Thinking block rendering',
+  shortChinese: 'Force Chinese output',
+  shortLocalize: 'Localize interface',
+  shortResize: 'Draggable dialog',
+  shortNavScroll: 'Scrollable nav',
+  shortSessionDelete: 'Session delete',
+  shortWorkspaceTabs: 'Workspace tabs',
+  shortOpenWithSettings: 'Open With settings',
+  shortOpenWithButton: 'Header open button',
+  owManage: 'Manage',
+  owCollapse: 'Collapse',
+  groupMotion: 'Motion',
+  motionTranscript: 'Conversation entrance',
+  motionSidebar: 'Sidebar',
+  motionNewChat: 'New conversation',
+  motionSettings: 'Settings panel',
+  motionTranscriptInfo: 'Messages arrive with a motion effect when a conversation loads or switches; off restores the stock behavior.',
+  motionSidebarInfo: 'The sidebar tree cascades in on web load; workspace rows fade in when their group expands.',
+  motionNewChatInfo: 'A brand-new conversation welcome dialog and composer fade in.',
+  motionSettingsInfo: 'The settings dialog grows out of the settings button, page content fades in on nav switch, and the panel shrinks back on close.',
+  motionStyleTranscriptInfo: 'How conversation content arrives.',
+  motionStyleSidebarInfo: 'How the sidebar session tree arrives, independent of the transcript style.',
+  motionStyleNewChatInfo: 'How the welcome dialog of a new conversation arrives.',
+  motionPreset: 'Presets',
+  motionPresetFluid: 'Fluid',
+  motionPresetElegant: 'Elegant',
+  motionPresetMinimal: 'Minimal',
+  motionPresetFluidInfo: 'Cascading rise and slide, bright and lively.',
+  motionPresetElegantInfo: 'Soft blur and bloom, quiet and refined.',
+  motionPresetMinimalInfo: 'Barely-there fades only, almost imperceptible.',
+  styleFadeUp: 'Fade up',
+  styleFade: 'Gentle fade',
+  styleRiseScale: 'Rise and scale',
+  styleSlideIn: 'Slide in',
+  styleBlurIn: 'Blur in',
+  styleScaleIn: 'Gentle scale',
+  styleSlideLeft: 'Slide in from left',
+  styleExpand: 'Expand',
+  styleSlideDown: 'Drop in',
+  styleReveal: 'Soft reveal',
+  styleBloom: 'Gentle bloom',
+  styleZoom: 'Soft zoom',
 }
 
 export { zh, en }

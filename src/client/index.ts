@@ -29,6 +29,9 @@ import { installWorkspaceTabs } from './workspaceTabs.tsx'
 import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
 import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
+import { installConversationEntrance, type MotionEngineState } from './motion/motion.ts'
+import { installSettingsMotion } from './motion/settingsMotion.ts'
+import { MOTION_CSS } from './motion/styles.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -109,6 +112,86 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
     ),
   )
   disposers.push(disposeInject)
+  return () => {
+    for (const dispose of disposers) {
+      try {
+        dispose()
+      } catch { /* 清理异常忽略 */ }
+    }
+  }
+}
+
+// ── 动效（整合自 dsh-client-ui-custom）────────────────────────────────
+
+/**
+ * 从 config store + 会话账本派生引擎状态；空白会话决定新建对话入场是否播放。
+ * @param ctx - client 上下文（读会话账本的 current/blank）。
+ */
+function motionStateOf(ctx: RpcClientContext): MotionEngineState {
+  const settings = getSettings()
+  const snapshot = (ctx as unknown as {
+    sessions: {
+      list: { getSnapshot: () => { current?: string; byId: Record<string, { blank?: boolean } | undefined> } }
+    }
+  }).sessions.list.getSnapshot()
+  const blank = snapshot.current !== undefined && snapshot.byId[snapshot.current]?.blank === true
+  return {
+    transcript: settings.motionEnabled,
+    sidebar: settings.sidebarMotionEnabled,
+    newChat: settings.newChatMotionEnabled,
+    style: settings.motionStyle,
+    sidebarStyle: settings.sidebarMotionStyle,
+    newChatStyle: settings.newChatMotionStyle,
+    blank,
+  }
+}
+
+/**
+ * 动效安装器（任一动效开关开启时安装；全部关闭即整体卸载）：
+ * - 注入动效样式表；
+ * - 对话/侧边栏/新建对话入场引擎（installConversationEntrance）；
+ * - 设置面板动效引擎（installSettingsMotion）；
+ * - 会话切换信号：宿主整段重挂载对话时强制重放入场。
+ */
+function installMotionFeature(ctx: RpcClientContext): Disposer {
+  const disposers: Disposer[] = []
+
+  const style = document.createElement('style')
+  style.id = 'dsh-plugin-width-slider-motion-styles'
+  style.textContent = MOTION_CSS
+  document.getElementById(style.id)?.remove()
+  document.head.appendChild(style)
+  disposers.push(() => { style.remove() })
+
+  const engine = installConversationEntrance({
+    getState: () => motionStateOf(ctx),
+    subscribe: (listener) => {
+      const offSettings = onSettingsChanged(listener)
+      const offSessions = ctx.sessions.list.subscribe(listener)
+      return () => {
+        offSettings()
+        offSessions()
+      }
+    },
+  })
+  disposers.push(engine.dispose)
+
+  const settingsMotion = installSettingsMotion({
+    enabled: () => getSettings().settingsMotionEnabled,
+    subscribe: (listener) => onSettingsChanged(listener),
+  })
+  disposers.push(settingsMotion.dispose)
+
+  let lastSessionId: string | undefined
+  const syncSession = (): void => {
+    const current = ctx.sessions.list.getSnapshot().current
+    if (current === lastSessionId) return
+    lastSessionId = current
+    if (current !== undefined) engine.notifySessionSwitch()
+  }
+  syncSession()
+  disposers.push(ctx.sessions.list.subscribe(syncSession))
+
   return () => {
     for (const dispose of disposers) {
       try {
@@ -281,7 +364,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel' | 'wsTabs'
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel' | 'wsTabs' | 'motion'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -304,13 +387,16 @@ export function apply(ctx: RpcClientContext): void {
       // 工作区分页：组件常驻（启动即包裹一次），开关只切换 wrapper 内 enabled
       // 状态（显示标签/过滤），不再反复安装/卸载组件——开关即时生效。
       ensure('wsTabs', true, () => installWorkspaceTabs(ctx as never))
+      // 动效：任一开关开启即安装引擎（引擎内部再按各开关分别门控）。
+      ensure('motion', s.motionEnabled || s.sidebarMotionEnabled || s.newChatMotionEnabled || s.settingsMotionEnabled,
+        () => installMotionFeature(ctx))
     }
 
     const unsubscribe = onSettingsChanged(sync)
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel', 'wsTabs'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel', 'wsTabs', 'motion'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

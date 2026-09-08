@@ -4,3 +4,5 @@ lib/
 my-dsh-plugins-main
 viz/
 dsh-im-connect-main
+dsh-src/
+dsh-client-ui-custom-main/

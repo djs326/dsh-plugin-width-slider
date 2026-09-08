@@ -12,6 +12,10 @@
  * 3. TRANSPARENT OVERLAY: in preview mode, hide the settings overlay layer
  *    ([data-shell-overlay] opacity:0) so the conversation area is visible
  *    behind the floating slider.  Restored on exit.
+ *
+ * Layout (v0.7.0): the control renders inline inside the settings row
+ * (display: contents) — follow toggle, slider track and the px readout share
+ * the group's single row.  Styles live in WidthSliderSettings.tsx (.dsws-*).
  */
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -32,7 +36,8 @@ import {
 // ── Panel slider geometry ────────────────────────────────────────────────────
 // The knob diameter equals the track height so the knob fully hides the fill
 // bar's rounded end — no flat edge ever shows through the round knob.
-const PANEL_THUMB_R = 10
+// 8px radius = the 16px track/knob height declared by .dsws-track / .dsws-knob.
+const PANEL_THUMB_R = 8
 /** Track height equals the knob diameter (2 * radius). */
 const PANEL_TRACK_H = PANEL_THUMB_R * 2
 /** Overlay preview slider knob radius in px (28px knob / 2). */
@@ -337,86 +342,6 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     }
   }, [follow])
 
-  // ── render: in-panel slider ──
-
-  const sliderContent = (
-    <>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-          marginBottom: 8,
-          fontSize: 13,
-          lineHeight: '20px',
-          color: 'var(--dsw-alias-label-primary, #e0e0e0)',
-        }}
-      >
-        <span style={{ fontWeight: 500 }}>{t('label')}</span>
-        <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--dsw-alias-label-caption, #999)' }}>
-          {Math.round(value)}{t('unit')}
-        </span>
-      </div>
-
-      <div
-        ref={panelTrackRef}
-        onPointerDown={onPointerDown}
-        style={{
-          position: 'relative',
-          height: PANEL_TRACK_H,
-          cursor: 'col-resize',
-          userSelect: 'none',
-          touchAction: 'none',
-          background: 'var(--dsw-alias-interactive-bg-hover, #333)',
-          borderRadius: PANEL_THUMB_R,
-        }}
-      >
-        {/*
-          Fill bar: left edge at the track left, right edge at the knob center
-          plus one thumb radius, so the fill's right end is a semicircle whose
-          center aligns with the knob center.  The knob (same radius) fully
-          covers that semicircle — no flat edge ever shows through.
-        */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0, bottom: 0, left: 0,
-            width: `calc(${pct}% + ${PANEL_THUMB_R}px)`,
-            background: 'var(--dsw-alias-state-business-primary, #4f9eff)',
-            borderRadius: PANEL_THUMB_R,
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: `${pct}%`,
-            transform: 'translate(-50%, -50%)',
-            width: PANEL_TRACK_H, height: PANEL_TRACK_H,
-            borderRadius: '50%',
-            background: 'var(--dsw-alias-state-business-primary, #4f9eff)',
-            border: '2px solid var(--dsw-alias-bg-base, #1a1a1a)',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-            pointerEvents: 'none',
-          }}
-        />
-      </div>
-
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 12,
-          lineHeight: '18px',
-          color: 'var(--dsw-alias-label-caption, #888)',
-        }}
-      >
-        {t('info')}
-      </div>
-    </>
-  )
-
   // ── render: preview overlay (portal) ──
 
   const previewOverlay = preview && createPortal(
@@ -542,74 +467,49 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     document.body,
   )
 
+  // ── render: 行内控件（跟随开关 + 滑块 + 数值）──
+  // 根节点 display:contents，让子元素直接参与设置页那一行的 flex 布局。
+
   return (
-    <div style={{ padding: '4px 0', ...(disabled ? { opacity: 0.55, pointerEvents: 'none', userSelect: 'none' } : {}) }}>
-      {disabled && (
-        <div style={{ marginBottom: 8, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-caption, #888)' }}>
-          {t('disabledHint')}
-        </div>
-      )}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 10,
-          fontSize: 13,
-          lineHeight: '20px',
-          color: 'var(--dsw-alias-label-primary, #e0e0e0)',
-        }}
+    <div className="dsws-contents">
+      <label
+        className={'dsws-item' + (disabled ? ' is-disabled' : '')}
+        title={t('followInfo')}
       >
+        <span className="dsws-label">{t('followLabel')}</span>
         <input
           id="dsh-plugin-width-slider-follow"
+          className="dsws-sw"
           type="checkbox"
           checked={follow}
+          disabled={disabled}
           onChange={onToggleFollow}
-          style={{
-            margin: 0,
-            width: 15,
-            height: 15,
-            accentColor: 'var(--dsw-alias-state-business-primary, #4f9eff)',
-            cursor: 'pointer',
-          }}
         />
-        <label
-          htmlFor="dsh-plugin-width-slider-follow"
-          style={{ cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}
-        >
-          {t('followLabel')}
-        </label>
-        {follow && (
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontVariantNumeric: 'tabular-nums',
-              color: 'var(--dsw-alias-label-caption, #999)',
-            }}
-          >
+      </label>
+      {follow
+        ? (
+          <span className="dsws-num" title={t('followInfo')}>
             {Math.round(column)}{t('unit')}
           </span>
+        )
+        : (
+          <div className={'dsws-slider-inline' + (disabled ? ' is-disabled' : '')} title={t('info')}>
+            <div ref={panelTrackRef} className="dsws-track" onPointerDown={onPointerDown}>
+              {/* Fill bar: left edge at the track left, right edge at the knob
+                  center plus one thumb radius, so the fill's right end is a
+                  semicircle whose center aligns with the knob center.  The knob
+                  (same radius) fully covers it — no flat edge shows through. */}
+              <div
+                className="dsws-fill"
+                style={{ width: `calc(${pct}% + ${PANEL_THUMB_R}px)` }}
+              />
+              <div className="dsws-knob" style={{ left: `${pct}%` }} />
+            </div>
+            <span className="dsws-num">{Math.round(value)}{t('unit')}</span>
+          </div>
         )}
-      </div>
-      {follow ? (
-        <div
-          style={{
-            fontSize: 12,
-            lineHeight: '18px',
-            color: 'var(--dsw-alias-label-caption, #888)',
-          }}
-        >
-          {t('followInfo')}
-        </div>
-      ) : (
-        <>
-          {sliderContent}
-          {preview && previewOverlay}
-        </>
-      )}
-      {preview && (
-        <style>{`body{overflow:hidden!important}`}</style>
-      )}
+      {preview && previewOverlay}
+      {preview && <style>{'body{overflow:hidden!important}'}</style>}
     </div>
   )
 }

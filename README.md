@@ -45,6 +45,7 @@
 | Open With 设置 | 总控页管理打开项：预设/自定义、组内拖拽排序、设为当前、隐藏、添加/编辑/删除；改动即时同步到已挂载的头部按钮（含其它窗口） | 开 |
 | 会话删除 | 会话行 ⋯ 菜单新增"删除会话"项：二次确认后永久删除会话及数据（官方不支持删除，由本插件补全） | 开 |
 | 工作区分页 | 官方侧栏「工作区」标题变为页签栏：固定「默认」页签 + 可新建/重命名/删除的命名页签（文件夹）；工作区唯一归属，行菜单「分配标签」移入任意页签或回默认；删除页签其中工作区自动回默认；在其它页签新建工作区自动归入该页签；重启后回到默认页签 | 开 |
+| 动效 | 对话入场 / 侧边栏 / 新建对话 / 设置界面四组入场动效，各带独立样式选择（共 12 种），另有流畅 / 优雅 / 极简三套一键预设；整合自 [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom) | 全开 |
 
 开关在 DSH 设置 → **对话宽度（Width Slider）** 区块内的功能总控页操作，改动即时生效、重启保留。
 
@@ -81,6 +82,19 @@ dsh-plugin-open-with**。
 **首次使用**：默认自带 VS Code / 终端 / PowerShell / 资源管理器四项，
 点对话头部的打开按钮即可在当前目录启动；想加其它程序，到设置 →
 对话宽度 → 打开方式里点"添加"，填应用名称与程序路径（.exe）即可。
+
+## 与 dsh-client-ui-custom 的关系
+
+从 v0.8.0 开始，参考的动效插件
+[dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom)
+（对话入场 / 侧边栏 / 新建对话 / 设置面板四组动效与三套预设）已整体并入本
+插件，设置项收进本插件的功能总控页。**装了本插件就不用再装
+dsh-client-ui-custom**：若两者同时启用，两套引擎会对同一批 DOM 各自动画
+一次，效果会叠加，请把动效插件停用或卸载。
+
+动效设置存在本插件自己的 settings.json 里（不再占用上游的 ui-custom 设置
+命名空间）；动效插件的引擎源码按 MIT 许可整合，版权声明见
+[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ---
 
@@ -208,6 +222,7 @@ dsh-plugin-width-slider/
 | 界面中文化 | MutationObserver 精准替换「完全等于」词表的叶子文本节点（排除代码/输入区） |
 | 面板补丁 | body 观察器探测 `[role=dialog][aria-modal]` + `> nav` 语义锚点（不依赖 hash 类名），失效自动跳过 |
 | 配置 | 功能开关经 `/width-slider` RPC（loopback 围栏）读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；Open With 数据经 `/open-with` RPC 存 `$DSH_HOME/storages/dsh-open-with/settings.json`（与官方/本地修改版共用，停用即无缝保留）；client 端 config store 热切换 |
+| 动效 | 命令式 Web Animations（`replayEntrance`）而非 CSS @starting-style：宿主挂载行/面板时已强制过一次样式解析，声明式起始态不会生效；观察 `[data-chat-anchor-key]` 消息行与 `[role="tree"] [role="treeitem"]` 侧栏行，load 批按文档序错峰入场；设置面板动效拦截三条关闭路径，先让真实面板缩小再放行 |
 | 性能 | 列宽在 `pointerdown` 时快照；宽度更新 rAF 节流，拖动不卡顿 |
 
 ---
@@ -245,6 +260,7 @@ dsh-plugin-width-slider/
 │   │   └── sessionDeleteService.ts  # 会话删除 host 删除链（v0.5.0：停 agent/删目录/投影缓存/workspace 记账）
 │   ├── shared/
 │   │   ├── settings.ts              # 功能开关契约唯一真源（host/client 共用）
+│   │   ├── motionSettings.ts        # 动效样式 id / 默认值 / 三套预设（整合自 dsh-client-ui-custom）
 │   │   └── dshHome.ts               # $DSH_HOME 解析
 │   └── client/
 │       ├── index.ts                 # Client 端入口：locale + 受控功能生命周期（开关驱动安装/卸载 + 宽度启动恢复 + 工作区分页安装）
@@ -262,6 +278,11 @@ dsh-plugin-width-slider/
 │       ├── think/
 │       │   ├── thinkView.tsx        # 思考块 + assistant-step 渲染器（整合上游，dsh-ws- 前缀）
 │       │   └── uiLocalize.ts        # 界面中文化词表 + MutationObserver（整合上游）
+│       ├── motion/
+│       │   ├── motion.ts            # 对话/侧边栏/新建对话入场引擎（整合 dsh-client-ui-custom）
+│       │   ├── settingsMotion.ts    # 设置面板入场/关闭动效引擎（整合 dsh-client-ui-custom）
+│       │   ├── animate.ts           # 命令式入场原语（replayEntrance 等）
+│       │   └── styles.ts            # 动效注入样式表
 │       ├── lang.ts                  # 界面语言判定（中文化门控/双语文本）
 │       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案
@@ -278,6 +299,7 @@ dsh-plugin-width-slider/
 
 - [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins)（baosfeng 的 my-dsh-plugins 仓库）—— 能力整合（v0.3.0）
 - [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with) —— 能力整合（v0.4.0）
+- [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom)（Yoli-mi）—— 动效引擎整合（v0.8.0）
 - [dsh-plugin-session-delete](https://github.com/lsz-asd/dsh-plugin-session-delete) —— 会话删除链参考（v0.5.0；client 端修正其按标题反查会删错会话的风险，改为行级 id）
 - [dsh-archived-chats](https://github.com/Ultronen/dsh-archived-chats) —— 归档会话删除链/记账清理参考（v0.5.0）
 

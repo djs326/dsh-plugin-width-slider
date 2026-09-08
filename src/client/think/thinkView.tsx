@@ -10,17 +10,16 @@
  *    DisclosureRow + IconThinkOutline14，正文纯文本；样式逐条对齐官方
  *    ReasoningRow.module.css（折叠高度、扫描动画、字号变量、summary 跟随）。
  *    官方类名是 CSS 模块 hash、无法跨包复用，故用同名自有类 + 相同声明复刻；
- * 5. 正式回复 text 块走官方 primitives 的 MarkdownText（官方 DOM 结构，
- *    含 labels / fileMentions 透传），本插件不自带 Markdown 渲染、不接管
- *    围栏渲染——围栏交给 genui / dsh-mermaid-render 等专门插件；组件缺失时
- *    降级纯文本。
+ * 5. 正式回复 text 块走官方 primitives 的 MarkdownText（官方 DOM 结构 +
+ *    labels 文案），本插件不自带 Markdown 渲染、不接管围栏渲染——围栏交给
+ *    genui / dsh-mermaid-render 等专门插件；组件缺失时降级纯文本。
  *
  * 渲染契约：替换官方 conversation.chat.node 的 assistant-step 渲染器，只为
  * 思考块提供展开/收起交互；image 块相邻分组复用宿主 renderMessageImages；
  * tool-call 块由独立节点渲染（返回 null）。
  */
 
-import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { Component, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { isZhInterface, pickText } from '../lang.ts'
 
 // ── 样式（取值对齐官方 ReasoningRow / AssistantMarkdown 的 CSS 模块）──
@@ -61,6 +60,7 @@ type MarkdownTextComponent = ComponentType<{
   text: string
   streaming?: boolean
   labels?: MarkdownLabels
+  /** 官方期望的是「已解析的 mentions 对象」，不是 slot 注入的解析函数。 */
   fileMentions?: unknown
 }>
 
@@ -124,14 +124,40 @@ function stripControlTags(text: string): string {
 
 // ── 文本渲染（官方 MarkdownText；缺失时降级纯文本）────────────────────
 // memo：流式渲染时内容未变的 block（同 key 复用实例）跳过 strip 与
-// MarkdownText 重解析，减少每帧全量工作。zh / fileMentions 参与比较：
-// 界面语言切换与文件提及解析变化都必须触发重渲染。
+// MarkdownText 重解析，减少每帧全量工作。zh 参与比较：界面语言切换必须
+// 触发重渲染（memo 只比较 props，语言不在 props 里就会被挡住）。
+// 注意：不要向官方 MarkdownText 透传 slot 的 fileMentions——slot 给的是
+// `(owner) => mentions` 函数，官方 MarkdownText 期望的是已解析的 mentions
+// 对象（内部调 fileMentions?.resolve(...)）。直接把函数传进去会抛
+// "fileMentions?.resolve is not a function"，整个 assistant-step 被错误边界
+// 接住（思考块一起失效）。owner 依赖 turn/seq/tail 上下文，插件侧拿不到，
+// 故这里不传（官方在无 owner 时同样不传）。
+/**
+ * 单块错误边界：官方 MarkdownText 抛错时只降级这一块为纯文本，不让整个
+ * assistant-step slot entry 崩溃（曾因透传错误的 fileMentions 导致整条消息
+ * 连思考块一起消失）。
+ */
+class BlockErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: unknown): void {
+    console.warn('[width-slider] 文本渲染失败，已降级为纯文本', error)
+  }
+
+  render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
 const TextRenderer = memo(function TextRenderer({
   text,
   streaming = false,
   zh,
-  fileMentions,
-}: { text: string; streaming?: boolean; zh: boolean; fileMentions?: unknown }) {
+}: { text: string; streaming?: boolean; zh: boolean }) {
   const cleanText = stripControlTags(text)
   // labels 必须引用稳定（官方以引用判断流式渲染缓存是否失效），且随界面语言
   // 重建：DSH 切换语言只改 document.lang，模块级常量不会更新。
@@ -144,7 +170,11 @@ const TextRenderer = memo(function TextRenderer({
   )
   const MarkdownText = resolvePrimitives()?.MarkdownText
   if (MarkdownText !== undefined) {
-    return <MarkdownText text={cleanText} streaming={streaming} labels={labels} fileMentions={fileMentions} />
+    return (
+      <BlockErrorBoundary fallback={<div className="dsh-ws-plain">{cleanText}</div>}>
+        <MarkdownText text={cleanText} streaming={streaming} labels={labels} />
+      </BlockErrorBoundary>
+    )
   }
   return <div className="dsh-ws-plain">{cleanText}</div>
 })
@@ -265,7 +295,6 @@ function renderBlock(
   streaming: boolean,
   last: number,
   zh: boolean,
-  fileMentions?: unknown,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
 ): ReactNode {
@@ -276,13 +305,7 @@ function renderBlock(
     // 尾块标记为 streaming，已定稿的块走 settled 渲染，避免历史消息反复
     // 重建流式渲染器。改动此处前请先确认流式观感。
     return (
-      <TextRenderer
-        key={'t' + i}
-        text={block.text}
-        streaming={streaming && i === last}
-        zh={zh}
-        fileMentions={fileMentions}
-      />
+      <TextRenderer key={'t' + i} text={block.text} streaming={streaming && i === last} zh={zh} />
     )
   }
   if (block.kind === 'reasoning' && typeof block.text === 'string') {
@@ -314,7 +337,6 @@ function renderBlocks(
   blocks: unknown[],
   streaming: boolean,
   zh: boolean,
-  fileMentions?: unknown,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
 ): ReactNode[] {
@@ -323,7 +345,7 @@ function renderBlocks(
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i] as { kind?: string } | null | undefined
     if (!block) continue
-    const el = renderBlock(blocks, i, streaming, last, zh, fileMentions, renderMessageImages, collapseAfterRun)
+    const el = renderBlock(blocks, i, streaming, last, zh, renderMessageImages, collapseAfterRun)
     if (el === null || el === undefined) continue
     if (block.kind === 'image') i = imageGroupEnd(blocks, i)
     rendered.push(el)
@@ -335,8 +357,6 @@ function renderBlocks(
 export interface AssistantStepViewProps {
   node?: { data?: { status?: string; blocks?: unknown[] } } | null
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode
-  /** 官方 slot 注入的文件提及解析器（内联代码里的文件路径变可点击链接）。 */
-  fileMentions?: unknown
   /** true=思考完自动收起（默认）；false=始终展开（上游语义）。 */
   collapseAfterRun?: boolean
 }
@@ -344,7 +364,6 @@ export interface AssistantStepViewProps {
 export function AssistantStepView({
   node,
   renderMessageImages,
-  fileMentions,
   collapseAfterRun = true,
 }: AssistantStepViewProps) {
   const data = node && node.data ? node.data : null
@@ -357,7 +376,7 @@ export function AssistantStepView({
   const blocks = data.blocks as Array<{ kind?: string } | null | undefined>
   const hasContent = blocks.some((b) => b !== null && b !== undefined && b.kind !== 'tool-call')
   if (!(streaming || interrupted === true || hasContent)) return null
-  const rendered = renderBlocks(data.blocks, streaming, isZhInterface(), fileMentions, renderMessageImages, collapseAfterRun)
+  const rendered = renderBlocks(data.blocks, streaming, isZhInterface(), renderMessageImages, collapseAfterRun)
   if (interrupted) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)
   }

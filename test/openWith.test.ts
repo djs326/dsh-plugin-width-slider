@@ -101,14 +101,13 @@ describe('spawnViaStart', () => {
     ({ spawn: () => handle }) as unknown as NonNullable<OpenWithCtx['subprocess']>
 
   it('成功：exitCode 0', async () => {
-    const sp = fakeSp({ pid: 9, done: Promise.resolve({ exitCode: 0 }), collected: { stderr: { readFrom: () => null } } })
+    const sp = fakeSp({ done: Promise.resolve({ exitCode: 0 }), collected: { stderr: { readFrom: () => null } } })
     const result = await spawnViaStart(sp, ['cmd'], 'C:\\Users', 100)
-    expect(result).toEqual({ pid: 9, exitCode: 0, stderr: '', timedOut: false })
+    expect(result).toEqual({ exitCode: 0, stderr: '', timedOut: false })
   })
 
   it('非零退出：回传 exitCode 与 stderr', async () => {
     const sp = fakeSp({
-      pid: 8,
       done: Promise.resolve({ exitCode: 1 }),
       collected: { stderr: { readFrom: () => ({ text: 'boom' }) } },
     })
@@ -121,7 +120,6 @@ describe('spawnViaStart', () => {
   it('超时：判失败并终止挂起的进程', async () => {
     let terminated = false
     const sp = fakeSp({
-      pid: 7,
       done: new Promise(() => {}),
       terminate: () => {
         terminated = true

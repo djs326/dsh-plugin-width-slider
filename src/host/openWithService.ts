@@ -148,11 +148,9 @@ export interface OpenWithCtx {
   }
   connection?: {
     rpc: {
-      /** opts 仅旧版（0.1.1 及之前）用于 loopback 围栏；0.1.2 起被忽略，围栏由服务统一施加。 */
       handle: (
         path: string,
         handler: (endpoint: string, payload: unknown) => Promise<unknown>,
-        opts?: { authority: string },
       ) => () => void
     }
   }
@@ -160,8 +158,6 @@ export interface OpenWithCtx {
 
 type SpawnHandle = {
   done: Promise<unknown>
-  /** 0.1.5 起 SubprocessHandle 不再暴露 pid（0.1.2 及之前为必填 number），取值可能为 undefined。 */
-  pid?: unknown
   collected?: { stdout?: { readFrom: (n: number) => { text?: string } | null }; stderr?: { readFrom: (n: number) => { text?: string } | null } }
   exitCode?: unknown
 }
@@ -266,7 +262,7 @@ export async function spawnViaStart(
   argv: string[],
   cwd: string,
   settleMs: number = START_SETTLE_MS,
-): Promise<{ pid: unknown; exitCode: number | null; stderr: string; timedOut: boolean }> {
+): Promise<{ exitCode: number | null; stderr: string; timedOut: boolean }> {
   const handle = sp.spawn({
     argv,
     cwd,
@@ -287,10 +283,10 @@ export async function spawnViaStart(
     try {
       ;(handle as { terminate?: () => void }).terminate?.()
     } catch { /* 终止失败不影响上报 */ }
-    return { pid: handle.pid, exitCode: null, stderr: '', timedOut: true }
+    return { exitCode: null, stderr: '', timedOut: true }
   }
   const exitCode = typeof outcome.exitCode === 'number' ? outcome.exitCode : null
-  return { pid: handle.pid, exitCode, stderr: handle.collected?.stderr?.readFrom(0)?.text ?? '', timedOut: false }
+  return { exitCode, stderr: handle.collected?.stderr?.readFrom(0)?.text ?? '', timedOut: false }
 }
 
 // ── 图标提取（PowerShell System.Drawing）────────────────────────────
@@ -525,8 +521,8 @@ export async function handleOpenWithEndpoint(ctx: OpenWithCtx, endpoint: string,
       ctx.logger?.error?.('launch target failed', { target: targetStr, exitCode: result.exitCode, stderr: detail })
       return fail('launch-failed', 'start exited with code ' + result.exitCode + (detail !== '' ? ': ' + detail : ''))
     }
-    ctx.logger?.info?.('spawned', { target: targetStr, argv, pid: result.pid })
-    return ok({ launched: true, target: targetStr, pid: result.pid })
+    ctx.logger?.info?.('spawned', { target: targetStr, argv })
+    return ok({ launched: true, target: targetStr })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     ctx.logger?.error?.('launch failed', err)
@@ -542,7 +538,6 @@ export function registerOpenWithRpc(ctx: OpenWithCtx): () => void {
   const handler = ctx.connection?.rpc.handle(
     '/open-with',
     (endpoint: string, payload: unknown) => handleOpenWithEndpoint(ctx, endpoint, payload),
-    { authority: 'loopback' },
   )
   return handler ?? (() => {})
 }

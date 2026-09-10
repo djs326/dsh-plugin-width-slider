@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/dsh-plugin-width-slider.svg)](https://www.npmjs.com/package/dsh-plugin-width-slider)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4.svg)](#环境要求)
-[![DSH](https://img.shields.io/badge/DSH-%E2%89%A5%200.1.1--rc.1-4F9EFF.svg)](#环境要求)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A5%200.1.5--rc.1-4F9EFF.svg)](#环境要求)
 [![Node](https://img.shields.io/badge/node-%5E22.11%20%7C%7C%20%3E%3D24-339933.svg)](#环境要求)
 
 > DSH Desktop 的一体化界面增强插件：对话宽度、思考块、界面中文化、会话与工作区管理、Open With 打开方式与入场动效。
@@ -92,7 +92,7 @@ dsh-plugin-width-slider 面向 DSH Desktop 的日常使用场景，补齐官方�
 | 项目 | 要求 |
 |---|---|
 | 运行环境 | DSH Desktop（DeepSeek Harness 桌面版），Windows 10/11 |
-| DSH 版本 | `>= 0.1.1-rc.1` |
+| DSH 版本 | `>= 0.1.5-rc.1` |
 | Node.js | `^22.11` 或 `>= 24` |
 | 平台 | 仅 `win32` |
 
@@ -289,10 +289,10 @@ Open With 的打开项数据存放在 `dsh-open-with` 存储目录，与官方�
 
 | 项目 | 说明 |
 |---|---|
-| 目标内核 | DSH `0.1.5-rc.1`（DSH Desktop 2.0.8 内置）；`0.1.2-rc.1` 及之后各版契约一致 |
+| 目标内核 | DSH `0.1.5-rc.1`（DSH Desktop 2.0.8 内置）。插件只适配该内核，不为更早版本保留兼容分支 |
 | Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。`connection.rpc.handle` 把 RPC 的 HTTP 路由注册在**调用者 fiber** 上，缺少 `webServer` 声明时加载期抛 `cannot get property "webServer" without inject`，整个插件树加载失败 |
-| RPC 访问围栏 | 由 connection 服务统一施加（可信 Host/Origin + 浏览器认证）；`handle` 的 `authority` 参数自 `0.1.2` 起被忽略，传入无害 |
-| Open With 进程信息 | `0.1.5` 起 `SubprocessHandle` 不再暴露 `pid`，Open With 的上报不再包含 pid；启动、退出码与 stderr 判断不受影响 |
+| RPC 访问围栏 | 由 connection 服务统一施加（可信 Host/Origin + 浏览器认证）；插件不再传 `authority` 参数 |
+| Open With 进程信息 | 该内核对齐的 `SubprocessHandle` 不暴露 `pid`，Open With 的上报不含 pid；启动、退出码与 stderr 判断不受影响 |
 | 已核对稳定的契约 | slot（`conversation.chat.node`、`conversation.session.header.actions`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
 
 ### 验证状态

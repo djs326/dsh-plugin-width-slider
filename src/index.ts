@@ -145,7 +145,6 @@ type RpcContext = Context & {
       handle: (
         path: string,
         handler: (endpoint: string, payload: unknown) => Promise<unknown>,
-        opts?: { authority: string },
       ) => () => void
     }
   }
@@ -198,8 +197,7 @@ export function apply(baseCtx: Context): void {
 
   // 生命周期 2：/width-slider RPC（client 总控页经 ctx.connection.rpc.call
   // 调用 readSettings / writeSettings）。访问围栏由 connection 服务统一施加
-  // （可信 Host/Origin + 浏览器认证）；handle 自 0.1.2 起不再接受 authority
-  // 参数，传入的第三参会被忽略。
+  // （可信 Host/Origin + 浏览器认证）。
   // 写盘与热切换分开处理：文件落盘成功即 ok:true，热切换异常仅告警，
   // 避免"已落盘但返回失败"导致 client 重复提交。
   ctx.effect(
@@ -252,7 +250,6 @@ export function apply(baseCtx: Context): void {
           logger?.warn?.('[width-slider] unknown endpoint', endpoint)
           return { ok: false, error: { code: 'unknown-endpoint', message: 'unknown endpoint: ' + endpoint } }
         },
-        { authority: 'loopback' },
       ) ?? (() => {}),
     'width-slider: rpc handler',
   )

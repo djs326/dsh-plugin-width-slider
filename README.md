@@ -285,6 +285,16 @@ dsh-plugin-width-slider/
 
 Open With 的打开项数据存放在 `dsh-open-with` 存储目录，与官方及本地修改版共用同一文件；停用上游插件后配置无缝保留。
 
+### 运行环境与内核适配
+
+| 项目 | 说明 |
+|---|---|
+| 目标内核 | DSH `0.1.5-rc.1`（DSH Desktop 2.0.8 内置）；`0.1.2-rc.1` 及之后各版契约一致 |
+| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。`connection.rpc.handle` 把 RPC 的 HTTP 路由注册在**调用者 fiber** 上，缺少 `webServer` 声明时加载期抛 `cannot get property "webServer" without inject`，整个插件树加载失败 |
+| RPC 访问围栏 | 由 connection 服务统一施加（可信 Host/Origin + 浏览器认证）；`handle` 的 `authority` 参数自 `0.1.2` 起被忽略，传入无害 |
+| Open With 进程信息 | `0.1.5` 起 `SubprocessHandle` 不再暴露 `pid`，Open With 的上报不再包含 pid；启动、退出码与 stderr 判断不受影响 |
+| 已核对稳定的契约 | slot（`conversation.chat.node`、`conversation.session.header.actions`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
+
 ### 验证状态
 
 | 功能 | 状态 |
@@ -294,6 +304,7 @@ Open With 的打开项数据存放在 `dsh-open-with` 存储目录，与官方�
 | 会话删除、宽度启动恢复、Open With 即时同步 | 已由作者验收 |
 | 工作区分页 | 已由作者验收 |
 | 设置页排版重写与动效整合 | 已通过类型检查、单元测试与构建，待真机验收 |
+| 0.1.5 内核适配（`webServer` 注入声明） | 已通过类型检查、单元测试与构建，待真机验收 |
 
 ### 已知限制
 

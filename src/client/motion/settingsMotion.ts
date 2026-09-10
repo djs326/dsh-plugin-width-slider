@@ -19,7 +19,7 @@
  * the host's class names are CSS-module hashes; nothing in the host markup has
  * to change.
  */
-import { EASE_FADE, EASE_GLIDE, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
+import { EASE_FADE, EASE_GLIDE, EASE_SETTLE, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */
 export const SETTINGS_PANEL_CLASS = 'dsu-settings-panel'
@@ -36,12 +36,12 @@ export const SETTINGS_MASK_CLOSING_CLASS = 'dsu-settings-mask-closing'
 const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
 /** The settings trigger: the shell button that opens the dialog. */
 const TRIGGER_SELECTOR = 'button[aria-haspopup="dialog"]'
-/** Upper bound for the exit transition (motion.module.css: 220ms). */
-const EXIT_TIMEOUT_MS = 320
-/** Page cross-fade duration (ms); the imperative animation supplies it. */
-const PAGE_REPLAY_MS = 240
-/** Panel re-entrance duration when the toggle is switched back on. */
-const PANEL_REPLAY_MS = 340
+/** Upper bound for the exit transition (opacity 160ms + scale 280ms, plus margin). */
+export const EXIT_TIMEOUT_MS = 380
+/** Page cross-fade duration (ms); a lightweight swap, so it sits in the `fast` band. */
+const PAGE_REPLAY_MS = 200
+/** Panel re-entrance duration when the toggle is switched back on; `standard` for a surface this large. */
+const PANEL_REPLAY_MS = 320
 
 /** Page cross-fade frames for the reused content column. */
 const PAGE_FRAMES: readonly Keyframe[] = [
@@ -220,7 +220,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     // transition could see the class, so a declarative start state would never
     // apply - the panel would simply appear.
     dialog.classList.add(SETTINGS_PANEL_CLASS)
-    replayEntrance(dialog, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_GLIDE })
+    replayEntrance(dialog, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SETTLE })
     if (mask !== null) {
       mask.classList.add(SETTINGS_MASK_CLASS)
       replayEntrance(mask, MASK_FRAMES, { duration: MASK_ENTRANCE_MS, easing: EASE_FADE })
@@ -343,7 +343,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     }
     panel.classList.add(SETTINGS_PANEL_CLASS)
     mask?.classList.add(SETTINGS_MASK_CLASS)
-    replayEntrance(panel, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_GLIDE })
+    replayEntrance(panel, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SETTLE })
     const content = contentOf(panel)
     if (content !== null) replayPage(content)
   })

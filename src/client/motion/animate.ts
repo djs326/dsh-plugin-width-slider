@@ -16,6 +16,14 @@
 export const EASE_GLIDE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 /** Easing for opacity-only work. */
 export const EASE_FADE = 'cubic-bezier(0.33, 1, 0.68, 1)'
+/**
+ * Landing curve with a 3% overshoot, written with `linear()` because
+ * `cubic-bezier()` cannot overshoot and settle. Used for travel and scale
+ * entrances so a surface settles into place instead of stopping dead;
+ * opacity-only work keeps EASE_FADE (an overshooting alpha would flicker).
+ * Sample points follow the spring-settle curve in the motion-tokens reference.
+ */
+export const EASE_SETTLE = 'linear(0, 0.32 8%, 0.79 20%, 1.03 30%, 1.01 46%, 1)'
 
 /** Whether the element can run an imperative animation here. */
 export function canAnimate(el: Element): boolean {

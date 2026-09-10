@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  installSettingsMotion, SETTINGS_CLOSING_CLASS, SETTINGS_PAGE_CLASS, SETTINGS_PANEL_CLASS,
+  EXIT_TIMEOUT_MS, installSettingsMotion, SETTINGS_CLOSING_CLASS, SETTINGS_PAGE_CLASS, SETTINGS_PANEL_CLASS,
   type SettingsMotionOptions,
 } from '../src/client/motion/settingsMotion.ts'
 
@@ -15,6 +15,9 @@ beforeEach(() => {
 
 /** Flush the MutationObserver microtask queue. */
 const flushObserver = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
+
+/** Wait out the panel exit transition, with margin; tied to the engine's own bound. */
+const EXIT_WAIT_MS = EXIT_TIMEOUT_MS + 40
 
 /** A DOMRect stand-in for the jsdom measurements. */
 const rect = (left: number, top: number, width: number, height: number): DOMRect => ({
@@ -155,7 +158,7 @@ describe('installSettingsMotion', () => {
     expect(dialog.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(true)
     expect(closed).toBe(false)
 
-    await new Promise((resolve) => { setTimeout(resolve, 360) })
+    await new Promise((resolve) => { setTimeout(resolve, EXIT_WAIT_MS) })
     expect(closed).toBe(true)
     handle.dispose()
   })
@@ -184,7 +187,7 @@ describe('installSettingsMotion', () => {
 
     closeButton.click()
     expect(dialog.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(true)
-    await new Promise((resolve) => { setTimeout(resolve, 360) })
+    await new Promise((resolve) => { setTimeout(resolve, EXIT_WAIT_MS) })
     expect(closed).toBe(true)
     handle.dispose()
   })
@@ -239,7 +242,7 @@ describe('installSettingsMotion', () => {
     expect(dialog.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(true)
     expect(escaped).toBe(false)
 
-    await new Promise((resolve) => { setTimeout(resolve, 360) })
+    await new Promise((resolve) => { setTimeout(resolve, EXIT_WAIT_MS) })
     expect(escaped).toBe(true)
     handle.dispose()
   })
@@ -255,7 +258,7 @@ describe('installSettingsMotion', () => {
     mask.click()
     expect(dialog.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(true)
 
-    await new Promise((resolve) => { setTimeout(resolve, 360) })
+    await new Promise((resolve) => { setTimeout(resolve, EXIT_WAIT_MS) })
     expect(closed).toBe(true)
     handle.dispose()
   })
@@ -331,7 +334,7 @@ describe('installSettingsMotion', () => {
     closeButton.click()
     expect(dialog.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(true)
     handle.dispose()
-    await new Promise((resolve) => { setTimeout(resolve, 360) })
+    await new Promise((resolve) => { setTimeout(resolve, EXIT_WAIT_MS) })
     expect(closed).toBe(true)
     expect(dialog.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(false)
   })
@@ -346,7 +349,7 @@ describe('installSettingsMotion', () => {
 
     mask.click()
     handle.dispose()
-    await new Promise((resolve) => { setTimeout(resolve, 360) })
+    await new Promise((resolve) => { setTimeout(resolve, EXIT_WAIT_MS) })
     expect(closed).toBe(true)
   })
 })

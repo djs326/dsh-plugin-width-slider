@@ -34,7 +34,7 @@ import {
   MOTION_STYLES, NEW_CHAT_MOTION_STYLES, SIDEBAR_MOTION_STYLES,
   type MotionStyle, type NewChatMotionStyle, type SidebarMotionStyle,
 } from '../../shared/motionSettings.ts'
-import { EASE_GLIDE, replayEntrance } from './animate.ts'
+import { EASE_FADE, EASE_GLIDE, EASE_SETTLE, replayEntrance } from './animate.ts'
 
 /** Chat-row selector: the host renders one anchored row per message. */
 const ANCHOR = '[data-chat-anchor-key]'
@@ -81,67 +81,85 @@ export function styleClass(style: EntranceStyle): string {
 }
 
 /**
- * Entrance keyframes and duration per style. Opacity always arrives on the
- * shorter side and travel or scale on the longer one, which reads as the row
+ * Entrance keyframes, duration, and easing per style. Opacity always arrives on
+ * the shorter side and travel or scale on the longer one, which reads as the row
  * settling rather than sliding to a stop.
+ *
+ * Durations follow the motion-tokens scale by intent: a transient row is
+ * `standard` (280–350ms), a full welcome surface is `medium` (400–500ms), and an
+ * opacity-only fade is `fast` (150–200ms). Travel and scale styles land on
+ * EASE_SETTLE (3% overshoot), sideways travel and the large welcome surface stay
+ * on EASE_GLIDE, and opacity-only work uses EASE_FADE.
  */
-const ENTRANCE: Record<EntranceStyle, { frames: Keyframe[]; durationMs: number }> = {
+const ENTRANCE: Record<EntranceStyle, { frames: Keyframe[]; durationMs: number; easing: string }> = {
   'fade-up': {
     frames: [{ opacity: 0, translate: '0 8px' }, { opacity: 1, translate: '0 0' }],
     durationMs: 300,
+    easing: EASE_SETTLE,
   },
   fade: {
     frames: [{ opacity: 0 }, { opacity: 1 }],
-    durationMs: 220,
+    durationMs: 200,
+    easing: EASE_FADE,
   },
   'rise-scale': {
     frames: [
       { opacity: 0, translate: '0 8px', scale: 0.98 },
       { opacity: 1, translate: '0 0', scale: 1 },
     ],
-    durationMs: 300,
+    durationMs: 320,
+    easing: EASE_SETTLE,
   },
   'slide-in': {
     frames: [{ opacity: 0, translate: '12px 0' }, { opacity: 1, translate: '0 0' }],
     durationMs: 280,
+    easing: EASE_GLIDE,
   },
   'blur-in': {
     frames: [
       { opacity: 0, filter: 'blur(6px)', translate: '0 4px' },
       { opacity: 1, filter: 'blur(0px)', translate: '0 0' },
     ],
-    durationMs: 280,
+    durationMs: 300,
+    easing: EASE_GLIDE,
   },
   'scale-in': {
     frames: [{ opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1 }],
-    durationMs: 280,
+    durationMs: 320,
+    easing: EASE_SETTLE,
   },
   'slide-left': {
     frames: [{ opacity: 0, translate: '-10px 0' }, { opacity: 1, translate: '0 0' }],
     durationMs: 280,
+    easing: EASE_GLIDE,
   },
   expand: {
     frames: [
       { opacity: 0, scale: '1 0.8', transformOrigin: 'top' },
       { opacity: 1, scale: '1 1', transformOrigin: 'top' },
     ],
-    durationMs: 280,
+    durationMs: 320,
+    easing: EASE_SETTLE,
   },
   'slide-down': {
     frames: [{ opacity: 0, translate: '0 -10px' }, { opacity: 1, translate: '0 0' }],
     durationMs: 280,
+    easing: EASE_GLIDE,
   },
   reveal: {
     frames: [{ opacity: 0, translate: '0 4px' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 460,
+    durationMs: 480,
+    easing: EASE_GLIDE,
   },
   bloom: {
     frames: [{ opacity: 0, scale: 0.99 }, { opacity: 1, scale: 1 }],
-    durationMs: 460,
+    durationMs: 480,
+    easing: EASE_SETTLE,
   },
   zoom: {
     frames: [{ opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1 }],
-    durationMs: 440,
+    durationMs: 460,
+    easing: EASE_SETTLE,
   },
 }
 
@@ -150,12 +168,12 @@ const PANEL_FRAMES: readonly Keyframe[] = [
   { opacity: 0.5, translate: '0 6px' },
   { opacity: 1, translate: '0 0' },
 ]
-const PANEL_DURATION_MS = 300
+const PANEL_DURATION_MS = 320
 
-/** Per-row stagger step on load batches (ms). */
-export const STAGGER_STEP_MS = 40
-/** Stagger cap: rows beyond this wait no longer (the tail joins together). */
-export const STAGGER_CAP_MS = 320
+/** Per-row stagger step on load batches (ms); the 70–80ms "standard list" step from the motion-tokens scale. */
+export const STAGGER_STEP_MS = 70
+/** Stagger cap: rows beyond this wait no longer (the tail joins together), so a long history still lands quickly. */
+export const STAGGER_CAP_MS = 420
 /** Longest buffered batch queue while the feature is disabled. */
 const MAX_PENDING_BATCHES = 8
 /**
@@ -323,7 +341,7 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
       row.classList.add(ROW_IN_CLASS, styleCls)
       replayEntrance(row, entrance.frames, {
         duration: entrance.durationMs,
-        easing: EASE_GLIDE,
+        easing: entrance.easing,
         delay,
       })
       marked.add(row)
@@ -509,7 +527,7 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
 
   function panelEntrance(el: HTMLElement): void {
     el.classList.add(PANEL_ANIMATION_CLASS)
-    replayEntrance(el, PANEL_FRAMES, { duration: PANEL_DURATION_MS, easing: EASE_GLIDE })
+    replayEntrance(el, PANEL_FRAMES, { duration: PANEL_DURATION_MS, easing: EASE_SETTLE })
   }
 
   /**
@@ -531,7 +549,7 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
       applied = true
       const entrance = ENTRANCE[style]
       current.classList.add(styleClass(style))
-      replayEntrance(current, entrance.frames, { duration: entrance.durationMs, easing: EASE_GLIDE })
+      replayEntrance(current, entrance.frames, { duration: entrance.durationMs, easing: entrance.easing })
     }
     // The welcome dialog renders INSIDE the seat (deeper than direct children —
     // the composer stack persists), so observe the whole subtree: the mutation

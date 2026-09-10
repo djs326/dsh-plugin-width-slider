@@ -17,12 +17,12 @@ export const MOTION_CSS = `
   scale: 0.62;
   pointer-events: none;
   transition:
-    opacity 150ms cubic-bezier(0.4, 0, 1, 1),
-    scale 220ms cubic-bezier(0.4, 0, 1, 1);
+    opacity 160ms cubic-bezier(0.7, 0, 0.84, 0),
+    scale 280ms cubic-bezier(0.7, 0, 0.84, 0);
 }
 .dsu-settings-mask-closing {
   opacity: 0;
-  transition: opacity 160ms cubic-bezier(0.4, 0, 1, 1);
+  transition: opacity 160ms cubic-bezier(0.7, 0, 0.84, 0);
 }
 @media (prefers-reduced-motion: reduce) {
   .dsu-settings-closing,

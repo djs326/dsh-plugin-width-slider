@@ -28,36 +28,6 @@ export interface WidthSliderKey {
   enableNavScroll: string
   enableNavScrollInfo: string
   disabledHint: string
-  // ── v0.4.0 Open With（整合自 dsh-plugin-open-with）──
-  owTooltip: string
-  owPickerAria: string
-  owMenuAria: string
-  owTargetCode: string
-  owGroupTitle: string
-  owSettingsLabel: string
-  owSettingsInfo: string
-  owButtonLabel: string
-  owButtonInfo: string
-  'settings.preset.title': string
-  'settings.current.title': string
-  'settings.dragTip': string
-  'settings.hide': string
-  'settings.show': string
-  'settings.custom.title': string
-  'settings.custom.add': string
-  'settings.custom.namePlaceholder': string
-  'settings.custom.pathPlaceholder': string
-  'settings.noCustom': string
-  'settings.edit': string
-  'settings.delete': string
-  'settings.cancel': string
-  'settings.save': string
-  'settings.form.nameRequired': string
-  'settings.form.pathRequired': string
-  'settings.form.exeOnly': string
-  owEmptyMenu: string
-  owNoCwdTip: string
-  owLaunchFailed: string
   sessionDeleteLabel: string
   sessionDeleteInfo: string
   groupWorkspace: string
@@ -78,10 +48,6 @@ export interface WidthSliderKey {
   shortNavScroll: string
   shortSessionDelete: string
   shortWorkspaceTabs: string
-  shortOpenWithSettings: string
-  shortOpenWithButton: string
-  owManage: string
-  owCollapse: string
   // ── v0.8.0 动效组（整合自 dsh-client-ui-custom；设置值存本插件 settings.json）──
   groupMotion: string
   motionTranscript: string
@@ -145,35 +111,6 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableNavScroll: '设置左侧 tab 栏超高滚动',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
-  owTooltip: '在 VS Code、终端或文件管理器中打开工作区',
-  owPickerAria: '选择要用来打开工作区的应用',
-  owMenuAria: '打开方式',
-  owTargetCode: '打开 VS Code',
-  owGroupTitle: '打开方式',
-  owSettingsLabel: 'Open With 设置',
-  owSettingsInfo: '管理预设/自定义打开项：排序、设为当前、隐藏、添加/编辑/删除（写入本机设置）。',
-  owButtonLabel: '启用头部打开按钮',
-  owButtonInfo: '对话头部显示胶囊按钮（当前打开项 + 下拉切换），点击在当前会话目录启动。',
-  'settings.preset.title': '预设项',
-  'settings.current.title': '当前项',
-  'settings.dragTip': '拖动以调整排序',
-  'settings.hide': '在胶囊中隐藏',
-  'settings.show': '在胶囊中显示',
-  'settings.custom.title': '自定义',
-  'settings.custom.add': '添加',
-  'settings.custom.namePlaceholder': '应用名称',
-  'settings.custom.pathPlaceholder': '可执行文件路径 (.exe)',
-  'settings.noCustom': '暂无自定义项',
-  'settings.edit': '编辑',
-  'settings.delete': '删除',
-  'settings.cancel': '取消',
-  'settings.save': '保存',
-  'settings.form.nameRequired': '请输入应用名称',
-  'settings.form.pathRequired': '请输入可执行文件路径',
-  'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（经 cmd start 启动，窗口正常显示）',
-  owEmptyMenu: '没有可见的打开项（全部已隐藏），可到设置中调整',
-  owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
-  owLaunchFailed: '启动失败，请检查目标程序',
   sessionDeleteLabel: '会话删除（⋯ 菜单）',
   sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
   groupWorkspace: '工作区分页',
@@ -182,7 +119,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
   pageTitle: '宽度滑块与界面增强',
-  pageSubtitle: '15 项开关 · 改动即时生效',
+  pageSubtitle: '12 项开关 · 改动即时生效',
   groupWidthShort: '对话宽度',
   groupThinkOutput: '思考与输出',
   shortEnableWidth: '启用对话宽度滑块',
@@ -193,10 +130,6 @@ const zh: Record<keyof WidthSliderKey, string> = {
   shortNavScroll: 'tab 栏滚动',
   shortSessionDelete: '会话删除',
   shortWorkspaceTabs: '工作区分页',
-  shortOpenWithSettings: 'Open With 设置',
-  shortOpenWithButton: '头部打开按钮',
-  owManage: '管理',
-  owCollapse: '收起',
   groupMotion: '动效',
   motionTranscript: '对话入场',
   motionSidebar: '侧边栏',
@@ -259,35 +192,6 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableNavScroll: 'Scrollable settings nav when tabs overflow',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
-  owTooltip: 'Open the workspace in VS Code, terminal or file manager',
-  owPickerAria: 'Choose an application to open the workspace',
-  owMenuAria: 'Open with',
-  owTargetCode: 'Open VS Code',
-  owGroupTitle: 'Open With',
-  owSettingsLabel: 'Open With settings',
-  owSettingsInfo: 'Manage preset/custom open targets: reorder, set current, hide, add/edit/delete (persisted on this machine).',
-  owButtonLabel: 'Enable header open button',
-  owButtonInfo: 'Shows the capsule button in the conversation header (current target + dropdown), launching in the current session folder.',
-  'settings.preset.title': 'Presets',
-  'settings.current.title': 'Current',
-  'settings.dragTip': 'Drag to reorder',
-  'settings.hide': 'Hide from capsule',
-  'settings.show': 'Show in capsule',
-  'settings.custom.title': 'Custom',
-  'settings.custom.add': 'Add',
-  'settings.custom.namePlaceholder': 'App name',
-  'settings.custom.pathPlaceholder': 'Executable path (.exe)',
-  'settings.noCustom': 'No custom items yet',
-  'settings.edit': 'Edit',
-  'settings.delete': 'Delete',
-  'settings.cancel': 'Cancel',
-  'settings.save': 'Save',
-  'settings.form.nameRequired': 'Please enter an app name',
-  'settings.form.pathRequired': 'Please enter an executable path',
-  'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched via cmd start so the window shows)',
-  owEmptyMenu: 'No visible open targets (all hidden); adjust in settings',
-  owNoCwdTip: 'No folder in this session (cannot open here)',
-  owLaunchFailed: 'Launch failed - check the target application',
   sessionDeleteLabel: 'Session delete (⋯ menu)',
   sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
   groupWorkspace: 'Workspace tabs',
@@ -296,7 +200,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
   pageTitle: 'Width slider & interface enhancements',
-  pageSubtitle: '15 switches · changes apply instantly',
+  pageSubtitle: '12 switches · changes apply instantly',
   groupWidthShort: 'Conversation width',
   groupThinkOutput: 'Thinking & output',
   shortEnableWidth: 'Conversation width slider',
@@ -307,10 +211,6 @@ const en: Record<keyof WidthSliderKey, string> = {
   shortNavScroll: 'Scrollable nav',
   shortSessionDelete: 'Session delete',
   shortWorkspaceTabs: 'Workspace tabs',
-  shortOpenWithSettings: 'Open With settings',
-  shortOpenWithButton: 'Header open button',
-  owManage: 'Manage',
-  owCollapse: 'Collapse',
   groupMotion: 'Motion',
   motionTranscript: 'Conversation entrance',
   motionSidebar: 'Sidebar',

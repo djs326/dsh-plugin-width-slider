@@ -11,11 +11,12 @@
  *   - 删除成功后调用会话列表刷新。
  * 规避其 issue #2：目标会话 id 从会话行 React fiber 直读 node.id
  * （menu 路径），绝不按标题反查；读不到 id 即失败提示（fail closed）。
- * 删除经 /width-slider RPC sessionDelete{id}（host 见 src/host/
+ * 删除经 /api/width-slider 端点 sessionDelete{id}（host 见 src/host/
  * sessionDeleteService.ts）。文案随界面语言（zh/en，运行时取值）。
  */
 import { createElement, useCallback, useEffect, useState } from 'react'
 import { isZhInterface } from './lang.ts'
+import { callEndpoint } from './endpointChannel.ts'
 
 interface SessCtx {
   connection: {
@@ -88,7 +89,7 @@ function sessionsById(): Record<string, { title?: string; running?: boolean } | 
 
 async function rpcDelete(ctx: SessCtx, sessionId: string): Promise<string | null> {
   try {
-    const result = await ctx.connection.rpc.call('/width-slider', 'sessionDelete', { id: sessionId })
+    const result = await callEndpoint('/api/width-slider', 'sessionDelete', { id: sessionId })
     if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) return null
     const err = (result as { error?: { message?: string } } | null)?.error?.message
     return err ?? 'delete failed'

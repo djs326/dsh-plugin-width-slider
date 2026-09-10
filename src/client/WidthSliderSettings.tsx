@@ -16,7 +16,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
-import { OpenWithPanel, type LaunchTarget, type OpenWithSettingsData } from './openWith/OpenWithPanel.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
 import type { WidthSliderKey } from './locales.ts'
@@ -73,11 +72,6 @@ const PRESET_INFO: Record<MotionPresetId, keyof WidthSliderKey> = {
 
 export interface WidthSliderSettingsInjected {
   writeSettings: (settings: unknown) => Promise<void>
-  /** Open With（整合自 dsh-plugin-open-with）host 能力桥，经 /open-with RPC。 */
-  owReadSettings: () => Promise<unknown>
-  owWriteSettings: (settings: unknown) => Promise<void>
-  owExtractIcon: (exePath: string) => Promise<string>
-  owResolvePresetPath: (target: LaunchTarget) => Promise<string>
 }
 
 export type WidthSliderSettingsProps = PropsLocale<'widthSlider'> & WidthSliderSettingsInjected
@@ -134,7 +128,6 @@ input.dsws-sw:disabled { cursor: default; }
 .dsws-fold-inline { margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 0 8px; }
 .dsws-mini { font: inherit; font-size: 11px; padding: 3px 9px; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary, #999); cursor: pointer; }
 .dsws-mini:hover { color: var(--dsw-alias-label-primary, #e0e0e0); }
-.dsws-ow-body { padding: 2px 8px 6px; border-top: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); margin-top: 4px; }
 
 @media (max-width: 560px) { .dsws-seg-inline, .dsws-fold-inline { margin-left: 0; } }
 `
@@ -210,15 +203,9 @@ function Segmented(props: {
 
 export function WidthSliderSettings({
   writeSettings,
-  owReadSettings,
-  owWriteSettings,
-  owExtractIcon,
-  owResolvePresetPath,
   t,
 }: WidthSliderSettingsProps): JSX.Element {
   const [settings, setSettings] = useState<FeatureSettings>(() => getSettings())
-  /** Open With 管理面板展开状态（默认折叠，保持整页单行紧凑）。 */
-  const [owOpen, setOwOpen] = useState(false)
   /** 仅本地（用户）改动触发写盘；store 外部更新（启动读回）不写。 */
   const dirtyRef = useRef(false)
 
@@ -454,44 +441,6 @@ export function WidthSliderSettings({
             onChange={(checked) => persist({ workspaceTabs: checked })}
           />
         </div>
-      </Group>
-
-      {/* 5. 打开方式（Open With，整合自 dsh-plugin-open-with） */}
-      <Group title={t('owGroupTitle')}>
-        <div className="dsws-rowline">
-          <SwitchItem
-            id={id('enable-ow-settings')}
-            label={t('shortOpenWithSettings')}
-            title={t('owSettingsInfo')}
-            checked={settings.openWithSettings}
-            onChange={(checked) => persist({ openWithSettings: checked })}
-          />
-          <SwitchItem
-            id={id('enable-ow-button')}
-            label={t('shortOpenWithButton')}
-            title={t('owButtonInfo')}
-            checked={settings.openWithButton}
-            onChange={(checked) => persist({ openWithButton: checked })}
-          />
-          {settings.openWithSettings && (
-            <div className="dsws-fold-inline">
-              <button type="button" className="dsws-mini" onClick={() => setOwOpen((open) => !open)}>
-                {owOpen ? t('owCollapse') : t('owManage')}
-              </button>
-            </div>
-          )}
-        </div>
-        {settings.openWithSettings && owOpen && (
-          <div className="dsws-ow-body">
-            <OpenWithPanel
-              t={t}
-              readSettings={async () => (await owReadSettings()) as OpenWithSettingsData | null}
-              writeSettings={owWriteSettings}
-              extractIcon={owExtractIcon}
-              resolvePresetPath={owResolvePresetPath}
-            />
-          </div>
-        )}
       </Group>
     </div>
   )

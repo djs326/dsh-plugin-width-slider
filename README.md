@@ -6,13 +6,13 @@
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A5%200.1.5--rc.1-4F9EFF.svg)](#环境要求)
 [![Node](https://img.shields.io/badge/node-%5E22.11%20%7C%7C%20%3E%3D24-339933.svg)](#环境要求)
 
-> DSH Desktop 的一体化界面增强插件：对话宽度、思考块、界面中文化、会话与工作区管理、Open With 打开方式与入场动效。
+> DSH 的一体化界面增强插件：对话宽度、思考块、界面中文化、会话与工作区管理与入场动效。
 
-DSH Desktop（DeepSeek Harness 桌面版）的多功能增强插件。把对话宽度调节、思考块交互、输出语言、界面中文化、设置面板补丁、会话删除、工作区分页、Open With 打开方式与入场动效收进同一个插件，每项功能独立开关、改动即时生效。
+DSH（DeepSeek Harness）的多功能增强插件。把对话宽度调节、思考块交互、输出语言、界面中文化、设置面板补丁、会话删除、工作区分页与入场动效收进同一个插件，每项功能独立开关、改动即时生效。
 
 ## 简介
 
-dsh-plugin-width-slider 面向 DSH Desktop 的日常使用场景，补齐官方客户端尚未提供、或使用体验不够顺手的能力：
+dsh-plugin-width-slider 面向 DSH 的日常使用场景，补齐官方客户端尚未提供、或使用体验不够顺手的能力：
 
 - **对话宽度**用滑块替代原生拖拽手柄，按下即预览，宽度在重启后保持；
 - **思考块**保留官方外观，只定制展开/收起行为（生成中展开、结束后自动收起）；
@@ -21,10 +21,9 @@ dsh-plugin-width-slider 面向 DSH Desktop 的日常使用场景，补齐官方�
 - **面板补丁**让官方设置面板可拖拽调宽、左侧导航超高时可滚动；
 - **会话删除**补全官方缺失的会话删除能力（二次确认后执行完整删除链）；
 - **工作区分页**把侧栏工作区标题行改造成页签栏，支持自建分组；
-- **Open With**在对话头部提供用外部程序打开当前会话目录的胶囊按钮；
 - **入场动效**为对话内容、侧边栏、新建对话与设置面板提供四组可配置的入场动效。
 
-本插件整合了三个上游插件（dsh-think-zh-expand、dsh-plugin-open-with、dsh-client-ui-custom）的成熟能力，安装本插件后无需再单独安装它们，详见[兼容性与已知限制](#兼容性与已知限制)。
+本插件整合了两个上游插件（dsh-think-zh-expand、dsh-client-ui-custom）的成熟能力，安装本插件后无需再单独安装它们，详见[兼容性与已知限制](#兼容性与已知限制)。
 
 ## 目录
 
@@ -72,13 +71,6 @@ dsh-plugin-width-slider 面向 DSH Desktop 的日常使用场景，补齐官方�
 - **工作区分页**：官方侧栏「工作区」标题行原位替换为页签栏——固定的「默认」页签加自建命名页签（文件夹）。工作区唯一归属（默认或某个页签），行菜单「分配标签」可移动归属；删除页签时其中的工作区自动回到默认；在其它页签新建工作区会自动归入该页签；重启后回到默认页签。
 - **会话删除**：会话行「⋯」菜单新增「删除会话」项（与官方重命名/分叉/归档同级、样式一致）。二次确认后，host 端执行完整删除链：停止任务 → 释放内存 → 删除磁盘日志目录 → 清理投影缓存 → 清理工作区记账，不留残留；删除不可恢复。
 
-### 打开方式（Open With）
-
-- **头部胶囊按钮**：对话头部显示打开项按钮，左侧主按钮直接在当前会话目录启动当前项，右侧箭头展开菜单选择其它项（选择即启动并设为当前）。
-- **打开项管理**：在功能总控页管理预设项与自定义项，支持拖拽排序、设为当前、隐藏、添加/编辑/删除，图标自动提取。
-- **即时同步**：设置改动（设为当前、增删改、隐藏/显示）会立即同步到所有已挂载的头部按钮，包括其它窗口，无需切换会话或重启。
-- **默认打开项**：VS Code、Command Prompt、PowerShell、File Explorer（按程序原名显示）。
-
 ### 动效
 
 整合自 [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom)，设置项收进本插件的功能总控页。
@@ -91,27 +83,27 @@ dsh-plugin-width-slider 面向 DSH Desktop 的日常使用场景，补齐官方�
 
 | 项目 | 要求 |
 |---|---|
-| 运行环境 | DSH Desktop（DeepSeek Harness 桌面版），Windows 10/11 |
+| 运行环境 | DSH（DeepSeek Harness），Windows 10/11 |
 | DSH 版本 | `>= 0.1.5-rc.1` |
 | Node.js | `^22.11` 或 `>= 24` |
 | 平台 | 仅 `win32` |
 
-> 本插件通过 Web 端注入与 host RPC 实现，机制上与 DSH 的 Web 界面一致；但仅在 DSH Desktop 上验证，以桌面版为准。
+> 本插件由浏览器端注入与 host 端两部分组成：`lib/client.js` 注入页面，`lib/index.mjs` 在 host 进程提供 `/api/width-slider` 端点，两者都随 DSH 重启生效。
 
 ## 安装
 
-> 任选一种方式安装后，请**重启 DSH Desktop**：host 端 `index.mjs`、client bundle 以及 `/width-slider`、`/open-with` RPC 都需要重启才会生效。
+> 下文中的 `<profile>` 指你实际使用的 profile 名。任选一种方式安装后，请**重启 DSH**：host 端 `index.mjs`、client bundle 以及 `/api/width-slider` 端点都需要重启才会生效。
 
 ### 方式一：npm 安装（推荐）
 
 ```bash
-dsh plugin --profile desktop add dsh-plugin-width-slider
+dsh plugin --profile <profile> add dsh-plugin-width-slider
 ```
 
 ### 方式二：源码软链（本地开发）
 
 ```bash
-cd C:\Users\<用户名>\.dsh\profiles\desktop
+cd C:\Users\<用户名>\.dsh\profiles\<profile>
 pnpm link C:\path\to\dsh-plugin-width-slider
 ```
 
@@ -130,20 +122,18 @@ dsh-plugin-width-slider/
     └── client.js     # Client 端 bundle（ModuleLoader 握手）
 ```
 
-复制到 `C:\Users\<用户名>\.dsh\profiles\desktop\node_modules\dsh-plugin-width-slider\`，并在该 profile 的 `package.json` 中把 `"dsh-plugin-width-slider"` 加入 `dsh.profile.bundles` 数组，然后重启 DSH Desktop。
+复制到 `C:\Users\<用户名>\.dsh\profiles\<profile>\node_modules\dsh-plugin-width-slider\`，并在该 profile 的 `package.json` 中把 `"dsh-plugin-width-slider"` 加入 `dsh.profile.bundles` 数组，然后重启 DSH。
 
 ### 升级与卸载
 
 - **升级**：重新执行安装命令或替换 `lib/` 产物，重启 DSH 生效；功能开关与各项偏好保留。
-- **卸载**：从 profile 中移除插件并重启。宽度偏好与 Open With 数据保留在本地，重新安装后继续可用。
+- **卸载**：从 profile 中移除插件并重启。宽度偏好等本地数据保留，重新安装后继续可用。
 
 ## 快速开始
 
-1. 按上述任一方式安装并重启 DSH Desktop。
+1. 按上述任一方式安装并重启 DSH。
 2. 打开 **设置**，在左侧导航选择 **Width Slider**，进入功能总控页（本插件的全部开关与选项都在这一页）。
 3. 按需开关功能：除「跟随窗口宽度」外默认开启，改动即时生效并自动保存；页头右上角「恢复默认设置」可重置全部开关与宽度记忆。
-
-对话头部的 Open With 按钮开箱可用，默认包含 VS Code、Command Prompt、PowerShell、File Explorer 四项（按程序原名显示）。
 
 ## 配置参考
 
@@ -166,8 +156,6 @@ dsh-plugin-width-slider/
 | 界面 | tab 栏滚动 | 设置左侧导航超高时显示滚动条 | 开 |
 | 界面 | 会话删除 | 会话行「⋯」菜单新增删除项 | 开 |
 | 界面 | 工作区分页 | 侧栏工作区标题行改为页签栏 | 开 |
-| 打开方式 | Open With 设置 | 打开项管理面板 | 开 |
-| 打开方式 | 头部打开按钮 | 对话头部胶囊按钮 | 开 |
 
 ### 样式与预设
 
@@ -194,13 +182,6 @@ dsh-plugin-width-slider/
 - 选择「思考完自动收起」：生成中强制展开，思考结束后收起为单行摘要，点击可再次展开。
 - 选择「始终展开」：默认展开，可点击收起。
 
-### Open With
-
-1. 点击对话头部胶囊按钮左侧的主按钮，直接在当前会话目录启动当前打开项。
-2. 点击右侧箭头展开菜单，选择其它打开项（选择即启动并设为当前）。
-3. 在总控页「打开方式」中点击「管理」，可对打开项排序、设为当前、隐藏、添加、编辑、删除。
-4. 添加自定义项时填写应用名称与可执行文件路径：仅支持本地绝对路径下的 `.exe` / `.com` 文件，经 `cmd.exe /c start` 启动；不接受 UNC 路径（`\\server\share`）或含 cmd 元字符的路径。
-
 ### 会话删除
 
 1. 点击会话条目右侧的「⋯」打开操作菜单，末尾会出现「删除会话」项。
@@ -223,7 +204,7 @@ dsh-plugin-width-slider/
 
 ## 界面预览
 
-> 截图与动图来自 DSH Desktop 实测，存放于 `png/` 目录。
+> 截图与动图来自 DSH 实测，存放于 `png/` 目录。
 
 **宽度滑块 · 按下即预览**
 
@@ -234,10 +215,6 @@ dsh-plugin-width-slider/
 ![设置面板顶部拖动移动](png/设置页拖动.gif)
 
 ![设置面板右下角把手调整大小](png/设置页调整大小.gif)
-
-**Open With**
-
-![对话头部胶囊按钮打开项菜单](png/头部快捷打开.png)
 
 **工作区分页**
 
@@ -253,7 +230,7 @@ dsh-plugin-width-slider/
 
 | 机制 | 说明 |
 |---|---|
-| Slot 注入 | `settings.section`（功能总控页，id `width-slider`）、`conversation.session.header.actions`（Open With 按钮）、`shell.overlay`（会话删除确认框）、`conversation.chat.node`（思考块渲染器）、`sidebar.workspaces`（工作区分页 wrapper） |
+| Slot 注入 | `settings.section`（功能总控页，id `width-slider`）、`shell.overlay`（会话删除确认框）、`conversation.chat.node`（思考块渲染器）、`sidebar.workspaces`（工作区分页 wrapper） |
 | 宽度应用 | 向每个 `[data-phase]` 对话根元素写入内联 `--dsh-chat-user-width`，与官方 `onHandleDrag` 同路径 |
 | 宽度启动恢复 | client 启动即应用持久偏好：跟随模式启用全局 ResizeObserver watcher（观察对话根尺寸、窗口与根增减）；固定值在对话根出现后发布一次 |
 | 预览模式 | `createPortal` 挂载到 `document.body`，`position: fixed; inset: 0; z-index: 100000`，同时把 `[data-shell-overlay]` 等设置面板覆盖层设为 `opacity: 0` |
@@ -263,9 +240,8 @@ dsh-plugin-width-slider/
 | 面板补丁 | body 观察器以 `[role=dialog][aria-modal]` + `> nav` 语义锚点探测设置面板，不依赖 CSS Module 哈希类名，探测失败安静跳过 |
 | 会话删除 | 克隆官方菜单项注入「⋯」菜单，目标会话 id 从会话行 React fiber 直读（避免按标题反查误删）；host 端 `/width-slider` `sessionDelete` 执行删除链，失败即中止并留痕 |
 | 工作区分页 | 常驻 wrapper 包裹官方 `sidebar.workspaces`，按当前页签过滤会话与工作区（结果按源引用与作用域缓存，保证 `getSnapshot` 引用稳定）；分组数据经 `/width-slider` `wsGroupsRead/Write` 存 `$DSH_HOME/storages/dsh-plugin-width-slider/workspace-groups.json` |
-| 打开方式同步 | 头部按钮订阅数据变更广播（同窗口事件总线 + BroadcastChannel 跨窗口），写盘成功后广播，各按钮重拉 host 真源刷新 |
 | 动效 | 命令式 Web Animations 实现（`replayEntrance`），而非 CSS `@starting-style`：宿主挂载行或面板时已强制过一次样式解析，声明式起始态不会生效；观察 `[data-chat-anchor-key]` 消息行与 `[role="tree"] [role="treeitem"]` 侧栏行，整批载入按文档序错峰入场；设置面板动效拦截三条关闭路径，先让真实面板缩小再放行 |
-| 配置存储 | 功能开关（含动效开关与样式）经 `/width-slider` RPC（loopback 围栏）读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；Open With 数据经 `/open-with` RPC 存 `$DSH_HOME/storages/dsh-open-with/settings.json`；client 端 config store 负责热切换 |
+| 配置存储 | 功能开关（含动效开关与样式）经 `/api/width-slider` 端点读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；client 端 config store 负责热切换 |
 | 滑块几何 | 轨道高度等于圆形手柄直径（设置页行内 16px、预览遮罩 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出 |
 | 性能 | 列宽在 `pointerdown` 时快照，宽度更新经 rAF 节流，拖动不卡顿 |
 
@@ -278,33 +254,28 @@ dsh-plugin-width-slider/
 | 上游插件 | 上游参考版本 | 本插件整合版本 | 整合内容 |
 |---|---|---|---|
 | [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins) | v0.4.7 | v0.3.0 | 强制中文、思考块渲染、界面中文化 |
-| [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with) | 本地修改版（上游 v1.0.0 + slot 注入修复） | v0.4.0 | 打开方式按钮与设置面板 |
 | [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom) | v0.1.0-rc.12 | v0.8.0 | 四组入场动效与三套预设 |
 
 同时启用时的后果：同一块界面被两个渲染器接管、出现两个按钮与两套设置，或两套动效引擎对同一批 DOM 各自动画一次导致效果叠加。
-
-Open With 的打开项数据存放在 `dsh-open-with` 存储目录，与官方及本地修改版共用同一文件；停用上游插件后配置无缝保留。
 
 ### 运行环境与内核适配
 
 | 项目 | 说明 |
 |---|---|
-| 目标内核 | DSH `0.1.5-rc.1`（DSH Desktop 2.0.8 内置）。插件只适配该内核，不为更早版本保留兼容分支 |
-| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。`connection.rpc.handle` 把 RPC 的 HTTP 路由注册在**调用者 fiber** 上，缺少 `webServer` 声明时加载期抛 `cannot get property "webServer" without inject`，整个插件树加载失败 |
-| RPC 访问围栏 | 由 connection 服务统一施加（可信 Host/Origin + 浏览器认证）；插件不再传 `authority` 参数 |
-| Open With 进程信息 | 该内核对齐的 `SubprocessHandle` 不暴露 `pid`，Open With 的上报不含 pid；启动、退出码与 stderr 判断不受影响 |
+| 目标内核 | DSH `0.1.5-rc.1`（当前官方内核）。插件只适配该内核，不为更早版本保留兼容分支 |
+| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject`（在调用者 `inject` 里补 `webServer` 无效）。改用 `connection.fetch.register` 注册 `/api` 下的精确 Fetch 路由 |
+| 端点与围栏 | 客户端 `POST /api/width-slider`，请求体为 `{ method, payload }`，响应体为处理器返回的 JSON；围栏由 connection 的 `/api` 处理器统一施加（可信 Host/Origin + 浏览器认证） |
 | 已核对稳定的契约 | slot（`conversation.chat.node`、`conversation.session.header.actions`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
 
 ### 验证状态
 
 | 功能 | 状态 |
 |---|---|
-| 对话宽度滑块、思考块增强、面板补丁 | 已在 DSH Desktop 上实测 |
-| Open With | 主要流程已由作者真机验证 |
-| 会话删除、宽度启动恢复、Open With 即时同步 | 已由作者验收 |
+| 对话宽度滑块、思考块增强、面板补丁 | 已在 DSH 上实测 |
+| 会话删除、宽度启动恢复 | 已由作者验收 |
 | 工作区分页 | 已由作者验收 |
 | 设置页排版重写与动效整合 | 已通过类型检查、单元测试与构建，待真机验收 |
-| 0.1.5 内核适配（`webServer` 注入声明） | 已通过类型检查、单元测试与构建，待真机验收 |
+| 0.1.5 内核适配（RPC 迁移到 `/api` 精确 Fetch 路由） | 已通过类型检查、单元测试、构建，并在本地临时实例端到端验证（`/api/width-slider` 返回 200），待真机验收 |
 
 ### 已知限制
 
@@ -330,7 +301,7 @@ lib/
 └── types/           # 类型声明（tsc 产出）
 ```
 
-测试位于 `test/`（`openWith`、`settingsMotion`、`thinkView` 三个用例文件）；仓库内包含若干参考源码副本（`dsh-src/`、`my-dsh-plugins-main/` 等），已在 `vitest.config.ts` 中排除，不参与测试收集。
+测试位于 `test/`（`settingsMotion`、`thinkView` 两个用例文件）；仓库内包含若干参考源码副本（`dsh-src/`、`my-dsh-plugins-main/` 等），已在 `vitest.config.ts` 中排除，不参与测试收集。
 
 ### 已知问题
 
@@ -343,9 +314,9 @@ lib/
 ```
 dsh-plugin-width-slider/
 ├── src/
-│   ├── index.ts                     # Host 端：systemPrompt 中文注入 + /width-slider 与 /open-with RPC + storages 配置
+│   ├── index.ts                     # Host 端：systemPrompt 中文注入 + /api/width-slider 端点 + storages 配置
 │   ├── host/
-│   │   ├── openWithService.ts       # Open With host 服务（启动、图标提取、路径解析、设置文件）
+│   │   ├── endpointChannel.ts       # /api 下 JSON 端点注册（connection.fetch.register）
 │   │   └── sessionDeleteService.ts  # 会话删除链（停任务、删目录、清投影缓存、工作区记账）
 │   ├── shared/
 │   │   ├── settings.ts              # 功能开关契约（host/client 唯一真源）
@@ -360,7 +331,7 @@ dsh-plugin-width-slider/
 │       ├── widthPrefs.ts            # 宽度偏好读写/发布与启动恢复
 │       ├── sessionDelete.ts         # 会话删除菜单项与确认框
 │       ├── workspaceTabs.tsx        # 工作区分页：页签栏、分组 store、树过滤 wrapper
-│       ├── openWith/                # Open With 按钮、管理面板与跨窗口同步
+│       ├── endpointChannel.ts       # /api 端点调用（POST { method, payload }）
 │       ├── think/                   # 思考块渲染器与界面中文化词表
 │       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）
 │       ├── lang.ts                  # 界面语言判定
@@ -400,12 +371,11 @@ dsh-plugin-width-slider/
 
 本项目以 [MIT](./LICENSE) 许可发布。
 
-思考增强、打开方式、会话删除与动效能力分别整合或参考自以下 MIT 开源项目，感谢各位开发者：
+思考增强、会话删除与动效能力分别整合或参考自以下 MIT 开源项目，感谢各位开发者：
 
 | 项目 | 作者 | 关系 |
 |---|---|---|
 | [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins) | baosfeng | 能力整合（本插件 v0.3.0 起） |
-| [dsh-plugin-open-with](https://github.com/hyrinx/dsh-plugin-open-with) | hyrinx | 能力整合（本插件 v0.4.0 起） |
 | [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom) | Yoli-mi | 动效引擎整合（本插件 v0.8.0 起） |
 | [dsh-plugin-session-delete](https://github.com/lsz-asd/dsh-plugin-session-delete) | lsz-asd | 会话删除链参考（本插件 v0.5.0 起） |
 | [dsh-archived-chats](https://github.com/Ultronen/dsh-archived-chats) | Ultronen | 归档会话删除链参考（本插件 v0.5.0 起） |

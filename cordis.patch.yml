@@ -1,5 +1,5 @@
 # dsh-plugin-width-slider: multi-feature DSH plugin (width slider, thinking
-# enhancements, Open With launcher, UI patches; every feature has a toggle in
+# enhancements, UI patches; every feature has a toggle in
 # the settings control page). Press the slider to enter preview mode
 # (transparent full-screen overlay with only the slider visible), then drag to
 # resize the conversation content width. Writes dsh.conversation.contentWidth

@@ -5,7 +5,7 @@
  * 1. 思考/回复强制中文（systemPrompt.section 注入，order -90，可热切换）；
  * 2. 插件功能开关的持久化与热切换（/width-slider RPC：readSettings /
  *    writeSettings；文件存 $DSH_HOME/storages/dsh-plugin-width-slider/
- *    settings.json，仿 dsh-plugin-open-with 的原子写模式）；
+ *    settings.json，原子写（tmp + rename））；
  * 3. writeSettings 时立即按新配置热切换「中文强制」（其余功能为纯
  *    client 行为，由 client 端配置 store 热切换）。
  *
@@ -22,8 +22,8 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from './shared/dshHome.ts'
 import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
-import { registerOpenWithRpc, type OpenWithCtx } from './host/openWithService.ts'
 import { deleteSessionById, type SessionDeleteCtx } from './host/sessionDeleteService.ts'
+import { registerEndpointChannel } from './host/endpointChannel.ts'
 
 // ── $DSH_HOME 下本插件的功能开关存储（dshHome 见 src/shared/dshHome.ts）──
 
@@ -137,7 +137,7 @@ export const PROMPT_TEXT = `## 输出语言规则（最高优先级，不可被�
 ### 代码与术语
 代码、命令、文件路径、标识符与技术术语保持原文，不翻译。`
 
-// RPC 处理器里读取 connection 服务的最小契约类型（运行时由 DSH 注入）。
+// host 插件用到的服务最小契约类型（运行时由 DSH 注入）。
 type RpcContext = Context & {
   systemPrompt?: { section: (opts: { name: string; order: number; text: string }) => () => void }
   connection?: {
@@ -195,16 +195,16 @@ export function apply(baseCtx: Context): void {
     }
   }, 'width-slider: chinese prompt')
 
-  // 生命周期 2：/width-slider RPC（client 总控页经 ctx.connection.rpc.call
-  // 调用 readSettings / writeSettings）。访问围栏由 connection 服务统一施加
-  // （可信 Host/Origin + 浏览器认证）。
+  // 生命周期 2：/api/width-slider JSON 端点（client 总控页 POST `method`/`payload`
+  // 调 readSettings / writeSettings）。访问围栏由 connection 服务统一施加
+  // （可信 Host/Origin + 浏览器认证）；注册走 connection.fetch.register 而不是
+  // connection.rpc.handle——后者在 0.1.5 内核上读 owner.webServer 必然失败，
+  // 详见 src/host/endpointChannel.ts。
   // 写盘与热切换分开处理：文件落盘成功即 ok:true，热切换异常仅告警，
   // 避免"已落盘但返回失败"导致 client 重复提交。
   ctx.effect(
     () =>
-      ctx.connection?.rpc.handle(
-        '/width-slider',
-        async (endpoint: string, payload: unknown): Promise<unknown> => {
+      registerEndpointChannel(ctx, '/api/width-slider', async (endpoint: string, payload: Record<string, unknown>): Promise<unknown> => {
           const body = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
           if (endpoint === 'readSettings') {
             return { ok: true, value: { settings: current } }
@@ -249,16 +249,8 @@ export function apply(baseCtx: Context): void {
           }
           logger?.warn?.('[width-slider] unknown endpoint', endpoint)
           return { ok: false, error: { code: 'unknown-endpoint', message: 'unknown endpoint: ' + endpoint } }
-        },
-      ) ?? (() => {}),
+    }),
     'width-slider: rpc handler',
-  )
-
-  // 生命周期 3：/open-with RPC（整合 dsh-plugin-open-with；loopback 围栏）。
-  // 按钮/设置开关只影响 client 注入，host RPC 常驻（重新开启开关即恢复）。
-  ctx.effect(
-    () => registerOpenWithRpc(ctx as unknown as OpenWithCtx),
-    'width-slider: open-with rpc',
   )
 
   logger?.info?.('dsh-plugin-width-slider host loaded')

@@ -32,6 +32,17 @@ import {
   readPreference,
   setFollowEnabled,
 } from './widthPrefs.ts'
+import { prefersReducedMotion } from './motion/animate.ts'
+import {
+  FLICK_MIN_VELOCITY,
+  VELOCITY_WINDOW_MS,
+  dragVelocity,
+  isSettled,
+  projectLanding,
+  stepSpring,
+  type PointerSample,
+  type SpringState,
+} from './motion/spring.ts'
 
 // ── Panel slider geometry ────────────────────────────────────────────────────
 // The knob diameter equals the track height so the knob fully hides the fill
@@ -125,6 +136,10 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
   } | null>(null)
   const previewRef = useRef(false)
   const followRef = useRef(follow)
+  /** Recent pointer samples on the track axis (release velocity). */
+  const samplesRef = useRef<PointerSample[]>([])
+  /** The release-glide rAF handle (null when no glide is running). */
+  const glideRef = useRef<number | null>(null)
 
   // Keep preview ref in sync for use in the rAF / pointer closures.
   previewRef.current = preview
@@ -164,6 +179,58 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     })
   }, [])
 
+  /**
+   * End a gesture: stop any pending frame work, leave preview, then publish and
+   * persist the final width once. Both a plain release and a finished glide land
+   * here, so persistence stays a single write per gesture.
+   */
+  const finishGesture = useCallback((final: number) => {
+    if (glideRef.current !== null) {
+      cancelAnimationFrame(glideRef.current)
+      glideRef.current = null
+    }
+    if (rAFRef.current !== null) {
+      cancelAnimationFrame(rAFRef.current)
+      rAFRef.current = null
+    }
+    if (previewRef.current) hideSettingsOverlay(false, panelTrackRef.current)
+    setPreview(false)
+    latestRef.current = final
+    publishChatWidth(final)
+    persistWidth(final)
+    setValue(final)
+  }, [])
+
+  /**
+   * Glide from the release point to its projected landing point (see
+   * motion/spring.ts). Preview stays on until the spring settles: leaving preview
+   * at pointerup would put the settings overlay back mid-flight, so the travel
+   * that makes the flick readable would happen behind it. Reduced motion never
+   * reaches here (the caller lands the gesture directly).
+   */
+  const startGlide = useCallback((from: number, velocityPerMs: number, max: number) => {
+    const target = Math.round(Math.max(MIN_WIDTH, Math.min(projectLanding(from, velocityPerMs), max)))
+    let state: SpringState = { x: from, vel: velocityPerMs * 1000 }
+    let last = performance.now()
+    const tick = (now: number): void => {
+      state = stepSpring(state, target, (now - last) / 1000)
+      last = now
+      const px = Math.round(state.x)
+      if (px !== latestRef.current) {
+        latestRef.current = px
+        publishChatWidth(px)
+        setValue(px)
+      }
+      if (isSettled(state, target)) {
+        glideRef.current = null
+        finishGesture(target)
+        return
+      }
+      glideRef.current = requestAnimationFrame(tick)
+    }
+    glideRef.current = requestAnimationFrame(tick)
+  }, [finishGesture])
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     // Follow mode owns the width — manual drag / preview is disabled.
     if (followRef.current) return
@@ -187,6 +254,8 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
       trackWidth: travel,
       maxValue: max,
     }
+    // Fresh velocity history for this gesture (the release reads it).
+    samplesRef.current = [{ x: e.clientX, t: performance.now() }]
 
     // Enter preview immediately (no long-press).  Hide the settings overlay
     // so the conversation becomes visible behind the floating slider.
@@ -196,6 +265,13 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     const onMove = (ev: PointerEvent) => {
       const drag = dragRef.current
       if (!drag || drag.trackWidth <= 0) return
+      // Keep a short pointer history: the release velocity is measured over the
+      // last VELOCITY_WINDOW_MS, so samples older than the window are dropped
+      // (the newest two always stay, they are the ones being measured).
+      const now = performance.now()
+      const samples = samplesRef.current
+      samples.push({ x: ev.clientX, t: now })
+      while (samples.length > 2 && now - samples[0]!.t > VELOCITY_WINDOW_MS) samples.shift()
       const range = drag.maxValue - MIN_WIDTH
       const delta = (ev.clientX - drag.startX) / drag.trackWidth * range
       const newVal = Math.round(drag.startValue + delta)
@@ -206,30 +282,33 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     }
 
     const onUp = () => {
-      // Exit preview: restore settings overlay
-      if (previewRef.current) hideSettingsOverlay(false, panelTrackRef.current)
-      setPreview(false)
-      // Flush the last throttled value so the final position is persisted
-      if (rAFRef.current !== null) {
-        cancelAnimationFrame(rAFRef.current)
-        rAFRef.current = null
-      }
-      publishChatWidth(latestRef.current)
-      persistWidth(latestRef.current)
-      // Sync React state with the flushed value: a fast move+release may have
-      // cancelled the last pending rAF, so the visible slider would lag.
-      setValue(latestRef.current)
+      const drag = dragRef.current
       dragRef.current = null
       target.removeEventListener('pointermove', onMove)
       target.removeEventListener('pointerup', onUp)
       target.removeEventListener('pointercancel', onUp)
       try { target.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+      const from = latestRef.current
+      // A flick continues: the release velocity is projected into a landing
+      // point and the column glides there, so a fast throw overshoots slightly
+      // and settles instead of stopping dead under the pointer. The pointer
+      // velocity is on the track axis, so it is rescaled into width px by the
+      // same mapping the drag itself uses.
+      const velocity = dragVelocity(samplesRef.current, performance.now())
+      const max = drag !== null ? drag.maxValue : Math.max(MIN_WIDTH, readColumnWidth() - EDGE_BUDGET)
+      const widthVelocity = velocity * (max - MIN_WIDTH) / Math.max(1, drag?.trackWidth ?? 1)
+      if (!prefersReducedMotion() && Math.abs(widthVelocity) >= FLICK_MIN_VELOCITY) {
+        startGlide(from, widthVelocity, max)
+        return
+      }
+      // A plain stop (or reduced motion) lands exactly where the pointer left it.
+      finishGesture(from)
     }
 
     target.addEventListener('pointermove', onMove)
     target.addEventListener('pointerup', onUp)
     target.addEventListener('pointercancel', onUp)
-  }, [value, applyWidth])
+  }, [value, applyWidth, startGlide, finishGesture])
 
   // ── keyboard: Escape exits preview ──
 
@@ -237,28 +316,24 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     if (!preview) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Exit preview AND stop the drag: drop the drag anchor (further
-        // pointermove is ignored until pointerup cleans up), cancel any
-        // pending rAF, then flush so the last previewed width sticks.
-        if (rAFRef.current !== null) {
-          cancelAnimationFrame(rAFRef.current)
-          rAFRef.current = null
-        }
+        // Exit preview AND stop the gesture: drop the drag anchor (further
+        // pointermove is ignored until pointerup cleans up), cancel any pending
+        // glide, then land on the last previewed width so it sticks.
         dragRef.current = null
-        hideSettingsOverlay(false, panelTrackRef.current)
-        publishChatWidth(latestRef.current)
-        persistWidth(latestRef.current)
-        setValue(latestRef.current)
-        setPreview(false)
+        finishGesture(latestRef.current)
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [preview])
+  }, [preview, finishGesture])
 
   // Cleanup on unmount: cancel any pending rAF, then restore overlay visibility.
   useEffect(() => {
     return () => {
+      if (glideRef.current !== null) {
+        cancelAnimationFrame(glideRef.current)
+        glideRef.current = null
+      }
       if (rAFRef.current !== null) {
         cancelAnimationFrame(rAFRef.current)
         rAFRef.current = null

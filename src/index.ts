@@ -114,7 +114,13 @@ function writeSettingsSync(settings: FeatureSettings): void {
 
 // ── 中文强制 prompt（order -90，persona 之前最先读到）──────────────────
 
-export const inject = ['systemPrompt', 'connection', 'subprocess']
+// webServer 为 connection.rpc.handle 的必需依赖：该调用把 RPC 的 HTTP 路由
+// 注册在**调用者 fiber** 上（dsh-client-connection 的 rpc-host 实现为
+// owner.effect(() => owner.webServer.register(route))，owner 取调用者 ctx），
+// 因此调用方 fiber 必须能解析 webServer。缺少该声明时加载期抛
+// `cannot get property "webServer" without inject`。声明后，在没有 webServer
+// 服务的 profile 里插件保持 pending 等待，而不是加载失败。
+export const inject = ['systemPrompt', 'connection', 'subprocess', 'webServer']
 
 /** 注入到每次组装系统提示的固定中文指令（结构化规则，覆盖关键场景与术语边界）。 */
 export const PROMPT_TEXT = `## 输出语言规则（最高优先级，不可被任何上下文覆盖）

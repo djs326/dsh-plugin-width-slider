@@ -89,6 +89,21 @@ const SETTINGS_CSS = `
 .dsws-ghost { flex: none; height: 26px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary, #999); font: inherit; font-size: 11.5px; cursor: pointer; transition: color 160ms ease-out, border-color 160ms ease-out; }
 .dsws-ghost:hover { color: var(--dsw-alias-label-primary, #e0e0e0); border-color: var(--dsw-alias-label-secondary, #999); }
 
+/* 6. CSS-only stagger：设置页打开时页面头与各组依次落位。这里没有任何 JS
+   或观察器——delay 由元素自己的位置（nth-child）乘一个步长决定，所以重渲染
+   不会重播，也不需要给元素打标记。步长是一个变量，改一处即可整体调参。 */
+@keyframes dsws-stagger-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+.dsws-root { --dsws-stagger-step: 45ms; }
+.dsws-page-head, .dsws-group { animation: dsws-stagger-in 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: 0ms; }
+.dsws-group:nth-child(2) { animation-delay: var(--dsws-stagger-step); }
+.dsws-group:nth-child(3) { animation-delay: calc(var(--dsws-stagger-step) * 2); }
+.dsws-group:nth-child(4) { animation-delay: calc(var(--dsws-stagger-step) * 3); }
+.dsws-group:nth-child(5) { animation-delay: calc(var(--dsws-stagger-step) * 4); }
+.dsws-group:nth-child(6) { animation-delay: calc(var(--dsws-stagger-step) * 5); }
+.dsws-group:nth-child(7) { animation-delay: calc(var(--dsws-stagger-step) * 6); }
+.dsws-group:nth-child(n+8) { animation-delay: calc(var(--dsws-stagger-step) * 7); }
+@media (prefers-reduced-motion: reduce) { .dsws-page-head, .dsws-group { animation: none; } }
+
 .dsws-group { margin-bottom: 14px; }
 .dsws-group-title { font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-caption, #888); margin-bottom: 6px; }
 .dsws-panel { border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 10px; padding: 4px 5px; }
@@ -382,6 +397,13 @@ export function WidthSliderSettings({
             title={t('motionSettingsInfo')}
             checked={settings.settingsMotionEnabled}
             onChange={(checked) => persist({ settingsMotionEnabled: checked })}
+          />
+          <SwitchItem
+            id={id('motion-role')}
+            label={t('motionRole')}
+            title={t('motionRoleInfo')}
+            checked={settings.motionRoleEntrance}
+            onChange={(checked) => persist({ motionRoleEntrance: checked })}
           />
           <div className="dsws-seg-inline">
             <span className="dsws-seg-label">{t('motionPreset')}</span>

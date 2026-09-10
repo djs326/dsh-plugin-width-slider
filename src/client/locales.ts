@@ -60,6 +60,8 @@ export interface WidthSliderKey {
   motionSidebarInfo: string
   motionNewChatInfo: string
   motionSettingsInfo: string
+  motionRole: string
+  motionRoleInfo: string
   motionStyleTranscriptInfo: string
   motionStyleSidebarInfo: string
   motionStyleNewChatInfo: string
@@ -122,7 +124,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
   pageTitle: '宽度滑块与界面增强',
-  pageSubtitle: '12 项开关 · 改动即时生效',
+  pageSubtitle: '15 项开关 · 改动即时生效',
   groupWidthShort: '对话宽度',
   groupThinkOutput: '思考与输出',
   shortEnableWidth: '启用对话宽度滑块',
@@ -143,6 +145,8 @@ const zh: Record<keyof WidthSliderKey, string> = {
   motionSidebarInfo: '打开 Web 时侧边栏树逐项出现，展开工作区时对话框浮现。',
   motionNewChatInfo: '新建对话时，欢迎界面和输入区淡入出现。',
   motionSettingsInfo: '打开设置时面板从设置按钮处展开，切换左侧标签时页面内容淡入，关闭时面板缩回。',
+  motionRole: '按角色入场',
+  motionRoleInfo: '用户消息从侧面滑入、助手正文用上面选择的样式、工具与系统行只做轻微淡入——不再所有内容共用同一种入场。',
   motionStyleTranscriptInfo: '对话内容的出现方式。',
   motionStyleSidebarInfo: '侧边栏会话树的出现方式，与对话动效独立选择。',
   motionStyleNewChatInfo: '新建对话时欢迎界面的出现方式。',
@@ -205,7 +209,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
   pageTitle: 'Width slider & interface enhancements',
-  pageSubtitle: '12 switches · changes apply instantly',
+  pageSubtitle: '15 switches · changes apply instantly',
   groupWidthShort: 'Conversation width',
   groupThinkOutput: 'Thinking & output',
   shortEnableWidth: 'Conversation width slider',
@@ -226,6 +230,8 @@ const en: Record<keyof WidthSliderKey, string> = {
   motionSidebarInfo: 'The sidebar tree cascades in on web load; workspace rows fade in when their group expands.',
   motionNewChatInfo: 'A brand-new conversation welcome dialog and composer fade in.',
   motionSettingsInfo: 'The settings dialog grows out of the settings button, page content fades in on nav switch, and the panel shrinks back on close.',
+  motionRole: 'Arrive by role',
+  motionRoleInfo: 'Your messages slide in from the side, assistant prose uses the style above, and tool or system rows settle in lightly — instead of every row sharing one entrance.',
   motionStyleTranscriptInfo: 'How conversation content arrives.',
   motionStyleSidebarInfo: 'How the sidebar session tree arrives, independent of the transcript style.',
   motionStyleNewChatInfo: 'How the welcome dialog of a new conversation arrives.',

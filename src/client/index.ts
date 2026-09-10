@@ -156,6 +156,7 @@ function motionStateOf(ctx: RpcClientContext): MotionEngineState {
     style: settings.motionStyle,
     sidebarStyle: settings.sidebarMotionStyle,
     newChatStyle: settings.newChatMotionStyle,
+    roleEntrance: settings.motionRoleEntrance,
     blank,
   }
 }

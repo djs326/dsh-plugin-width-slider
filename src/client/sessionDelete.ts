@@ -14,9 +14,10 @@
  * 删除经 /api/width-slider 端点 sessionDelete{id}（host 见 src/host/
  * sessionDeleteService.ts）。文案随界面语言（zh/en，运行时取值）。
  */
-import { createElement, useCallback, useEffect, useState } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { isZhInterface } from './lang.ts'
 import { callEndpoint } from './endpointChannel.ts'
+import { shakeElement } from './motion/animate.ts'
 
 interface SessCtx {
   connection: {
@@ -129,6 +130,19 @@ function DeleteSessionDialog(): any {
     return () => window.removeEventListener(EVENT, handler)
   }, [])
 
+  // ── 失败反馈：错误行落地时抖一下（impact 通道）──────────────────
+  // 删除失败原本只是把一行红字换进来，容易被当成"刚才那下没反应"；抖动让
+  // 失败有分量。只抖错误行本身（不是用户正在读的正文），reduced motion 由
+  // shakeElement 内部短路。同一段错误只抖一次（失败重试产生的新文案会再抖）。
+  const shakenError = useRef<string | null>(null)
+  useEffect(() => {
+    if (error === null || shakenError.current === error) return
+    const line = document.querySelector<HTMLElement>('[data-dsws-delete-error]')
+    if (line === null) return
+    shakenError.current = error
+    shakeElement(line, 3, 260)
+  }, [error])
+
   const close = useCallback(() => {
     if (busy) return
     setTarget(null)
@@ -194,7 +208,7 @@ function DeleteSessionDialog(): any {
         target.notFound ? null : createElement('label', { key: 'ack', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--dsw-alias-label-primary,inherit)', marginTop: 10 } },
           createElement('input', { type: 'checkbox', checked: acknowledged, disabled: busy, onChange: (e: { target: { checked: boolean } }) => setAcknowledged(e.target.checked) }),
           tt('dialog.ack')),
-        error ? createElement('div', { key: 'err', role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary,#e5484d)', fontSize: 12, lineHeight: '16px', marginTop: 8 } }, error) : null,
+        error ? createElement('div', { key: 'err', role: 'alert', 'data-dsws-delete-error': '', style: { color: 'var(--dsw-alias-state-error-primary,#e5484d)', fontSize: 12, lineHeight: '16px', marginTop: 8 } }, error) : null,
       ])
 }
 

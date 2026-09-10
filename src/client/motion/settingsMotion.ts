@@ -19,7 +19,7 @@
  * the host's class names are CSS-module hashes; nothing in the host markup has
  * to change.
  */
-import { EASE_FADE, EASE_GLIDE, EASE_SETTLE, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
+import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */
 export const SETTINGS_PANEL_CLASS = 'dsu-settings-panel'
@@ -220,7 +220,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     // transition could see the class, so a declarative start state would never
     // apply - the panel would simply appear.
     dialog.classList.add(SETTINGS_PANEL_CLASS)
-    replayEntrance(dialog, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SETTLE })
+    replayEntrance(dialog, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
     if (mask !== null) {
       mask.classList.add(SETTINGS_MASK_CLASS)
       replayEntrance(mask, MASK_FRAMES, { duration: MASK_ENTRANCE_MS, easing: EASE_FADE })
@@ -343,7 +343,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     }
     panel.classList.add(SETTINGS_PANEL_CLASS)
     mask?.classList.add(SETTINGS_MASK_CLASS)
-    replayEntrance(panel, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SETTLE })
+    replayEntrance(panel, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
     const content = contentOf(panel)
     if (content !== null) replayPage(content)
   })

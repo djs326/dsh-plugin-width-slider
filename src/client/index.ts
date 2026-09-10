@@ -17,6 +17,7 @@ import { createElement } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
+import { callEndpoint } from './endpointChannel.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { WidthSliderSettings } from './WidthSliderSettings.tsx'
 import { en, zh, type WidthSliderKey } from './locales.ts'
@@ -26,7 +27,6 @@ import { applySavedWidth } from './widthPrefs.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { installSessionDelete } from './sessionDelete.ts'
 import { installWorkspaceTabs } from './workspaceTabs.tsx'
-import { OpenWithButton, type CapsuleItem } from './openWith/OpenWithButton.tsx'
 import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
 import { installConversationEntrance, type MotionEngineState } from './motion/motion.ts'
@@ -156,6 +156,7 @@ function motionStateOf(ctx: RpcClientContext): MotionEngineState {
     style: settings.motionStyle,
     sidebarStyle: settings.sidebarMotionStyle,
     newChatStyle: settings.newChatMotionStyle,
+    roleEntrance: settings.motionRoleEntrance,
     blank,
   }
 }
@@ -234,105 +235,6 @@ function installLocalize(): Disposer {
   return installUiLocalize()
 }
 
-// ── Open With 头部胶囊按钮（整合 dsh-plugin-open-with；openWithButton=开时）──
-
-type OpenWithRpcContext = RpcClientContext & {
-  sessions?: {
-    list: { getSnapshot: () => { byId: Record<string, { cwd?: string } | undefined> } }
-  }
-}
-
-/** 调 host /open-with RPC（host 见 src/host/openWithService.ts）。 */
-function rpcOpenWith(ctx: RpcClientContext, method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
-  return ctx.connection.rpc.call('/open-with', method, payload)
-}
-
-function installOpenWithButton(ctx: RpcClientContext): Disposer {
-  const log = (level: 'info' | 'warn' | 'error', message: string, extra?: unknown): void => {
-    const safe = extra instanceof Error ? { name: extra.name, message: extra.message, stack: extra.stack } : extra
-    const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log
-    fn('[open-with] ' + message, safe)
-    rpcOpenWith(ctx, 'log', { level, message, extra: safe }).catch(() => {})
-  }
-
-  /** 读 open-with 设置对象（items/hiddenIds/currentId）；失败返回 null。 */
-  const readSettingsObj = async (): Promise<{ items?: CapsuleItem[]; hiddenIds?: string[]; currentId?: string } | null> => {
-    try {
-      const result = await rpcOpenWith(ctx, 'readSettings', {})
-      if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
-        const settings = (result as { value?: { settings?: unknown } }).value?.settings
-        return (settings && typeof settings === 'object' ? settings : null) as { items?: CapsuleItem[]; hiddenIds?: string[] } | null
-      }
-      return null
-    } catch {
-      return null
-    }
-  }
-
-  const readCapsuleItems = async (): Promise<CapsuleItem[]> => {
-    const settings = await readSettingsObj()
-    if (!settings || !Array.isArray(settings.items)) return []
-    return settings.items.filter((it: CapsuleItem) =>
-      typeof it.id === 'string' && typeof it.name === 'string' && typeof it.path === 'string')
-  }
-
-  const readHiddenIds = async (): Promise<string[]> => {
-    const settings = await readSettingsObj()
-    if (!settings || !Array.isArray(settings.hiddenIds)) return []
-    return settings.hiddenIds.filter((id: unknown) => typeof id === 'string')
-  }
-
-  /** 读设置中的当前项 id（host setCurrent 的反向读取，同源 currentId）。 */
-  const readCurrentId = async (): Promise<string | null> => {
-    const settings = await readSettingsObj()
-    return settings && typeof settings.currentId === 'string' ? settings.currentId : null
-  }
-
-  /** 写回当前项 id（host /open-with setCurrent endpoint）。 */
-  const setCurrent = async (id: string): Promise<unknown> => {
-    return rpcOpenWith(ctx, 'setCurrent', { id })
-  }
-
-  const launch = async (cwd: string, target: string) => {
-    const result = await rpcOpenWith(ctx, 'launch', { cwd, target })
-    return (result && typeof result === 'object' ? result : { ok: false }) as {
-      ok: boolean
-      value?: unknown
-      error?: { code: string; message: string }
-    }
-  }
-
-  const getCwd = (sessionId: string): string | undefined => {
-    try {
-      const state = (ctx as OpenWithRpcContext).sessions?.list.getSnapshot()
-      const summary = state?.byId[sessionId]
-      if (summary === undefined) {
-        const allIds = state ? Object.keys(state.byId) : []
-        log('warn', 'session not in list', { requested: sessionId, count: allIds.length, sample: allIds.slice(0, 3) })
-      }
-      return summary?.cwd
-    } catch (err) {
-      console.error('[open-with] getCwd failed:', err)
-      return undefined
-    }
-  }
-
-  // 与官方 open-with 同款修复后的注入：inject 目标 = register 的 slot 自身
-  // （conversation.session.header.actions），按钮才能被装配到头部操作区。
-  return ctx.slots.inject('conversation.session.header.actions', () =>
-    ctx.slots.register(
-      {
-        name: 'conversation.session.header.actions',
-        id: 'open-with',
-        order: 10,
-        locale: NS,
-        inject: () => ({ launch, getCwd, log, readHiddenIds, readCapsuleItems, readCurrentId, setCurrent }),
-      },
-      OpenWithButton,
-    ),
-  )
-}
-
 /** 上游 dsh-think-zh-expand 冲突提示（仅提示，不阻断）。 */
 function warnIfUpstreamPresent(): void {
   try {
@@ -359,7 +261,7 @@ type RpcClientContext = ClientContext & {
 
 async function rpcReadSettings(ctx: RpcClientContext): Promise<unknown> {
   try {
-    const result = await ctx.connection.rpc.call('/width-slider', 'readSettings', {})
+    const result = await callEndpoint('/api/width-slider', 'readSettings', {})
     if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
       return (result as { value?: { settings?: unknown } }).value?.settings ?? null
     }
@@ -370,7 +272,7 @@ async function rpcReadSettings(ctx: RpcClientContext): Promise<unknown> {
 }
 
 async function rpcWriteSettings(ctx: RpcClientContext, settings: unknown): Promise<void> {
-  await ctx.connection.rpc.call('/width-slider', 'writeSettings', { settings })
+  await callEndpoint('/api/width-slider', 'writeSettings', { settings })
 }
 
 export const inject = ['slots', 'locale', 'connection', 'sessions', 'workspaces']
@@ -386,7 +288,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'owButton' | 'sessionDel' | 'wsTabs' | 'motion'
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'sessionDel' | 'wsTabs' | 'motion'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -417,7 +319,6 @@ export function apply(ctx: RpcClientContext): void {
       ensureSafe('localize', s.uiLocalize, () => installLocalize())
       ensureSafe('resize', s.dialogResize, () => installDialogResizePatch())
       ensureSafe('nav', s.navScroll, () => installNavScrollPatch())
-      ensureSafe('owButton', s.openWithButton, () => installOpenWithButton(ctx))
       ensureSafe('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
       // 工作区分页：组件常驻（启动即包裹一次），开关只切换 wrapper 内 enabled
       // 状态（显示标签/过滤），不再反复安装/卸载组件——开关即时生效。
@@ -431,7 +332,7 @@ export function apply(ctx: RpcClientContext): void {
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'owButton', 'sessionDel', 'wsTabs', 'motion'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'sessionDel', 'wsTabs', 'motion'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined
@@ -462,45 +363,8 @@ export function apply(ctx: RpcClientContext): void {
         label: 'Width Slider',
         locale: NS,
         // 单一读源：client 入口启动时经 config load 拉取一次；总控页只写。
-        // open-with 桥：/open-with RPC（host 见 src/host/openWithService.ts）。
         inject: () => ({
           writeSettings: (settings: unknown) => rpcWriteSettings(ctx, settings),
-          owReadSettings: async () => {
-            try {
-              const result = await rpcOpenWith(ctx, 'readSettings', {})
-              if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
-                return (result as { value?: { settings?: unknown } }).value?.settings ?? null
-              }
-              return null
-            } catch {
-              return null
-            }
-          },
-          owWriteSettings: async (settings: unknown) => {
-            await rpcOpenWith(ctx, 'writeSettings', { settings })
-          },
-          owExtractIcon: async (exePath: string) => {
-            try {
-              const result = await rpcOpenWith(ctx, 'extractIcon', { exePath })
-              if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
-                return String((result as { value?: { icon?: unknown } }).value?.icon ?? '')
-              }
-              return ''
-            } catch {
-              return ''
-            }
-          },
-          owResolvePresetPath: async (target: string) => {
-            try {
-              const result = await rpcOpenWith(ctx, 'resolvePresetPath', { target })
-              if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) {
-                return String((result as { value?: { path?: unknown } }).value?.path ?? '')
-              }
-              return ''
-            } catch {
-              return ''
-            }
-          },
         }),
       },
       WidthSliderSettings,

@@ -1,8 +1,8 @@
 {
   "name": "dsh-plugin-width-slider",
-  "displayName": "Width Slider · 对话宽度 / 思考增强 / 打开方式 / 动效",
-  "description": "DSH 个人多功能插件：对话宽度滑块 + 思考块增强（整合 dsh-think-zh-expand）+ Open With 打开方式（整合 dsh-plugin-open-with 本地修改版）+ 界面中文化 + 官方面板补丁 + 入场动效（整合 dsh-client-ui-custom），全部功能独立开关。Settings feature control page with width slider, thinking-block enhancements, an Open With launcher button and entrance motion — every feature has its own toggle.",
-  "version": "0.8.1",
+  "displayName": "Width Slider · 对话宽度 / 思考增强 / 界面增强 / 动效",
+  "description": "DSH 个人多功能插件：对话宽度滑块 + 思考块增强（整合 dsh-think-zh-expand）+ 界面中文化 + 官方面板补丁 + 会话删除 + 工作区分页 + 入场动效（整合 dsh-client-ui-custom），全部功能独立开关。Settings feature control page with a width slider, thinking-block enhancements, interface localization, session delete, workspace tabs and entrance motion — every feature has its own toggle.",
+  "version": "1.0.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.mjs",
@@ -21,7 +21,7 @@
   },
   "dsh": {
     "engines": {
-      "dsh": ">=0.1.1-rc.1"
+      "dsh": ">=0.1.5-rc.1"
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -59,7 +59,6 @@
     "conversation-width",
     "resize",
     "thinking",
-    "open-with",
     "reasoning",
     "zh",
     "localization"
@@ -75,7 +74,7 @@
     "win32"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1-rc.1",
+    "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/dsh-client-connection": "*",
     "@deepseek-ai/dsh-client-locale": "*",
     "@deepseek-ai/dsh-client-runtime": "*",
@@ -83,7 +82,7 @@
     "@deepseek-ai/dsh-client-ui-primitives": "*",
     "@deepseek-ai/dsh-client-ui-slots": "*",
     "@deepseek-ai/dsh-subprocess": "*",
-    "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.5-rc.1",
     "react": "^18.2.0"
   },
   "peerDependenciesMeta": {

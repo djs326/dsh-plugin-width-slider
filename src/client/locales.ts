@@ -25,39 +25,10 @@ export interface WidthSliderKey {
   enableLocalizeInfo: string
   enableResize: string
   enableResizeInfo: string
+  dialogAdaptiveInfo: string
   enableNavScroll: string
   enableNavScrollInfo: string
   disabledHint: string
-  // ── v0.4.0 Open With（整合自 dsh-plugin-open-with）──
-  owTooltip: string
-  owPickerAria: string
-  owMenuAria: string
-  owTargetCode: string
-  owGroupTitle: string
-  owSettingsLabel: string
-  owSettingsInfo: string
-  owButtonLabel: string
-  owButtonInfo: string
-  'settings.preset.title': string
-  'settings.current.title': string
-  'settings.dragTip': string
-  'settings.hide': string
-  'settings.show': string
-  'settings.custom.title': string
-  'settings.custom.add': string
-  'settings.custom.namePlaceholder': string
-  'settings.custom.pathPlaceholder': string
-  'settings.noCustom': string
-  'settings.edit': string
-  'settings.delete': string
-  'settings.cancel': string
-  'settings.save': string
-  'settings.form.nameRequired': string
-  'settings.form.pathRequired': string
-  'settings.form.exeOnly': string
-  owEmptyMenu: string
-  owNoCwdTip: string
-  owLaunchFailed: string
   sessionDeleteLabel: string
   sessionDeleteInfo: string
   groupWorkspace: string
@@ -75,13 +46,10 @@ export interface WidthSliderKey {
   shortChinese: string
   shortLocalize: string
   shortResize: string
+  shortDialogAdaptive: string
   shortNavScroll: string
   shortSessionDelete: string
   shortWorkspaceTabs: string
-  shortOpenWithSettings: string
-  shortOpenWithButton: string
-  owManage: string
-  owCollapse: string
   // ── v0.8.0 动效组（整合自 dsh-client-ui-custom；设置值存本插件 settings.json）──
   groupMotion: string
   motionTranscript: string
@@ -92,6 +60,8 @@ export interface WidthSliderKey {
   motionSidebarInfo: string
   motionNewChatInfo: string
   motionSettingsInfo: string
+  motionRole: string
+  motionRoleInfo: string
   motionStyleTranscriptInfo: string
   motionStyleSidebarInfo: string
   motionStyleNewChatInfo: string
@@ -141,39 +111,11 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableLocalize: '界面英文中文化',
   enableLocalizeInfo: '把官方界面残留的硬编码英文标签替换为中文（如 Tool Call→工具调用、Thinking→思考）。',
   enableResize: '设置弹窗可拖拽（窗口化）',
-  enableResizeInfo: '官方设置弹窗变普通窗口：右下角把手拖宽高、顶部空白拖动移动，双击把手复位 800×800 居中；尺寸与位置会被记住。',
+  enableResizeInfo: '官方设置弹窗变普通窗口：没动过时保持官方尺寸与居中位置（并随窗口大小自动适配）；右下角把手拖宽高、顶部空白拖动移动，双击把手复位为官方尺寸与位置；尺寸与位置会被记住。',
+  dialogAdaptiveInfo: '弹窗尺寸改按窗口比例自适应（宽 62%、高 82%，并留出视口边距），窗口缩放时弹窗跟着缩放；只改外框、不缩放内容与字号。开启后不再是官方 800px 尺寸，也不能手动拖拽改尺寸（位置仍可拖）。',
   enableNavScroll: '设置左侧 tab 栏超高滚动',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
-  owTooltip: '在 VS Code、终端或文件管理器中打开工作区',
-  owPickerAria: '选择要用来打开工作区的应用',
-  owMenuAria: '打开方式',
-  owTargetCode: '打开 VS Code',
-  owGroupTitle: '打开方式',
-  owSettingsLabel: 'Open With 设置',
-  owSettingsInfo: '管理预设/自定义打开项：排序、设为当前、隐藏、添加/编辑/删除（写入本机设置）。',
-  owButtonLabel: '启用头部打开按钮',
-  owButtonInfo: '对话头部显示胶囊按钮（当前打开项 + 下拉切换），点击在当前会话目录启动。',
-  'settings.preset.title': '预设项',
-  'settings.current.title': '当前项',
-  'settings.dragTip': '拖动以调整排序',
-  'settings.hide': '在胶囊中隐藏',
-  'settings.show': '在胶囊中显示',
-  'settings.custom.title': '自定义',
-  'settings.custom.add': '添加',
-  'settings.custom.namePlaceholder': '应用名称',
-  'settings.custom.pathPlaceholder': '可执行文件路径 (.exe)',
-  'settings.noCustom': '暂无自定义项',
-  'settings.edit': '编辑',
-  'settings.delete': '删除',
-  'settings.cancel': '取消',
-  'settings.save': '保存',
-  'settings.form.nameRequired': '请输入应用名称',
-  'settings.form.pathRequired': '请输入可执行文件路径',
-  'settings.form.exeOnly': '仅支持 .exe / .com 可执行文件（经 cmd start 启动，窗口正常显示）',
-  owEmptyMenu: '没有可见的打开项（全部已隐藏），可到设置中调整',
-  owNoCwdTip: '当前会话没有文件夹（无法在此打开）',
-  owLaunchFailed: '启动失败，请检查目标程序',
   sessionDeleteLabel: '会话删除（⋯ 菜单）',
   sessionDeleteInfo: '会话条目 "⋯" 菜单新增"删除会话"项：删除前二次确认，永久删除该会话及全部数据，不可恢复。',
   groupWorkspace: '工作区分页',
@@ -190,13 +132,10 @@ const zh: Record<keyof WidthSliderKey, string> = {
   shortChinese: '思考/回复强制中文',
   shortLocalize: '界面中文化',
   shortResize: '弹窗可拖拽',
+  shortDialogAdaptive: '弹窗按比例跟随',
   shortNavScroll: 'tab 栏滚动',
   shortSessionDelete: '会话删除',
   shortWorkspaceTabs: '工作区分页',
-  shortOpenWithSettings: 'Open With 设置',
-  shortOpenWithButton: '头部打开按钮',
-  owManage: '管理',
-  owCollapse: '收起',
   groupMotion: '动效',
   motionTranscript: '对话入场',
   motionSidebar: '侧边栏',
@@ -206,6 +145,8 @@ const zh: Record<keyof WidthSliderKey, string> = {
   motionSidebarInfo: '打开 Web 时侧边栏树逐项出现，展开工作区时对话框浮现。',
   motionNewChatInfo: '新建对话时，欢迎界面和输入区淡入出现。',
   motionSettingsInfo: '打开设置时面板从设置按钮处展开，切换左侧标签时页面内容淡入，关闭时面板缩回。',
+  motionRole: '按角色入场',
+  motionRoleInfo: '用户消息从侧面滑入、助手正文用上面选择的样式、工具与系统行只做轻微淡入——不再所有内容共用同一种入场。',
   motionStyleTranscriptInfo: '对话内容的出现方式。',
   motionStyleSidebarInfo: '侧边栏会话树的出现方式，与对话动效独立选择。',
   motionStyleNewChatInfo: '新建对话时欢迎界面的出现方式。',
@@ -255,39 +196,11 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableLocalize: 'Localize interface labels to Chinese',
   enableLocalizeInfo: 'Replaces leftover hard-coded English UI labels with Chinese (Tool Call to 工具调用, Thinking to 思考, etc.).',
   enableResize: 'Draggable settings dialog',
-  enableResizeInfo: 'Turns the official settings dialog into a window: drag the bottom-right grip to resize, drag the header to move, double-click the grip to reset to 800x800 centered; size and position are remembered.',
+  enableResizeInfo: 'Turns the official settings dialog into a window: untouched it keeps the official size and centered position (and adapts to the window); drag the bottom-right grip to resize, drag the header to move, double-click the grip to reset to the official size and position; size and position are remembered.',
+  dialogAdaptiveInfo: 'Sizes the dialog by the window ratio instead (62% width, 82% height, minus viewport margins), so it scales with the window; only the box changes, never content or font size. It no longer matches the official 800px size and cannot be resized by dragging (moving still works).',
   enableNavScroll: 'Scrollable settings nav when tabs overflow',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
-  owTooltip: 'Open the workspace in VS Code, terminal or file manager',
-  owPickerAria: 'Choose an application to open the workspace',
-  owMenuAria: 'Open with',
-  owTargetCode: 'Open VS Code',
-  owGroupTitle: 'Open With',
-  owSettingsLabel: 'Open With settings',
-  owSettingsInfo: 'Manage preset/custom open targets: reorder, set current, hide, add/edit/delete (persisted on this machine).',
-  owButtonLabel: 'Enable header open button',
-  owButtonInfo: 'Shows the capsule button in the conversation header (current target + dropdown), launching in the current session folder.',
-  'settings.preset.title': 'Presets',
-  'settings.current.title': 'Current',
-  'settings.dragTip': 'Drag to reorder',
-  'settings.hide': 'Hide from capsule',
-  'settings.show': 'Show in capsule',
-  'settings.custom.title': 'Custom',
-  'settings.custom.add': 'Add',
-  'settings.custom.namePlaceholder': 'App name',
-  'settings.custom.pathPlaceholder': 'Executable path (.exe)',
-  'settings.noCustom': 'No custom items yet',
-  'settings.edit': 'Edit',
-  'settings.delete': 'Delete',
-  'settings.cancel': 'Cancel',
-  'settings.save': 'Save',
-  'settings.form.nameRequired': 'Please enter an app name',
-  'settings.form.pathRequired': 'Please enter an executable path',
-  'settings.form.exeOnly': 'Only .exe / .com executables are supported (launched via cmd start so the window shows)',
-  owEmptyMenu: 'No visible open targets (all hidden); adjust in settings',
-  owNoCwdTip: 'No folder in this session (cannot open here)',
-  owLaunchFailed: 'Launch failed - check the target application',
   sessionDeleteLabel: 'Session delete (⋯ menu)',
   sessionDeleteInfo: 'Adds "Delete session" to the session row "⋯" menu: double confirmation first, permanently removes the session and all its data.',
   groupWorkspace: 'Workspace tabs',
@@ -304,13 +217,10 @@ const en: Record<keyof WidthSliderKey, string> = {
   shortChinese: 'Force Chinese output',
   shortLocalize: 'Localize interface',
   shortResize: 'Draggable dialog',
+  shortDialogAdaptive: 'Dialog follows window',
   shortNavScroll: 'Scrollable nav',
   shortSessionDelete: 'Session delete',
   shortWorkspaceTabs: 'Workspace tabs',
-  shortOpenWithSettings: 'Open With settings',
-  shortOpenWithButton: 'Header open button',
-  owManage: 'Manage',
-  owCollapse: 'Collapse',
   groupMotion: 'Motion',
   motionTranscript: 'Conversation entrance',
   motionSidebar: 'Sidebar',
@@ -320,6 +230,8 @@ const en: Record<keyof WidthSliderKey, string> = {
   motionSidebarInfo: 'The sidebar tree cascades in on web load; workspace rows fade in when their group expands.',
   motionNewChatInfo: 'A brand-new conversation welcome dialog and composer fade in.',
   motionSettingsInfo: 'The settings dialog grows out of the settings button, page content fades in on nav switch, and the panel shrinks back on close.',
+  motionRole: 'Arrive by role',
+  motionRoleInfo: 'Your messages slide in from the side, assistant prose uses the style above, and tool or system rows settle in lightly — instead of every row sharing one entrance.',
   motionStyleTranscriptInfo: 'How conversation content arrives.',
   motionStyleSidebarInfo: 'How the sidebar session tree arrives, independent of the transcript style.',
   motionStyleNewChatInfo: 'How the welcome dialog of a new conversation arrives.',

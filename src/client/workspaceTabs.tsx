@@ -18,7 +18,7 @@
  *   官方树渲染、行菜单、搜索、分组方式全部原样保留；
  * - 标题行处理同 v0.6.0 首版：官方「工作区/会话」标题原位隐藏，页签栏以
  *   React Portal 放进官方 header 行首（标题位置）；
- * - 分组持久化在 host（workspace-groups.json，/width-slider wsGroupsRead/Write），
+ * - 分组持久化在 host（workspace-groups.json，/api/width-slider wsGroupsRead/Write），
  *   本模块维护小组 store（useSyncExternalStore），任何增删改即时落盘。
  *
  * 对官方内部结构的依赖（升级回归自检清单；官方 = @deepseek-ai/
@@ -55,6 +55,7 @@ import {
 import { createPortal } from 'react-dom'
 import { isZhInterface } from './lang.ts'
 import { getSettings, onSettingsChanged } from './config.ts'
+import { callEndpoint } from './endpointChannel.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
@@ -1455,16 +1456,11 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     console.warn('[width-slider] 读取 dsh-client-ui-primitives 失败，工作区分页功能已跳过安装')
     return () => {}
   }
-  rpcCall = (method: string, payload?: Record<string, unknown>) => {
-    try {
-      if (!ctx.connection?.rpc?.call) {
-        return Promise.resolve({ ok: false, error: { code: 'no-rpc', message: tt('warn.noRpc') } })
-      }
-      return ctx.connection.rpc.call('/width-slider', method, payload || {})
-    } catch {
-      return Promise.resolve({ ok: false, error: { code: 'no-rpc', message: tt('warn.noRpc') } })
-    }
-  }
+  rpcCall = (method: string, payload?: Record<string, unknown>) =>
+    callEndpoint('/api/width-slider', method, payload || {}).catch(() => ({
+      ok: false,
+      error: { code: 'no-rpc', message: tt('warn.noRpc') },
+    }))
   void loadGroups()
 
   // 工作区行菜单「分配标签」注入；选择框由侧栏壳组件本地渲染。

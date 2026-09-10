@@ -25,6 +25,7 @@ export interface WidthSliderKey {
   enableLocalizeInfo: string
   enableResize: string
   enableResizeInfo: string
+  dialogAdaptiveInfo: string
   enableNavScroll: string
   enableNavScrollInfo: string
   disabledHint: string
@@ -45,6 +46,7 @@ export interface WidthSliderKey {
   shortChinese: string
   shortLocalize: string
   shortResize: string
+  shortDialogAdaptive: string
   shortNavScroll: string
   shortSessionDelete: string
   shortWorkspaceTabs: string
@@ -107,7 +109,8 @@ const zh: Record<keyof WidthSliderKey, string> = {
   enableLocalize: '界面英文中文化',
   enableLocalizeInfo: '把官方界面残留的硬编码英文标签替换为中文（如 Tool Call→工具调用、Thinking→思考）。',
   enableResize: '设置弹窗可拖拽（窗口化）',
-  enableResizeInfo: '官方设置弹窗变普通窗口：右下角把手拖宽高、顶部空白拖动移动，双击把手复位 800×800 居中；尺寸与位置会被记住。',
+  enableResizeInfo: '官方设置弹窗变普通窗口：没动过时保持官方尺寸与居中位置（并随窗口大小自动适配）；右下角把手拖宽高、顶部空白拖动移动，双击把手复位为官方尺寸与位置；尺寸与位置会被记住。',
+  dialogAdaptiveInfo: '弹窗尺寸改按窗口比例自适应（宽 62%、高 82%，并留出视口边距），窗口缩放时弹窗跟着缩放；只改外框、不缩放内容与字号。开启后不再是官方 800px 尺寸，也不能手动拖拽改尺寸（位置仍可拖）。',
   enableNavScroll: '设置左侧 tab 栏超高滚动',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
   disabledHint: '该功能已关闭，开启后可用。',
@@ -127,6 +130,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   shortChinese: '思考/回复强制中文',
   shortLocalize: '界面中文化',
   shortResize: '弹窗可拖拽',
+  shortDialogAdaptive: '弹窗按比例跟随',
   shortNavScroll: 'tab 栏滚动',
   shortSessionDelete: '会话删除',
   shortWorkspaceTabs: '工作区分页',
@@ -188,7 +192,8 @@ const en: Record<keyof WidthSliderKey, string> = {
   enableLocalize: 'Localize interface labels to Chinese',
   enableLocalizeInfo: 'Replaces leftover hard-coded English UI labels with Chinese (Tool Call to 工具调用, Thinking to 思考, etc.).',
   enableResize: 'Draggable settings dialog',
-  enableResizeInfo: 'Turns the official settings dialog into a window: drag the bottom-right grip to resize, drag the header to move, double-click the grip to reset to 800x800 centered; size and position are remembered.',
+  enableResizeInfo: 'Turns the official settings dialog into a window: untouched it keeps the official size and centered position (and adapts to the window); drag the bottom-right grip to resize, drag the header to move, double-click the grip to reset to the official size and position; size and position are remembered.',
+  dialogAdaptiveInfo: 'Sizes the dialog by the window ratio instead (62% width, 82% height, minus viewport margins), so it scales with the window; only the box changes, never content or font size. It no longer matches the official 800px size and cannot be resized by dragging (moving still works).',
   enableNavScroll: 'Scrollable settings nav when tabs overflow',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
   disabledHint: 'This feature is off; enable it to use.',
@@ -208,6 +213,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   shortChinese: 'Force Chinese output',
   shortLocalize: 'Localize interface',
   shortResize: 'Draggable dialog',
+  shortDialogAdaptive: 'Dialog follows window',
   shortNavScroll: 'Scrollable nav',
   shortSessionDelete: 'Session delete',
   shortWorkspaceTabs: 'Workspace tabs',

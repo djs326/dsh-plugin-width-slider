@@ -420,6 +420,13 @@ export function WidthSliderSettings({
             onChange={(checked) => persist({ dialogResize: checked })}
           />
           <SwitchItem
+            id={id('enable-dialog-adaptive')}
+            label={t('shortDialogAdaptive')}
+            title={t('dialogAdaptiveInfo')}
+            checked={settings.dialogAdaptive}
+            onChange={(checked) => persist({ dialogAdaptive: checked })}
+          />
+          <SwitchItem
             id={id('enable-nav-scroll')}
             label={t('shortNavScroll')}
             title={t('enableNavScrollInfo')}

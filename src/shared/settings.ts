@@ -33,23 +33,25 @@ export interface FeatureSettings {
   dialogResize: boolean
   /** 7 官方设置左侧 tab 栏超高滚动 */
   navScroll: boolean
-  /** 8 会话行 ⋯ 菜单"删除会话"项（克隆官方菜单项，二次确认后 host 永久删除） */
+  /** 8 设置弹窗尺寸按窗口比例自适应（关闭时未拖动就与官方尺寸一致） */
+  dialogAdaptive: boolean
+  /** 9 会话行 ⋯ 菜单"删除会话"项（克隆官方菜单项，二次确认后 host 永久删除） */
   sessionDelete: boolean
-  /** 9 工作区分页 tab 栏（官方标题行原位替换为「默认+分组文件夹」页签；工作区唯一归属默认或某页签，行菜单「分配标签」移动归属；删除页签时其中工作区自动回默认；重启后回到默认页签） */
+  /** 10 工作区分页 tab 栏（官方标题行原位替换为「默认+分组文件夹」页签；工作区唯一归属默认或某页签，行菜单「分配标签」移动归属；删除页签时其中工作区自动回默认；重启后回到默认页签） */
   workspaceTabs: boolean
-  /** 10 对话入场动效（整合自 dsh-client-ui-custom） */
+  /** 11 对话入场动效（整合自 dsh-client-ui-custom） */
   motionEnabled: boolean
-  /** 11 对话内容入场样式 */
+  /** 12 对话内容入场样式 */
   motionStyle: MotionStyle
-  /** 12 侧边栏动效（初次载入 + 工作区分组展开） */
+  /** 13 侧边栏动效（初次载入 + 工作区分组展开） */
   sidebarMotionEnabled: boolean
-  /** 13 侧边栏入场样式 */
+  /** 14 侧边栏入场样式 */
   sidebarMotionStyle: SidebarMotionStyle
-  /** 14 新建对话（空白会话）入场动效 */
+  /** 15 新建对话（空白会话）入场动效 */
   newChatMotionEnabled: boolean
-  /** 15 新建对话入场样式 */
+  /** 16 新建对话入场样式 */
   newChatMotionStyle: NewChatMotionStyle
-  /** 16 设置面板动效（展开/页面淡入/关闭缩回） */
+  /** 17 设置面板动效（展开/页面淡入/关闭缩回） */
   settingsMotionEnabled: boolean
 }
 
@@ -61,6 +63,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   thinkMode: 'auto-collapse',
   dialogResize: true,
   navScroll: true,
+  dialogAdaptive: false,
   sessionDelete: true,
   workspaceTabs: true,
   motionEnabled: true,
@@ -83,6 +86,7 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     thinkMode: o.thinkMode === 'keep-expanded' ? 'keep-expanded' : 'auto-collapse',
     dialogResize: o.dialogResize !== false,
     navScroll: o.navScroll !== false,
+    dialogAdaptive: o.dialogAdaptive === true,
     sessionDelete: o.sessionDelete !== false,
     workspaceTabs: o.workspaceTabs !== false,
     motionEnabled: o.motionEnabled !== false,

@@ -13,9 +13,14 @@
  * 功能：
  * - navScroll：navList 超高时出现纵向滚动；
  * - dialogWindow：把官方设置弹窗变成"可拖拽窗口"——右下角把手拖宽高、
- *   顶部 header 空白处拖动移动弹窗、双击把手复位 800x800 居中；尺寸与
+ *   顶部 header 空白处拖动移动弹窗、双击把手复位到官方尺寸并居中；尺寸与
  *   位置记忆（localStorage 键 dsh.conversation.settingsPanelWindow，兼容
- *   迁移旧宽度键）。实现：弹窗改 position:absolute 于全屏 overlay 内定位
+ *   迁移旧宽度键）。两种模式：没有"用户拖过尺寸"的记忆时是自动模式，
+ *   尺寸按官方公式 min(800, 视口-48) 计算，并在窗口尺寸变化时实时重算
+ *   （页面变小则弹窗跟着收，页面够大就是官方 800 封顶，只挪位置不打断
+ *   自适应）；用户拖过尺寸后进入手动模式，改用记忆值，窗口变化时只做
+ *   视口内收敛。全程只改外框 width/height，不缩放内容、不动字号。
+ *   实现：弹窗改 position:absolute 于全屏 overlay 内定位
  *   （官方原为 flex 居中，切 absolute 后手动维护 left/top）。
  *
  * 设置面板每次开关都会重新挂载弹窗 DOM（React unmount/mount），因此两个
@@ -28,16 +33,31 @@
 // ── 常量 ─────────────────────────────────────────────────────────────
 
 import { pickText } from './lang.ts'
+import { getSettings, onSettingsChanged } from './config.ts'
 
 const DIALOG_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
 const RECT_KEY = 'dsh.conversation.settingsPanelWindow'
 const LEGACY_WIDTH_KEY = 'dsh.conversation.settingsPanelWidth'
 const RESIZE_HANDLE_ATTR = 'data-width-slider-resize-handle'
+/** 手动拖拽的尺寸下限。 */
 const MIN_W = 640
 const MIN_H = 560
-const DEFAULT_W = 800
-const DEFAULT_H = 800
+/** 官方弹窗尺寸上限与边距（SettingsRoot.module.css：width 800px / height min(800px, 100vh-48px) / max-width 100vw-48px）。 */
+const OFFICIAL_MAX_W = 800
+const OFFICIAL_MAX_H = 800
+const OFFICIAL_EDGE = 48
+/** 位置 clamp 的视口边距（比官方 48 更贴边，允许把窗口挪到角落）。 */
 const VIEWPORT_EDGE = 16
+/** "弹窗按比例跟随"开启时的视口比例（宽 / 高）。 */
+const ADAPTIVE_W_RATIO = 0.62
+const ADAPTIVE_H_RATIO = 0.82
+/**
+ * 弹窗圆角：官方 .panel 是 32px，配 `overflow: hidden` 会把贴角的把手裁掉；
+ * 收到 16px（卡片/面板设计系统的常见区间是 16–24px），把手即可完整可见。
+ */
+const DIALOG_RADIUS = '16px'
+/** 把手距右下角的偏移：避开圆角弧线，保证完整可见。 */
+const HANDLE_INSET = '6px'
 
 // ── 探测 ─────────────────────────────────────────────────────────────
 
@@ -144,6 +164,8 @@ interface DialogRect {
   h: number
   left: number
   top: number
+  /** true/缺省 = 尺寸仍随视口自适应（用户只挪过位置）；false = 尺寸由用户手动拖定。 */
+  auto?: boolean
 }
 
 function readDialogRect(): DialogRect | null {
@@ -152,7 +174,7 @@ function readDialogRect(): DialogRect | null {
     if (raw !== null) {
       const o = JSON.parse(raw) as Record<string, unknown>
       if (typeof o.w === 'number' && typeof o.h === 'number' && typeof o.left === 'number' && typeof o.top === 'number') {
-        return { w: o.w, h: o.h, left: o.left, top: o.top }
+        return { w: o.w, h: o.h, left: o.left, top: o.top, auto: o.auto !== false }
       }
     }
   } catch { /* 忽略 */ }
@@ -161,7 +183,10 @@ function readDialogRect(): DialogRect | null {
     const legacy = localStorage.getItem(LEGACY_WIDTH_KEY)
     if (legacy !== null) {
       const w = Number(legacy)
-      if (Number.isFinite(w) && w >= MIN_W) return { w: Math.round(w), h: DEFAULT_H, left: NaN, top: NaN }
+      if (Number.isFinite(w) && w >= MIN_W) {
+        const vh = typeof window === 'undefined' ? OFFICIAL_MAX_H : window.innerHeight
+        return { w: Math.round(w), h: officialSize(w, vh).h, left: NaN, top: NaN, auto: true }
+      }
     }
   } catch { /* 忽略 */ }
   return null
@@ -181,12 +206,28 @@ function clearDialogRect(): void {
   } catch { /* ignore */ }
 }
 
-/** 尺寸 clamp（宽高各留视口边距）。 */
+/**
+ * 官方设置弹窗在给定视口下的尺寸：width 800、height min(800, 视口-48)、
+ * max-width 视口-48（与 SettingsRoot.module.css 的三条规则等价）。
+ */
+function officialSize(vw: number, vh: number): { w: number; h: number } {
+  return {
+    w: Math.max(1, Math.min(OFFICIAL_MAX_W, vw - OFFICIAL_EDGE)),
+    h: Math.max(1, Math.min(OFFICIAL_MAX_H, vh - OFFICIAL_EDGE)),
+  }
+}
+
+/** 尺寸 clamp（手动模式：不低于下限，不超过官方边距允许的视口内空间）。 */
 function clampSize(w: number, h: number, vw: number, vh: number): { w: number; h: number } {
   return {
-    w: Math.min(Math.max(MIN_W, Math.round(w)), Math.max(MIN_W, vw - VIEWPORT_EDGE * 2)),
-    h: Math.min(Math.max(MIN_H, Math.round(h)), Math.max(MIN_H, vh - VIEWPORT_EDGE * 2)),
+    w: Math.min(Math.max(MIN_W, Math.round(w)), Math.max(MIN_W, vw - OFFICIAL_EDGE)),
+    h: Math.min(Math.max(MIN_H, Math.round(h)), Math.max(MIN_H, vh - OFFICIAL_EDGE)),
   }
+}
+
+/** "弹窗按比例跟随"模式下的尺寸：取视口比例，并受拖拽下限与官方边距约束。 */
+function adaptiveSize(vw: number, vh: number): { w: number; h: number } {
+  return clampSize(vw * ADAPTIVE_W_RATIO, vh * ADAPTIVE_H_RATIO, vw, vh)
 }
 
 /** 位置 clamp：保持弹窗主体在视口内。 */
@@ -220,6 +261,12 @@ function makeDialogDraggable(dialog: HTMLElement): { left: number; top: number }
   return { left: Math.round(cur.left), top: Math.round(cur.top) }
 }
 
+/** 写 left/top 前确保已切 absolute：否则官方布局的定位会与内联 left/top 叠加。 */
+function ensureAbsolute(dialog: HTMLElement): void {
+  if (dialog.style.position === 'absolute') return
+  makeDialogDraggable(dialog)
+}
+
 // ── 拖拽期间锁定 body 文本选择；带兜底恢复 ───────────────────────────
 
 let bodyUserSelectLocked = false
@@ -242,12 +289,14 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
     target.closest('button, a, input, select, textarea, label, [role="button"], [contenteditable]') !== null
 }
 
-/** 右下角把手图标（用户选定样式 B：双层实心三角）。 */
+/** 右下角把手图标（选定样式 5：圆角底 + 两道斜线；底色与线条都取 currentColor，跟随 hover 变色）。 */
 const GRIP_SVG =
-  '<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
-  '<path d="M15 15H9.5L15 9.5V15z"/>' +
-  '<path d="M15 4.5L4.5 15H.5L15 .5v4z"/>' +
-  '</svg>'
+  '<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">' +
+  '<rect x="5" y="5" width="17" height="17" rx="4.5" fill="currentColor" opacity="0.18"/>' +
+  '<g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none">' +
+  '<line x1="18.5" y1="9.5" x2="9.5" y2="18.5"/>' +
+  '<line x1="18.5" y1="14.5" x2="14.5" y2="18.5"/>' +
+  '</g></svg>'
 
 /** 当前 dialog 定位（left/top，属性未设时回退计算）。 */
 function currentPosOf(dialog: HTMLElement): { left: number; top: number } {
@@ -262,11 +311,11 @@ function currentPosOf(dialog: HTMLElement): { left: number; top: number } {
 function buildResizeHandle(dialog: HTMLElement): HTMLElement {
   const handle = document.createElement('div')
   handle.setAttribute(RESIZE_HANDLE_ATTR, '')
-  handle.title = pickText('拖动调整弹窗大小，双击复位居中', 'Drag to resize the dialog; double-click to reset and center')
+  handle.title = handleTitle()
   handle.style.cssText = [
     'position:absolute',
-    'right:2px',
-    'bottom:2px',
+    'right:' + HANDLE_INSET,
+    'bottom:' + HANDLE_INSET,
     'width:22px',
     'height:22px',
     'cursor:nwse-resize',
@@ -286,14 +335,16 @@ function buildResizeHandle(dialog: HTMLElement): HTMLElement {
   })
   handle.addEventListener('dblclick', (event) => {
     event.stopPropagation()
-    const rect: DialogRect = {
-      w: DEFAULT_W,
-      h: DEFAULT_H,
-      left: Math.round((window.innerWidth - DEFAULT_W) / 2),
-      top: Math.round((window.innerHeight - DEFAULT_H) / 2),
-    }
-    applyRectToDialog(dialog, rect)
+    // 复位 = 回到官方原样：清手动记忆与内联尺寸/位置，官方居中布局与官方
+    // 尺寸重新生效（保留承载把手所需的 position）。
     clearDialogRect()
+    dialog.style.width = ''
+    dialog.style.height = ''
+    dialog.style.left = ''
+    dialog.style.top = ''
+    dialog.style.margin = ''
+    dialog.style.position = ''
+    ensureHandleContainer(dialog)
   })
 
   let drag: { startX: number; startY: number; startW: number; startH: number } | null = null
@@ -302,6 +353,8 @@ function buildResizeHandle(dialog: HTMLElement): HTMLElement {
     restoreBodyUserSelect()
   }
   handle.addEventListener('pointerdown', (event) => {
+    // 按比例跟随时尺寸由窗口决定，拖拽改尺寸无效（位置仍可由标题区拖动）。
+    if (getSettings().dialogAdaptive) return
     event.preventDefault()
     event.stopPropagation()
     drag = {
@@ -332,7 +385,7 @@ function buildResizeHandle(dialog: HTMLElement): HTMLElement {
       window.innerWidth,
       window.innerHeight,
     )
-    persistDialogRect({ w: size.w, h: size.h, ...currentPosOf(dialog) })
+    persistDialogRect({ w: size.w, h: size.h, ...currentPosOf(dialog), auto: false })
     endDrag()
     try {
       handle.releasePointerCapture(event.pointerId)
@@ -357,6 +410,13 @@ function attachMoveBar(dialog: HTMLElement): () => void {
     if (isInteractiveTarget(event.target)) return
     if (event.button !== 0) return
     event.preventDefault()
+    // 首次拖动前弹窗可能还是官方布局（没有记忆）：先切 absolute 并固定当前
+    // 位置，后续位移才有确定的基准。
+    if (dialog.style.position !== 'absolute') {
+      const cur = makeDialogDraggable(dialog)
+      dialog.style.left = cur.left + 'px'
+      dialog.style.top = cur.top + 'px'
+    }
     const pos = currentPosOf(dialog)
     drag = { startX: event.clientX, startY: event.clientY, baseLeft: pos.left, baseTop: pos.top }
     header.setPointerCapture(event.pointerId)
@@ -377,7 +437,14 @@ function attachMoveBar(dialog: HTMLElement): () => void {
   }
   const onUp = (event: PointerEvent): void => {
     if (!drag) return
-    persistDialogRect({ w: dialog.offsetWidth, h: dialog.offsetHeight, ...currentPosOf(dialog) })
+    // 只挪位置不动尺寸：保留原有的"尺寸是否随视口"标记（没拖过尺寸就仍是自动模式）。
+    const prev = readDialogRect()
+    persistDialogRect({
+      w: dialog.offsetWidth,
+      h: dialog.offsetHeight,
+      ...currentPosOf(dialog),
+      auto: prev?.auto !== false,
+    })
     drag = null
     restoreBodyUserSelect()
     try {
@@ -403,28 +470,81 @@ function attachMoveBar(dialog: HTMLElement): () => void {
   }
 }
 
+/** 把手 tooltip：按当前模式给出不同的操作指引。 */
+function handleTitle(): string {
+  return getSettings().dialogAdaptive
+    ? pickText('尺寸按窗口比例自适应中（关闭设置里的「弹窗按比例跟随」后可手动调整）', 'Size follows the window ratio (turn that switch off to resize by hand)')
+    : pickText('拖动调整弹窗大小，双击复位为官方尺寸与位置', 'Drag to resize the dialog; double-click to reset to the official size and position')
+}
+
+/**
+ * 解析弹窗当前的尺寸策略，返回应套用的矩形；`null` 表示"保持官方原样"
+ * （不动任何内联尺寸与位置，交给官方布局与官方 CSS）。
+ *
+ * 尺寸优先级：按比例跟随 > 用户拖定的尺寸 > 官方公式；位置沿用记忆，
+ * 没有位置记忆时用弹窗当前所在位置（初始即官方居中位置）。
+ * @param dialog - 当前弹窗（位置兜底与现状读取）。
+ * @param vw - 视口宽。
+ * @param vh - 视口高。
+ * @returns 目标矩形，或 null 表示交给官方。
+ */
+function resolveDialogRect(dialog: HTMLElement, vw: number, vh: number): DialogRect | null {
+  const adaptive = getSettings().dialogAdaptive
+  const stored = readDialogRect()
+  if (!adaptive && stored === null) return null
+  const hasPos = stored !== null && Number.isFinite(stored.left) && Number.isFinite(stored.top)
+  const cur = currentPosOf(dialog)
+  const left = hasPos ? (stored as DialogRect).left : cur.left
+  const top = hasPos ? (stored as DialogRect).top : cur.top
+  const size = adaptive
+    ? adaptiveSize(vw, vh)
+    : stored !== null && stored.auto === false
+      ? clampSize(stored.w, stored.h, vw, vh)
+      : officialSize(vw, vh)
+  const pos = clampPos(left, top, size.w, size.h, vw, vh)
+  return { w: size.w, h: size.h, left: pos.left, top: pos.top }
+}
+
+/** 把当前策略套用到弹窗；"交给官方"时清除内联尺寸与位置并保留把手容器。 */
+function applyResolvedRect(dialog: HTMLElement): void {
+  const rect = resolveDialogRect(dialog, window.innerWidth, window.innerHeight)
+  if (rect === null) {
+    dialog.style.width = ''
+    dialog.style.height = ''
+    dialog.style.left = ''
+    dialog.style.top = ''
+    dialog.style.margin = ''
+    dialog.style.position = ''
+    ensureHandleContainer(dialog)
+    return
+  }
+  ensureAbsolute(dialog)
+  applyRectToDialog(dialog, rect)
+}
+
+/** 配置变化（例如切换「弹窗按比例跟随」）时重新套用策略并刷新把手提示。 */
+function reapplyDialogRect(): void {
+  const dialog = activePatch?.dialog
+  if (!dialog || !dialog.isConnected) return
+  applyResolvedRect(dialog)
+  const handle = dialog.querySelector<HTMLElement>('[' + RESIZE_HANDLE_ATTR + ']')
+  if (handle !== null) handle.title = handleTitle()
+}
+
 const patchedDialogs = new WeakSet<HTMLElement>()
 /** 最近一次 patch 的弹窗及其清理句柄（供开关关闭时完整还原）。 */
 let activePatch: { dialog: HTMLElement; unbindMove: () => void } | null = null
 
+/** 官方布局本身可能不是定位元素；补 relative 让右下把手能相对弹窗绝对定位。 */
+function ensureHandleContainer(dialog: HTMLElement): void {
+  if (getComputedStyle(dialog).position === 'static') dialog.style.position = 'relative'
+}
+
 function applyDialogWindowPatch(dialog: HTMLElement): void {
   if (dialog.querySelector('[' + RESIZE_HANDLE_ATTR + ']') !== null) return
-  // 1) 切 absolute 并保持当前（官方居中）位置。
-  const pos = makeDialogDraggable(dialog)
-  dialog.style.left = pos.left + 'px'
-  dialog.style.top = pos.top + 'px'
-  // 2) 恢复记忆（尺寸/位置；旧宽度键迁移时位置取居中）。
-  const stored = readDialogRect()
-  if (stored !== null) {
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const size = clampSize(stored.w, stored.h, vw, vh)
-    const left = Number.isFinite(stored.left) ? stored.left : Math.round((vw - size.w) / 2)
-    const top = Number.isFinite(stored.top) ? stored.top : Math.round((vh - size.h) / 2)
-    const pos2 = clampPos(left, top, size.w, size.h, vw, vh)
-    applyRectToDialog(dialog, { w: size.w, h: size.h, left: pos2.left, top: pos2.top })
-  }
-  // 3) 挂右下把手 + 顶部移动区。
+  // 官方 .panel 的 32px 圆角配 overflow:hidden 会裁掉贴角的把手，收到 16px。
+  dialog.style.borderRadius = DIALOG_RADIUS
+  applyResolvedRect(dialog)
   dialog.appendChild(buildResizeHandle(dialog))
   const unbindMove = attachMoveBar(dialog)
   activePatch = { dialog, unbindMove }
@@ -438,16 +558,43 @@ function probeAndPatchDialog(): void {
   applyDialogWindowPatch(dialog)
 }
 
-/** 安装弹窗窗口化补丁（body 观察器跟随面板开合）；返回 disposer。 */
+/**
+ * 视口尺寸变化时同步弹窗：按当前策略重算尺寸与位置；"交给官方"时不动任何
+ * 内联样式（官方布局与官方尺寸本身随视口响应）。只写外框，不缩放内容、
+ * 不动字号。
+ */
+function syncDialogToViewport(): void {
+  const dialog = activePatch?.dialog
+  if (!dialog || !dialog.isConnected) return
+  applyResolvedRect(dialog)
+  // 手动尺寸模式下把收敛结果写回记忆；官方/比例模式不写。
+  const stored = readDialogRect()
+  if (stored !== null && stored.auto === false && !getSettings().dialogAdaptive) {
+    const cur = currentPosOf(dialog)
+    persistDialogRect({ w: dialog.offsetWidth, h: dialog.offsetHeight, left: cur.left, top: cur.top, auto: false })
+  }
+}
+
+/** 安装弹窗窗口化补丁（body 观察器跟随面板开合，外加视口尺寸跟随）；返回 disposer。 */
 export function installDialogResizePatch(): () => void {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
   probeAndPatchDialog()
+  const reapply = debouncedProbe(() => reapplyDialogRect())
   const probe = debouncedProbe(() => probeAndPatchDialog())
+  const resize = debouncedProbe(() => syncDialogToViewport())
+  const onResize = (): void => { resize.schedule() }
+  window.addEventListener('resize', onResize)
+  // 设置里的「弹窗按比例跟随」切换后即时套用新策略。
+  const offSettings = onSettingsChanged(() => reapply.schedule())
   const observer = new MutationObserver(() => probe.schedule())
   observer.observe(document.body, { childList: true, subtree: true })
   return () => {
     observer.disconnect()
     probe.dispose()
+    resize.dispose()
+    reapply.dispose()
+    offSettings()
+    window.removeEventListener('resize', onResize)
     restoreBodyUserSelect()
     // 关闭即时可逆：摘把手/解绑移动/还原官方尺寸与居中/清记忆并重置 WeakSet，
     // 同一弹窗再次开启开关可立即重新 patch。
@@ -463,6 +610,7 @@ export function installDialogResizePatch(): () => void {
       dialog.style.top = ''
       dialog.style.position = ''
       dialog.style.margin = ''
+      dialog.style.borderRadius = ''
       patchedDialogs.delete(dialog)
     }
     clearDialogRect()

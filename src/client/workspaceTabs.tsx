@@ -172,6 +172,17 @@ function tt(key: string, vars?: Record<string, string>): string {
 
 // ── primitives（Modal 等；bundle external，运行时 require）──────────────
 let _primitives: { Modal?: unknown } | null = null
+
+/**
+ * 测试专用注入缝：vitest 的 ESM 环境里 `require` 由 runner 提供，解析不到宿主的
+ * `@deepseek-ai/dsh-client-ui-primitives`（optional peer），`primitives()` 会静默
+ * 降级、整个安装被跳过，组件级测试因此无从渲染。生产路径始终走 `require`。
+ * @param mod - 假 primitives（含 Modal），或 null 恢复未读取状态。
+ */
+export function setPrimitivesForTest(mod: { Modal?: unknown } | null): void {
+  _primitives = mod
+}
+
 function primitives(): { Modal: any } {
   if (_primitives === null) {
     try {

@@ -69,9 +69,15 @@ describe('entrance classes', () => {
   })
 
   it('cleans up both the style and the role classes', () => {
+    // 原来只断言「ENTRANCE_CLASSES 包含 STYLE_CLASSES + ROLE_CLASSES」——而它正是这么拼出来的，
+    // 除了「拼错了」之外抓不到回归。补上内容约束：清理集合必须无重复、都在命名空间内，
+    // 且数量与两份来源一致（多塞成员同样会红）。
     for (const cls of [...STYLE_CLASSES, ...ROLE_CLASSES]) {
       expect(ENTRANCE_CLASSES).toContain(cls)
     }
+    expect(new Set(ENTRANCE_CLASSES).size).toBe(ENTRANCE_CLASSES.length)
+    for (const cls of ENTRANCE_CLASSES) expect(cls.startsWith('dsu-motion-')).toBe(true)
+    expect(ENTRANCE_CLASSES).toHaveLength(STYLE_CLASSES.length + ROLE_CLASSES.length)
     // The style ids keep their documented class shape.
     expect(ENTRANCE_CLASSES).toContain(styleClass('fade-up'))
   })

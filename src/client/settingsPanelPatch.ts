@@ -40,12 +40,13 @@ const RECT_KEY = 'dsh.conversation.settingsPanelWindow'
 const LEGACY_WIDTH_KEY = 'dsh.conversation.settingsPanelWidth'
 
 /**
- * 清掉弹窗的尺寸/位置记忆（「恢复默认设置」用）。必须清 `RECT_KEY` —— 它才是现行记忆
- * 键；`LEGACY_WIDTH_KEY` 只在迁移路径里被读一次，删它不会重置弹窗大小。
+ * 清掉弹窗的尺寸/位置记忆（「恢复默认设置」用）。两个键都要清：`RECT_KEY` 是现行记忆键，
+ * 而 `LEGACY_WIDTH_KEY` 仍被迁移路径读取 —— 留着它，「恢复默认」之后弹窗会被重新套回旧宽度。
  */
 export function clearPanelRect(): void {
   try {
     window.localStorage.removeItem(RECT_KEY)
+    window.localStorage.removeItem(LEGACY_WIDTH_KEY)
   } catch { /* 存储不可用时没有记忆可清 */ }
 }
 const RESIZE_HANDLE_ATTR = 'data-width-slider-resize-handle'
@@ -199,7 +200,9 @@ function readDialogRect(): DialogRect | null {
       const w = Number(legacy)
       if (Number.isFinite(w) && w >= MIN_W) {
         const vh = typeof window === 'undefined' ? OFFICIAL_MAX_H : window.innerHeight
-        return { w: Math.round(w), h: officialSize(w, vh).h, left: NaN, top: NaN, auto: true }
+        // auto:false = 尺寸来自记忆。旧键存的正是用户拖定的宽度；标成 true（只挪过位置）
+        // 会让 resolveDialogRect 改用官方尺寸，迁移等于没做。
+        return { w: Math.round(w), h: officialSize(w, vh).h, left: NaN, top: NaN, auto: false }
       }
     }
   } catch { /* 忽略 */ }

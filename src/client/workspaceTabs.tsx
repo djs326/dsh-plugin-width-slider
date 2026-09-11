@@ -325,10 +325,13 @@ async function loadGroups(): Promise<void> {
   }
   try {
     const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
-    // 读回期间用户已经建/改过页签：本地是更新的真源，弃用这次的远端结果，否则刚建的
-    // 页签会被旧列表在内存与缓存里一起覆盖掉（窗口＝RPC 往返）。
-    if (groupRevision !== startedRevision) return
-    if (result && result.ok === true) {
+    // 读回期间用户已经建/改过页签：本地是更新的真源，这次远端结果不再赋值（否则刚建的
+    // 页签会被旧列表在内存与缓存里一起覆盖掉，窗口＝RPC 往返）。收尾照常走完，并清掉
+    // 上次的失败标记 —— 本地写入一律经过 commitGroups，revision 变化即代表它已经完成
+    // 了 groupReady／缓存／host 写回。
+    if (groupRevision !== startedRevision) {
+      groupLoadFailed = false
+    } else if (result && result.ok === true) {
       const remote = sanitize(result.value)
       if (remote.length > 0) {
         // 上次写 host 失败过（脏标志）且本地缓存更新 → 以本地为准并重试写回，
@@ -1388,7 +1391,8 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
 
   /** 新建草稿被确认：此时才创建组并切过去（activeIntent 供官方新建工作区的自动归属）。 */
   const createGroup = (id: string, name: string): void => {
-    commitGroups((cur) => [...cur, { id, name, workspaceIds: [] }])
+    // 幂等：同一 id 不重复追加（渲染层已挡住「草稿 id 已存在」，这里是单点防护）。
+    commitGroups((cur) => (cur.some((g) => g.id === id) ? cur : [...cur, { id, name, workspaceIds: [] }]))
     setActive(id)
     activeIntentRef.current = id
   }
@@ -1679,6 +1683,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     style.remove()
     rpcCall = null
     groupReady = false
+    groupLoadFailed = false
     groups = []
     emitGroups()
   }

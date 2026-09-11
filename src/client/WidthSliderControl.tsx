@@ -50,8 +50,6 @@ import {
 // bar's rounded end — no flat edge ever shows through the round knob.
 // 8px radius = the 16px track/knob height declared by .dsws-track / .dsws-knob.
 const PANEL_THUMB_R = 8
-/** Track height equals the knob diameter (2 * radius). */
-const PANEL_TRACK_H = PANEL_THUMB_R * 2
 /** Overlay preview slider knob radius in px (28px knob / 2). */
 const OVERLAY_THUMB_R = 14
 /** Overlay track height equals the knob diameter. */

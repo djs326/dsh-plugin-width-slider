@@ -63,13 +63,6 @@ const THINK_BODY = '.dsh-ws-think-body'
 const HERO_HEADLINE = '[class*="headline"]'
 
 /**
- * Transcript-column entrance marker. The class records that the column has had
- * its arrival; the fade-and-drop itself is the imperative animation in
- * panelEntrance, not a CSS rule.
- */
-export const PANEL_ANIMATION_CLASS = 'dsu-motion-panel'
-
-/**
  * Entrance classes applied to marked rows. Literal (global) classes on purpose:
  * the engine runs identically in the browser and in jsdom tests, independent of
  * CSS-module processing. ROW_IN_CLASS is the "already animated" marker used for
@@ -645,7 +638,6 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
   }
 
   function panelEntrance(el: HTMLElement): void {
-    el.classList.add(PANEL_ANIMATION_CLASS)
     replayEntrance(el, PANEL_FRAMES, { duration: PANEL_DURATION_MS, easing: EASE_SETTLE })
   }
 

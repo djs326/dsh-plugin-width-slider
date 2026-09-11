@@ -154,10 +154,12 @@ describe('tuning constants', () => {
   })
 
   it('stays underdamped so the release keeps momentum', () => {
-    // ζ = -ln(damping) * 60 / (2√k) ≈ 0.67: the overshoot is visible while the
-    // oscillation dies out instead of ringing for a second.
+    // ζ = -ln(damping) * 60 / (2√k) ≈ 0.77: the overshoot is visible while the
+    // oscillation dies out instead of ringing for a second. The band is tight
+    // enough to catch a noticeably under-damped pair (a 0.5 lower bound let
+    // "nearly no damping" and "clearly too little" both pass).
     const zeta = -Math.log(SPRING_DAMPING) * 60 / (2 * Math.sqrt(SPRING_STIFFNESS))
-    expect(zeta).toBeGreaterThan(0.5)
+    expect(zeta).toBeGreaterThan(0.7)
     expect(zeta).toBeLessThan(0.85)
   })
 

@@ -345,7 +345,6 @@ dsh-plugin-width-slider/
 │       ├── think/                   # 思考块渲染器与界面中文化词表
 │       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）+ 弹簧手感 + 文字擦除
 │       ├── lang.ts                  # 界面语言判定
-│       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案
 ├── test/                            # 单元测试（含 jsdom 动效用例）
 ├── scripts/fix-dts-imports.mjs      # 构建后修正 d.ts 相对导入

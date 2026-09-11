@@ -50,6 +50,8 @@ export interface WidthSliderKey {
   shortNavScroll: string
   shortSessionDelete: string
   shortWorkspaceTabs: string
+  sidebarToolsMerge: string
+  sidebarToolsMergeInfo: string
   // ── v0.8.0 动效组（整合自 dsh-client-ui-custom；设置值存本插件 settings.json）──
   groupMotion: string
   motionTranscript: string
@@ -136,6 +138,8 @@ const zh: Record<keyof WidthSliderKey, string> = {
   shortNavScroll: 'tab 栏滚动',
   shortSessionDelete: '会话删除',
   shortWorkspaceTabs: '工作区分页',
+  sidebarToolsMerge: '工具按钮并入新会话',
+  sidebarToolsMergeInfo: '把工作区标题行右侧的「搜索会话 / 视图选项 / 添加工作区」三个按钮移到「新建会话」旁边，页签行因此独占整行宽度。关闭后三个按钮回到工作区标题行。',
   groupMotion: '动效',
   motionTranscript: '对话入场',
   motionSidebar: '侧边栏',
@@ -221,6 +225,8 @@ const en: Record<keyof WidthSliderKey, string> = {
   shortNavScroll: 'Scrollable nav',
   shortSessionDelete: 'Session delete',
   shortWorkspaceTabs: 'Workspace tabs',
+  sidebarToolsMerge: 'Merge toolbar into New chat',
+  sidebarToolsMergeInfo: 'Moves the Search, View options and Add workspace buttons from the workspace header next to New chat, so the tab row gets the full width. Turning it off puts the three buttons back on the workspace header.',
   groupMotion: 'Motion',
   motionTranscript: 'Conversation entrance',
   motionSidebar: 'Sidebar',

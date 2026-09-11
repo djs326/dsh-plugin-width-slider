@@ -469,6 +469,13 @@ export function WidthSliderSettings({
             checked={settings.workspaceTabs}
             onChange={(checked) => persist({ workspaceTabs: checked })}
           />
+          <SwitchItem
+            id={id('merge-sidebar-tools')}
+            label={t('sidebarToolsMerge')}
+            title={t('sidebarToolsMergeInfo')}
+            checked={settings.sidebarToolsMerge}
+            onChange={(checked) => persist({ sidebarToolsMerge: checked })}
+          />
         </div>
       </Group>
     </div>

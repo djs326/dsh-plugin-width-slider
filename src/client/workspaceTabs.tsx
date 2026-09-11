@@ -923,21 +923,32 @@ function btnStyle(opts: { primary?: boolean; danger?: boolean; disabled?: boolea
   return base
 }
 
-function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode {
+function RenameDialog(props: {
+  groupId: string
+  /** true = 新建草稿：组还不存在，点「保存」才创建；取消 = 什么都不发生。 */
+  draft?: boolean
+  /** 草稿被确认时由 Shell 创建该组（落盘并切换过去）。 */
+  onCreate?: (name: string) => void
+  onDone: () => void
+}): ReactNode {
+  const isDraft = props.draft === true
   const g = groupOf(props.groupId)
-  const [draft, setDraft] = useState(g?.name || '')
+  const [draftName, setDraftName] = useState(g?.name || tt('new.name'))
   const [busy, setBusy] = useState(false)
-  if (!g) return null
+  if (!g && !isDraft) return null
   const Modal = primitives().Modal
   if (!Modal) return null
 
-  const trimmed = draft.trim()
-  const duplicate = trimmed !== '' && trimmed !== g.name && groups.some((x) => x.id !== g.id && x.name === trimmed)
+  const trimmed = draftName.trim()
+  const currentName = g?.name ?? ''
+  const duplicate = trimmed !== '' && trimmed !== currentName
+    && groups.some((x) => x.id !== props.groupId && x.name === trimmed)
   const blocked = busy || trimmed === '' || duplicate
   const save = () => {
     if (blocked) return
     setBusy(true)
-    commitGroups((cur) => cur.map((x) => (x.id === g.id ? { ...x, name: trimmed } : x)))
+    if (isDraft) props.onCreate?.(trimmed)
+    else commitGroups((cur) => cur.map((x) => (x.id === props.groupId ? { ...x, name: trimmed } : x)))
     setBusy(false)
     props.onDone()
   }
@@ -949,7 +960,7 @@ function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode
     {
       open: true,
       onClose: close,
-      title: tt('rename.title'),
+      title: isDraft ? tt('add.tab') : tt('rename.title'),
       closeLabel: tt('cancel'),
       footer: [
         h('button', { key: 'cancel', type: 'button', onClick: close, style: btnStyle({}, busy) }, tt('cancel')),
@@ -967,10 +978,10 @@ function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode
         key: 'inp',
         type: 'text',
         autoFocus: true,
-        value: draft,
+        value: draftName,
         maxLength: 40,
         placeholder: tt('rename.placeholder'),
-        onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
+        onChange: (e: { target: { value: string } }) => setDraftName(e.target.value),
         onKeyDown: (e: { key: string }) => {
           if (e.key === 'Enter') save()
         },
@@ -1141,7 +1152,8 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const activeIntentRef = useRef<string>(DEFAULT_TAB)
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
-  const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string } | null>(null)
+  // draft = 新建页签草稿：组此时还不存在（不落盘），用户点「保存」才创建。
+  const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string; draft?: boolean } | null>(null)
   // 工作区行菜单「分配标签」事件桥 → 本地弹窗（Shell 一定挂载，比 overlay 桥更可靠）。
   const [assignTarget, setAssignTarget] = useState<{ workspaceId: string; title: string } | null>(null)
   useEffect(() => {
@@ -1283,7 +1295,9 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) {
       setActive(DEFAULT_TAB)
     }
-    if (dialog && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
+    // 草稿（新建页签）的 id 此时还不存在于 groupList，必须跳过这条校验，
+    // 否则对话框挂载的同一帧就被关掉（表现为点加号没反应/一闪而过）。
+    if (dialog && dialog.draft !== true && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
   }, [gs.ready, active, groupList, dialog])
 
   // 标题行处理：官方标题原位替换为页签栏。
@@ -1341,11 +1355,15 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     const gid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? 'g-' + crypto.randomUUID()
       : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
-    const nu: WsGroup = { id: gid, name: tt('new.name'), workspaceIds: [] }
-    commitGroups((cur) => [...cur, nu])
-    setActive(nu.id)
-    activeIntentRef.current = nu.id
-    setDialog({ kind: 'rename', id: nu.id })
+    // 新建先落草稿：此处不建组、不落盘，用户点「保存」才创建；取消/关闭什么都不发生。
+    setDialog({ kind: 'rename', id: gid, draft: true })
+  }
+
+  /** 新建草稿被确认：此时才创建组并切过去（activeIntent 供官方新建工作区的自动归属）。 */
+  const createGroup = (id: string, name: string): void => {
+    commitGroups((cur) => [...cur, { id, name, workspaceIds: [] }])
+    setActive(id)
+    activeIntentRef.current = id
   }
 
   // 过滤 hooks：仅开关开启时用页签作用域驱动官方树；关闭时原样透传（官方原貌）。
@@ -1401,6 +1419,8 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   }
 
   const dialogGroup = dialog ? groupList.find((g) => g.id === dialog.id) : undefined
+  // 重命名对话框的两个来源：已存在的页签，或尚未创建的新页签草稿。
+  const renameTarget = dialog && dialog.kind === 'rename' && (dialog.draft === true || dialogGroup) ? dialog : null
 
   return h(
     'div',
@@ -1422,8 +1442,13 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
             header.row,
           )
         : null,
-      dialog && dialog.kind === 'rename' && dialogGroup
-        ? h(RenameDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
+      renameTarget
+        ? h(RenameDialog, {
+            groupId: renameTarget.id,
+            draft: renameTarget.draft === true,
+            onCreate: (name: string) => createGroup(renameTarget.id, name),
+            onDone: () => setDialog(null),
+          })
         : null,
       dialog && dialog.kind === 'members' && dialogGroup
         ? h(MembersDialog, { groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })

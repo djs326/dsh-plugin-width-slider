@@ -129,8 +129,11 @@ function applyNavScrollPatch(navList: HTMLElement): void {
 }
 
 const patchedNavLists = new WeakSet<HTMLElement>()
-/** 已 patch 过的 navList（保留引用，供开关关闭时还原内联样式）。 */
-const patchedNavListEls = new Set<HTMLElement>()
+/**
+ * 当前已 patch 的 navList。设置面板同时只存在一份，保留单个引用即可 —— 原来用 Set 会
+ * 强引用每一次打开过的 nav 子树（关闭后仍被钉住，每开一次设置就泄漏一棵）。
+ */
+let patchedNavListEl: HTMLElement | null = null
 
 function probeAndPatchNavList(): void {
   if (typeof document === 'undefined') return
@@ -139,7 +142,7 @@ function probeAndPatchNavList(): void {
   const navList = findNavList(dialog)
   if (!navList || patchedNavLists.has(navList)) return
   patchedNavLists.add(navList)
-  patchedNavListEls.add(navList)
+  patchedNavListEl = navList
   applyNavScrollPatch(navList)
 }
 
@@ -153,7 +156,8 @@ export function installNavScrollPatch(): () => void {
   return () => {
     observer.disconnect()
     probe.dispose()
-    for (const navList of patchedNavListEls) {
+    const navList = patchedNavListEl
+    if (navList !== null) {
       navList.style.flex = ''
       navList.style.minHeight = ''
       navList.style.overflowY = ''
@@ -161,8 +165,8 @@ export function installNavScrollPatch(): () => void {
       const nav = navList.parentElement
       if (nav) nav.style.minHeight = ''
       patchedNavLists.delete(navList)
+      patchedNavListEl = null
     }
-    patchedNavListEls.clear()
   }
 }
 

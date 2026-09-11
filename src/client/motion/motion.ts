@@ -384,7 +384,9 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
   const markedAt = new WeakMap<HTMLElement, number>()
   // Per-container anchor-row count from the last observed batch, used to tell
   // a first render (empty before) from an incremental append.
-  const lastCount = new Map<Element, number>()
+  // 键是 DOM 元素且只增不减：容器每次被替换都会留下一个强引用（旁边的 marked 有 delete
+  // 清理，这里没有）。WeakMap 语义等价（只 get/set），容器回收后条目随之消失。
+  const lastCount = new WeakMap<Element, number>()
   // Session-switch replay bookkeeping.
   let switchTimer = 0
   let switchAttempts = 0
@@ -464,8 +466,13 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
   function scanTreeBoot(): void {
     if (disposed || !anyMotionEnabled(state)) return
     const items = [...document.querySelectorAll<HTMLElement>(TREE_ITEM)].filter(isTreeItem)
-    if (items.length === 0 && bootAttempts < MAX_SWITCH_RETRIES) {
+    if (items.length === 0) {
+      // 树还没挂上来：继续重试，而不是把 bootScanned 置真 —— 否则重试耗尽之后侧边栏的
+      // 首次入场就永久不再补扫。开新链前清掉旧定时器（syncEnabled 每次都开一条，只记
+      // 最后一个会留下孤儿链）。
+      if (bootAttempts >= MAX_SWITCH_RETRIES) return
       bootAttempts += 1
+      if (bootTimer !== 0) window.clearTimeout(bootTimer)
       bootTimer = window.setTimeout(scanTreeBoot, SWITCH_RETRY_MS)
       return
     }
@@ -673,9 +680,13 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
     // lands in the same microtask as the host's commit (after React's render,
     // before paint), so the content never paints at rest before the entrance
     // starts.
+    // 单槽观察器：连续两次 notifySessionSwitch（快速切会话）会覆盖前一个实例，而它仍在
+    // 观察、可能补播一次入场，且 dispose 只断得到最后一个。开新的之前先断旧的。
+    composerObserver?.disconnect()
+    composerObserver = null
     const composerWatch = new MutationObserver(() => {
       composerWatch.disconnect()
-      composerObserver = null
+      if (composerObserver === composerWatch) composerObserver = null
       const latest = options.getState()
       if (!latest.blank || !latest.newChat) return
       apply()
@@ -688,7 +699,8 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
     composerRafId = requestAnimationFrame(() => {
       composerRafId = 0
       composerWatch.disconnect()
-      composerObserver = null
+      // 只在槽里仍是自己时才清空：期间可能已经开了新的观察器。
+      if (composerObserver === composerWatch) composerObserver = null
       const latest = options.getState()
       if (latest.blank && latest.newChat) apply()
     })

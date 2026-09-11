@@ -99,7 +99,16 @@ export function whenTransitionSettles(el: HTMLElement, timeoutMs: number): Promi
       resolve()
     }
     const onEnd = (event: TransitionEvent): void => {
-      if (event.target === el) finish()
+      if (event.target !== el) return
+      // 同一元素常有多条并行过渡（面板退出是 opacity 160ms + scale 280ms）：只等最短的
+      // 那条结束就放行，会让较长的那条被截断。仍有动画在跑就继续等，超时兜底。
+      const running = (el as HTMLElement & { getAnimations?: () => Animation[] }).getAnimations
+      if (typeof running === 'function') {
+        try {
+          if (running.call(el).some((animation) => animation.playState === 'running')) return
+        } catch { /* 取不到动画列表时按已结束处理 */ }
+      }
+      finish()
     }
     el.addEventListener('transitionend', onEnd)
     const timer = window.setTimeout(finish, timeoutMs)

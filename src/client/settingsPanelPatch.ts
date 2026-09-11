@@ -38,6 +38,16 @@ import { getSettings, onSettingsChanged } from './config.ts'
 const DIALOG_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
 const RECT_KEY = 'dsh.conversation.settingsPanelWindow'
 const LEGACY_WIDTH_KEY = 'dsh.conversation.settingsPanelWidth'
+
+/**
+ * 清掉弹窗的尺寸/位置记忆（「恢复默认设置」用）。必须清 `RECT_KEY` —— 它才是现行记忆
+ * 键；`LEGACY_WIDTH_KEY` 只在迁移路径里被读一次，删它不会重置弹窗大小。
+ */
+export function clearPanelRect(): void {
+  try {
+    window.localStorage.removeItem(RECT_KEY)
+  } catch { /* 存储不可用时没有记忆可清 */ }
+}
 const RESIZE_HANDLE_ATTR = 'data-width-slider-resize-handle'
 /** 手动拖拽的尺寸下限。 */
 const MIN_W = 640

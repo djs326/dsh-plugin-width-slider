@@ -263,25 +263,41 @@ function clearDirty(): void {
   } catch { /* 忽略 */ }
 }
 
+/**
+ * 写盘序号：每次 persistGroups 自增；链上真正执行时用它丢弃已被更新过的那一次。
+ */
+let writeSeq = 0
+/**
+ * 写盘串行链：并发 POST 的到达顺序不保证，旧 payload 后到就会成为持久态（内存/缓存是
+ * 新的、重启后回退）。串行 + 只发最新一次，让落盘顺序与本地变更顺序一致。
+ */
+let writeChain: Promise<void> = Promise.resolve()
+
 function persistGroups(): void {
-  if (!rpcCall) {
+  const call = rpcCall
+  if (!call) {
     markDirty()
     return
   }
-  rpcCall('wsGroupsWrite', { groups })
-    .then((res) => {
-      const r = res as { ok?: boolean } | null
+  const seq = ++writeSeq
+  // 快照内容：链上执行时 groups 可能已经变了。
+  const snapshot = groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] }))
+  writeChain = writeChain.then(async () => {
+    // 期间又改过：这次的快照已过期，跳过（更新的那一次会带着最新内容发出去）。
+    if (seq !== writeSeq) return
+    try {
+      const r = (await call('wsGroupsWrite', { groups: snapshot })) as { ok?: boolean } | null
       if (!r || r.ok !== true) {
         console.warn('[width-slider] wsGroupsWrite rejected by host，下次启动将以本地缓存为准重试')
         markDirty()
       } else {
         clearDirty()
       }
-    })
-    .catch((err: unknown) => {
+    } catch (err) {
       console.warn('[width-slider] wsGroupsWrite failed，下次启动将以本地缓存为准重试', err)
       markDirty()
-    })
+    }
+  })
 }
 
 function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {

@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
+import { clearPanelRect } from './settingsPanelPatch.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
 import type { WidthSliderKey } from './locales.ts'
 import {
@@ -227,11 +228,25 @@ export function WidthSliderSettings({
   // 订阅 config store：入口读回 / 其它来源的配置变化同步到本页。
   useEffect(() => onSettingsChanged((next) => setSettings(next)), [])
 
+  /** 写盘序号与串行链：连点开关时只把最新一份发出去，落盘顺序与本地变更顺序一致。 */
+  const writeSeqRef = useRef(0)
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve())
+
   // 本组件改动后写盘（dirty 由 persist 置位，effect 消费后复位）。
   useEffect(() => {
     if (!dirtyRef.current) return
     dirtyRef.current = false
-    writeSettings(settings).catch((err) => console.warn('[width-slider] writeSettings failed', err))
+    const seq = ++writeSeqRef.current
+    const snapshot = settings
+    writeChainRef.current = writeChainRef.current.then(async () => {
+      // 期间又改过：这一份已过期，跳过（更新的那份会带着最新配置发出）。
+      if (seq !== writeSeqRef.current) return
+      try {
+        await writeSettings(snapshot)
+      } catch (err) {
+        console.warn('[width-slider] writeSettings failed', err)
+      }
+    })
   }, [settings, writeSettings])
 
   /** 应用补丁：以 store 最新值为基 → applySettings 广播热切换 → dirty 写盘。 */
@@ -240,18 +255,20 @@ export function WidthSliderSettings({
     applySettings({ ...getSettings(), ...patch })
   }, [])
 
-  /** 恢复默认：重置开关 + 清宽度/弹窗宽度记忆，刷新页面应用。 */
+  /** 恢复默认：重置开关 + 清宽度与弹窗记忆，写盘完成后刷新页面应用。 */
   const resetAll = useCallback((): void => {
     try {
       localStorage.removeItem('dsh.conversation.contentWidth')
       localStorage.removeItem('dsh.conversation.contentWidthFollow')
-      localStorage.removeItem('dsh.conversation.settingsPanelWidth')
     } catch { /* ignore */ }
+    // 弹窗尺寸/位置的记忆键由 settingsPanelPatch 持有：走它导出的清理函数，避免键名漂移
+    // （此前这里删的是已经废弃的 settingsPanelWidth，导致「恢复默认」重置不了弹窗大小）。
+    clearPanelRect()
     applySettings({ ...DEFAULT_FEATURE_SETTINGS })
-    writeSettings({ ...DEFAULT_FEATURE_SETTINGS }).catch((err) =>
-      console.warn('[width-slider] reset write failed', err))
-    // 宽度/弹窗 UI 均读自记忆与组件本地态，刷新后整体取默认最可靠。
-    window.location.reload()
+    // 先把默认配置写回 host 再刷新：reload 会打断在途写盘，刷新后仍旧读回旧配置。
+    void writeSettings({ ...DEFAULT_FEATURE_SETTINGS })
+      .catch((err) => { console.warn('[width-slider] reset write failed', err) })
+      .finally(() => { window.location.reload() })
   }, [writeSettings])
 
   /** 当前动效取值与某套预设完全一致时，该预设按钮高亮。 */

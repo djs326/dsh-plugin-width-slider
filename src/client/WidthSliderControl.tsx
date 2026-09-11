@@ -236,6 +236,12 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     if (followRef.current) return
     // 重入保护：上一次拖动未结束（多指/快速二击）忽略新按下，防止锚点覆盖跳变。
     if (dragRef.current !== null) return
+    // 甩动惯性可能还在跑（此时 dragRef 已清空）：它的每一帧仍在发布宽度，落定时还会
+    // finishGesture(target) —— 会把用户这次新拖的宽度覆盖掉。先按 release 路径的方式取消它。
+    if (glideRef.current !== null) {
+      cancelAnimationFrame(glideRef.current)
+      glideRef.current = null
+    }
     e.preventDefault()
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)

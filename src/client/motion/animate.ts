@@ -167,6 +167,13 @@ const MAX_SHAKE_MS = 350
 /** One element's pending impact: the loudest source wins, sources are never summed. */
 interface ShakeState {
   amp: number
+  /**
+   * First frame of the entire run. The decay divides by `end - start` (not by the first
+   * caller's duration): an absorbed impact extends `end`, and dividing by the old
+   * duration would compute a decay above 1 - amplifying the shake past the loudest
+   * amplitude any caller asked for.
+   */
+  start: number
   end: number
 }
 
@@ -199,7 +206,7 @@ export function shakeElement(el: HTMLElement, amp: number, durationMs: number): 
     pending.end = Math.max(pending.end, now + duration)
     return
   }
-  const state: ShakeState = { amp, end: now + duration }
+  const state: ShakeState = { amp, start: now, end: now + duration }
   SHAKING.set(el, state)
   const step = (): void => {
     const t = performance.now()
@@ -209,7 +216,10 @@ export function shakeElement(el: HTMLElement, amp: number, durationMs: number): 
       SHAKING.delete(el)
       return
     }
-    const decay = left / duration
+    // 分母是这一整段的实际时长（吸收会延长 end），并夹到 1 以内：用首次调用的 duration
+    // 会让后续更长的影响算出 decay > 1，把振幅放大到超过传入值。
+    const span = Math.max(1, state.end - state.start)
+    const decay = Math.min(1, left / span)
     const s = t / 1000
     el.style.translate =
       `${(Math.sin(s * 47) * state.amp * decay).toFixed(2)}px ${(Math.sin(s * 31 + 1.3) * state.amp * decay).toFixed(2)}px`

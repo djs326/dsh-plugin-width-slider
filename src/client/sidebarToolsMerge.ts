@@ -20,6 +20,18 @@
  * them fails exactly while the user is pointing at the sidebar - which is when a
  * re-measure is triggered. The button's own box cannot stand in for the column
  * either, since the injected rule narrows it.
+ *
+ * `fixed` rather than `absolute`: the tool containers sit inside ancestors that
+ * clip with `overflow: hidden` (section header, region area, sidebar column), so
+ * an absolutely positioned child across that chain is painted nowhere. `fixed`
+ * has its own trap: a transformed ancestor takes over as the containing block, and
+ * the host animates one - `_regionArea`, the `sidebar.workspaces` container and
+ * thus an ancestor of the tools, carries the `rail-in` keyframes with
+ * `translate(49px)` on a rail toggle. While that runs the published viewport
+ * coordinates would be read against the region instead of the viewport, and
+ * `getBoundingClientRect` reports transformed boxes, so both the measurement and
+ * the publish are skipped and the previous placement is kept. The keyframes end
+ * with `animationend`, not `transitionend`, hence that listener too.
  */
 import { onSettingsChanged } from './config.ts'
 
@@ -35,6 +47,13 @@ const SEARCH_SLOT = '[class*="_searchSlot"]'
 const HEADER_ACTIONS = '[class*="_headerActions"]'
 /** The search container's own "expanded" class (hash-prefixed by the host). */
 const SEARCH_SLOT_EXPANDED = '[class*="_searchSlotExpanded"]'
+
+/**
+ * What to watch: child edits, viewport changes, and class swaps. The last one is
+ * not optional - a rail toggle and the search's expand/collapse are both pure
+ * class changes, which `childList` alone cannot see.
+ */
+const OBSERVE: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }
 
 /** Injected stylesheet id. */
 export const TOOLS_STYLE_ID = 'dsh-ws-tools-merge-style'
@@ -52,8 +71,8 @@ const EDGE_GAP = 8
 const TIGHT_GAP = 4
 /**
  * The button's horizontal chrome once the injected rule applies: the host's 16px
- * left padding, the injected 0 right padding, and the 1px border. The label's
- * own room starts after this.
+ * left padding, the injected 0 right padding, and the host's 0.5px border on each
+ * side (1px together). The label's own room starts after this.
  */
 const BUTTON_CHROME = 17
 /** The icon and the button's own gap, which the label's room starts after. */
@@ -72,26 +91,48 @@ interface Placement {
 }
 
 /**
+ * Read one computed pixel value, treating an unparsable one as 0.
+ * @param value - the computed style value.
+ * @returns the length in pixels, or 0 when it is not a number.
+ */
+function px(value: string): number {
+  const n = Number.parseFloat(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Whether an ancestor of `el` establishes a containing block for `fixed` children.
+ * @param el - the element to walk up from.
+ * @returns true when some ancestor up to `body` is transformed.
+ */
+function hasTransformedAncestor(el: Element | null): boolean {
+  for (let node = el?.parentElement ?? null; node !== null && node !== document.body; node = node.parentElement) {
+    const transform = getComputedStyle(node).transform
+    // `none` is the computed value everywhere; the empty string only shows up where
+    // the property is not computed at all (jsdom), and is not a transform either.
+    if (transform !== 'none' && transform !== '') return true
+  }
+  return false
+}
+
+/**
  * The placement stylesheet, or an empty string to leave the host layout alone.
- *
- * `fixed` rather than `absolute`: the tool containers live inside the workspace
- * region, whose ancestors (section header, region area, sidebar column, frame)
- * all clip with `overflow: hidden`. An absolutely positioned child across that
- * chain is painted nowhere, so the tools are pinned to the viewport instead -
- * this sidebar never scrolls, and no ancestor sets a transform that would
- * re-anchor `fixed`.
  * @param place - the measured viewport coordinates.
  * @param gutter - the width the new-chat button gives up, matching `place`.
  * @param gap - the inset `place` was measured with.
+ * @param searchExpanded - whether the search owns the row right now.
  */
-function placementCss(place: Placement, gutter: number, gap: number): string {
+function placementCss(place: Placement, gutter: number, gap: number, searchExpanded: boolean): string {
   const tools = `${SECTION_HEADER}>${SEARCH_SLOT},${SECTION_HEADER}>${HEADER_ACTIONS}`
+  // An expanded search takes the row; the button yields instead of showing
+  // through under the search field, whose own background is not guaranteed.
+  const yields = searchExpanded ? ';visibility:hidden' : ''
   return `
 ${tools}{position:fixed;display:flex;align-items:center;gap:${gap}px;z-index:60}
 ${SECTION_HEADER}>${HEADER_ACTIONS}{top:${place.top}px;right:${place.actionsRight}px}
 ${SECTION_HEADER}>${SEARCH_SLOT}{top:${place.top}px;right:${place.searchRight}px}
 ${SECTION_HEADER}>${SEARCH_SLOT_EXPANDED}{left:${place.left}px;right:${place.actionsRight}px}
-${NEW_SESSION}{width:calc(100% - ${gutter}px);max-width:calc(100% - ${gutter}px);min-width:fit-content;padding-right:0}
+${NEW_SESSION}{width:calc(100% - ${gutter}px);max-width:calc(100% - ${gutter}px);min-width:fit-content;padding-right:0${yields}}
 `
 }
 
@@ -110,7 +151,8 @@ export interface SidebarToolsMergeHandle {
 }
 
 /**
- * Install the tools placement.
+ * Install the tools placement. One installation at a time: a second one takes the
+ * stylesheet id over and the first one's writes go to a detached node.
  * @param options - the toggle access.
  * @returns the handle that re-syncs or removes the placement.
  */
@@ -123,6 +165,9 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
   let frame = 0
   let disposed = false
   let current = ''
+  let observing = false
+  let boundColumn: Element | null = null
+  let observedColumn: Element | null = null
 
   /** Write the stylesheet only when its text actually changes. */
   const publish = (css: string): void => {
@@ -139,40 +184,73 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     })
   }
 
-  // A rail toggle is a class swap that changes the column's width without
-  // touching the DOM, so the childList observer below cannot see it; the size
-  // observer catches exactly that.
+  const observer = new MutationObserver(schedule)
+  // A rail toggle and the search's expand/collapse change classes without touching
+  // the DOM, so the observer above can see them only through `attributes`; the size
+  // observer is what catches a width that changes without either.
   const sizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
-  let observedColumn: Element | null = null
 
-  /** Keep the size observer on the live column (the host rebuilds it). */
+  /** Watch the live column (the host rebuilds it), falling back to the body. */
+  const bindObserver = (column: Element | null): void => {
+    if (column === boundColumn) return
+    boundColumn = column
+    observer.disconnect()
+    if (!observing) return
+    observer.observe(column ?? document.body ?? document.documentElement, OBSERVE)
+  }
+
+  /** Keep the size observer on the live column. */
   const trackColumn = (column: Element | null): void => {
     if (column === observedColumn) return
     if (observedColumn !== null) sizeObserver?.unobserve(observedColumn)
     observedColumn = column
-    if (column !== null) sizeObserver?.observe(column)
+    if (observing && column !== null) sizeObserver?.observe(column)
+  }
+
+  /**
+   * Follow the toggle with the observers themselves: while the feature is off the
+   * sidebar's markup edits must not keep scheduling re-measures.
+   */
+  const setObserving = (on: boolean): void => {
+    if (on === observing) return
+    observing = on
+    observer.disconnect()
+    if (on) {
+      observer.observe(boundColumn ?? document.body ?? document.documentElement, OBSERVE)
+      return
+    }
+    sizeObserver?.disconnect()
+    observedColumn = null
+    boundColumn = null
   }
 
   const apply = (): void => {
     if (!options.enabled()) {
-      trackColumn(null)
+      setObserving(false)
       publish('')
       return
     }
+    setObserving(true)
     const button = document.querySelector<HTMLElement>(NEW_SESSION)
     const header = document.querySelector<HTMLElement>(SECTION_HEADER)
     // The host is mid-remount: keep the last placement rather than clearing it.
     // The stylesheet is a set of global selectors, so it applies again by itself
     // once the nodes are back, while clearing it would flash the tools home.
     if (button === null || header === null) return
+    // A transformed ancestor takes over as the containing block for `fixed`, which
+    // invalidates both the viewport coordinates we publish and the transformed
+    // rects we would measure. Hold the last placement until the animation settles
+    // (`animationend` re-enters here).
+    if (hasTransformedAncestor(button)) return
     // The button's parent is the sidebar column: the shell renders the button as
     // a direct child (the tooltip wrapper clones it instead of wrapping it).
     const column = button.parentElement
-    trackColumn(column)
     if (column === null) {
       publish('')
       return
     }
+    bindObserver(column)
+    trackColumn(column)
     const columnRect = column.getBoundingClientRect()
     const buttonRect = button.getBoundingClientRect()
     // Rail mode, or a column the host has not laid out yet: there is no row to
@@ -181,17 +259,20 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
       publish('')
       return
     }
-    // Narrowing the button costs its label room, and the host clips the overflow,
-    // so the label is measured and given its full width first: what is left over
-    // is the room the tools may take. A column that cannot afford the widest inset
-    // falls back to a tighter gap, and only a column that cannot fit the tools at
-    // all keeps the host layout. `min-width: fit-content` above is the backstop
-    // against a late font or zoom change reintroducing the clip.
+    // The label is measured first and keeps its full width; what is left over is
+    // the room the tools may take. Measuring it as 0 would read as "plenty of
+    // room" and narrow the button back into the clipping this exists to prevent,
+    // so a missing label leaves the host layout alone.
     const label = button.querySelector<HTMLElement>(NEW_SESSION_LABEL)
+    if (label === null) {
+      publish('')
+      return
+    }
     const columnStyle = getComputedStyle(column)
-    const columnContent = columnRect.width
-      - parseFloat(columnStyle.paddingLeft) - parseFloat(columnStyle.paddingRight)
-    const needed = BUTTON_LEAD + BUTTON_CHROME + (label?.scrollWidth ?? 0)
+    const columnContent = columnRect.width - px(columnStyle.paddingLeft) - px(columnStyle.paddingRight)
+    const needed = BUTTON_LEAD + BUTTON_CHROME + label.scrollWidth
+    // A column that cannot afford the widest inset falls back to a tighter gap, and
+    // only a column that cannot fit the tools at all keeps the host layout.
     const room = columnContent - needed
     const gap = room >= SEARCH_WIDTH + ACTIONS_WIDTH + 2 * EDGE_GAP ? EDGE_GAP : TIGHT_GAP
     const gutter = SEARCH_WIDTH + ACTIONS_WIDTH + 2 * gap
@@ -207,7 +288,7 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
       actionsRight,
       searchRight: actionsRight + ACTIONS_WIDTH + gap,
       left: Math.round(buttonRect.left),
-    }, gutter, gap))
+    }, gutter, gap, document.querySelector(SEARCH_SLOT_EXPANDED) !== null))
   }
 
   const sync = (): void => {
@@ -216,13 +297,19 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
 
   apply()
 
-  // The host rebuilds the sidebar on a rail toggle, so re-measure on DOM edits,
-  // viewport changes, and any transition that settles (a rail toggle animates the
-  // column, and the size observer alone can fire before the final layout lands).
-  const observer = new MutationObserver(schedule)
-  observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true })
+  // Re-measure on DOM edits, viewport changes, and on any animation or transition
+  // that settles: a rail toggle animates the column (and its region), and either
+  // observer can fire before the final layout lands. `animationend` is the one the
+  // host's keyframes dispatch - `transitionend` never arrives for them.
   window.addEventListener('resize', schedule, { passive: true })
   document.addEventListener('transitionend', schedule, true)
+  document.addEventListener('animationstart', schedule, true)
+  document.addEventListener('animationend', schedule, true)
+
+  // The label's width is also what the fit above depends on, and neither observer
+  // fires when a font finishes loading.
+  const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
+  if (fonts !== undefined) fonts.addEventListener('loadingdone', schedule)
 
   let unsubscribe = (): void => {}
   try {
@@ -239,6 +326,9 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
       sizeObserver?.disconnect()
       window.removeEventListener('resize', schedule)
       document.removeEventListener('transitionend', schedule, true)
+      document.removeEventListener('animationstart', schedule, true)
+      document.removeEventListener('animationend', schedule, true)
+      if (fonts !== undefined) fonts.removeEventListener('loadingdone', schedule)
       unsubscribe()
       style.remove()
     },

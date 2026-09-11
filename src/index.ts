@@ -45,7 +45,9 @@ function normalizeGroups(raw: unknown): Array<{ id: string; name: string; worksp
     if (!item || typeof item !== 'object') continue
     const it = item as GroupFileItem
     if (typeof it.id !== 'string' || it.id === '' || seen.has(it.id)) continue
-    const name = typeof it.name === 'string' && it.name.trim() !== '' ? it.name.trim() : '未命名'
+    // 不做语言相关兜底：原先硬编码「未命名」，而 client 侧用 tt('new.name')（随界面语言），
+    // 同一份数据的兜底名会在两侧漂移。空名原样保留，由 client 的 sanitize() 补默认名。
+    const name = typeof it.name === 'string' ? it.name.trim() : ''
     const workspaceIds = Array.isArray(it.workspaceIds)
       ? it.workspaceIds.filter((v): v is string => typeof v === 'string' && v !== '')
       : []

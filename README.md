@@ -163,6 +163,7 @@ dsh-plugin-width-slider/
 | 界面 | tab 栏滚动 | 设置左侧导航超高时显示滚动条 | 开 |
 | 界面 | 会话删除 | 会话行「⋯」菜单新增删除项 | 开 |
 | 界面 | 工作区分页 | 侧栏工作区标题行改为页签栏 | 开 |
+| 界面 | 侧边栏工具并入 | 工作区标题行的搜索 / 视图 / 添加工作区三个按钮并入「新建会话」行，页签行独占整行 | 开 |
 
 ### 样式与预设
 
@@ -196,7 +197,7 @@ dsh-plugin-width-slider/
 
 ### 工作区分页
 
-- 开启后，侧栏顶部「工作区」标题位置变为页签栏：最前是固定的「默认」页签，其后是自建页签，末尾「＋」用于新建页签（新建后立即改名）。
+- 开启后，侧栏顶部「工作区」标题位置变为页签栏：最前是固定的「默认」页签，其后是自建页签，末尾「＋」打开「新建页签」对话框 —— 输入名字并保存才真正创建，取消 / Esc / 点遮罩关闭都不会建出页签。
 - 「默认」页签显示未分组的直属工作区与官方未分组会话；自建页签收纳被分配过去的工作区（同一工作区只属于一个位置）。
 - 把工作区移入页签：展开工作区行右侧「⋯」菜单，点击「分配标签」，在弹窗中选择目标页签（或选择「默认」移回）。
 - 删除页签：右键页签选择删除，其中的工作区自动回到「默认」，不会丢失。
@@ -275,7 +276,7 @@ dsh-plugin-width-slider/
 | 目标内核 | DSH `0.1.5-rc.1`（当前官方内核）。插件只适配该内核，不为更早版本保留兼容分支 |
 | Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject` —— 所以承担路由注册的 fiber 自己必须声明 `webServer` 依赖。注册改走 `connection.fetch.register` 的 `/api` 精确 Fetch 路由 |
 | 端点与围栏 | 客户端 `POST /api/width-slider`，请求体为 `{ method, payload }`，响应体为处理器返回的 JSON；围栏由 connection 的 `/api` 处理器统一施加（可信 Host/Origin + 浏览器认证） |
-| 已核对稳定的契约 | slot（`conversation.chat.node`、`conversation.session.header.actions`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
+| 已核对稳定的契约 | slot（`conversation.chat.node`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
 
 ### 验证状态
 
@@ -311,7 +312,7 @@ lib/
 └── types/           # 类型声明（tsc 产出）
 ```
 
-测试位于 `test/`（`settingsMotion`、`thinkView` 两个用例文件）；仓库内包含若干参考源码副本（`dsh-src/`、`my-dsh-plugins-main/` 等），已在 `vitest.config.ts` 中排除，不参与测试收集。
+测试位于 `test/`（8 个用例文件、约 94 项：设置面板动效、思考块渲染、动效角色映射、弹簧手感、文字擦除、侧边栏工具并入、工作区页签对话框）；仓库内包含 DSH 源码副本（`dsh-src/`），已在 `vitest.config.ts` 中排除，不参与测试收集。
 
 ### 已知问题
 

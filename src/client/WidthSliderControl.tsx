@@ -135,8 +135,10 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     const pref = readPreference()
     const column = readColumnWidth()
     const max = Math.max(MIN_WIDTH, column - EDGE_BUDGET)
+    // 无偏好时也要按当前列宽的上限收敛：窄列下 defaultWidth 的下限（680）会超过 max，
+    // 初值一旦超出量程，百分比读数会落到 0，一拖动就跳变。
     if (pref !== null) return Math.max(MIN_WIDTH, Math.min(pref, max))
-    return defaultWidth(column)
+    return Math.max(MIN_WIDTH, Math.min(defaultWidth(column), max))
   })
   const [preview, setPreview] = useState(false)
   /** Follow-window mode: content width == conversation column, live. */

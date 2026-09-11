@@ -362,7 +362,9 @@ function renderBlocks(
     if (!block) continue
     const el = renderBlock(blocks, i, streaming, last, zh, renderMessageImages, collapseAfterRun)
     if (el === null || el === undefined) continue
-    if (block.kind === 'image') i = imageGroupEnd(blocks, i)
+    // 与 renderBlock 的分支条件对齐：只有真的渲染了整组（renderMessageImages 可用）才
+    // 跳过整组；否则这些 image 块走 JSON 降级分支逐个渲染，不能被静默跳过。
+    if (block.kind === 'image' && typeof renderMessageImages === 'function') i = imageGroupEnd(blocks, i)
     rendered.push(el)
   }
   return rendered

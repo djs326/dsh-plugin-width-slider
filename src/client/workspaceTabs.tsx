@@ -121,11 +121,6 @@ export interface WsGroup {
 
 export interface WsTabsCtx {
   get?: <T = unknown>(name: string) => T | undefined
-  connection?: {
-    rpc: {
-      call: (path: string, method: string, payload?: Record<string, unknown>) => Promise<unknown>
-    }
-  }
   slots?: {
     entries?: (key: string) => Array<{ component?: unknown }>
     subscribe?: (key: string, listener: () => void) => () => void

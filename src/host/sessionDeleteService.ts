@@ -279,7 +279,7 @@ export async function deleteSessionById(ctx: SessionDeleteCtx, id: string): Prom
     const cleanupFailed = projStorage.projFailed || workspaceStorage.projFailed || workspaceStorage.workspaceFailed
     ctx.logger?.info?.('[width-slider] session deleted', { sessionId, dirRemoved, projRemoved, workspaceRemoved, cleanupFailed })
     // 目录已删、仅索引清理异常：不打断成功语义（日志已留痕），
-    // 提示用户重启后检查列表是否残留（见 docs/verification F7 兜底）。
+    // 返回提示让用户重启后检查列表是否残留。
     if (cleanupFailed) {
       return { ok: true, message: 'session deleted; workspace/cache index cleanup had errors (see host log), restart DSH if the list still shows it' }
     }

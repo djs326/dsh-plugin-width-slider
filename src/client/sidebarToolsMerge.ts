@@ -24,14 +24,15 @@
  * `fixed` rather than `absolute`: the tool containers sit inside ancestors that
  * clip with `overflow: hidden` (section header, region area, sidebar column), so
  * an absolutely positioned child across that chain is painted nowhere. `fixed`
- * has its own trap: a transformed ancestor takes over as the containing block, and
- * the host animates one - `_regionArea`, the `sidebar.workspaces` container and
- * thus an ancestor of the tools, carries the `rail-in` keyframes with
- * `translate(49px)` on a rail toggle. While that runs the published viewport
- * coordinates would be read against the region instead of the viewport, and
- * `getBoundingClientRect` reports transformed boxes, so both the measurement and
- * the publish are skipped and the previous placement is kept. The keyframes end
- * with `animationend`, not `transitionend`, hence that listener too.
+ * brings its own trap - a transformed element takes over as the containing block
+ * - and the host animates one: `_regionArea` carries the `rail-in` keyframes with
+ * `translate(49px)`. The guard in `apply` therefore walks the chain of the pinned
+ * elements themselves, never the button's: the tools live in the workspace region,
+ * a *sibling* of the new-chat button, so a check rooted at the button cannot see
+ * it. In the host this was written against, that region unmounts in the very frame
+ * the animation starts (and a rail column is too narrow for the tools anyway), so
+ * the guard is a backstop for a host that keeps it mounted rather than a live path.
+ * The keyframes end with `animationend`, not `transitionend`, hence that listener.
  */
 import { onSettingsChanged } from './config.ts'
 
@@ -48,12 +49,13 @@ const HEADER_ACTIONS = '[class*="_headerActions"]'
 /** The search container's own "expanded" class (hash-prefixed by the host). */
 const SEARCH_SLOT_EXPANDED = '[class*="_searchSlotExpanded"]'
 
+/** Body-level fallback observation: it catches a rebuilt column. */
+const BODY_OBSERVE: MutationObserverInit = { childList: true, subtree: true }
 /**
- * What to watch: child edits, viewport changes, and class swaps. The last one is
- * not optional - a rail toggle and the search's expand/collapse are both pure
- * class changes, which `childList` alone cannot see.
+ * Column-level observation. `attributes` is not optional: a rail toggle and the
+ * search's expand/collapse are pure class changes, which `childList` cannot see.
  */
-const OBSERVE: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }
+const CLASS_OBSERVE: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }
 
 /** Injected stylesheet id. */
 export const TOOLS_STYLE_ID = 'dsh-ws-tools-merge-style'
@@ -101,15 +103,20 @@ function px(value: string): number {
 }
 
 /**
- * Whether an ancestor of `el` establishes a containing block for `fixed` children.
- * @param el - the element to walk up from.
- * @returns true when some ancestor up to `body` is transformed.
+ * Whether `el` itself or an ancestor establishes a containing block for `fixed`
+ * descendants. Only `transform` is checked - it is the property the host animates;
+ * `will-change`, `filter` and `contain: paint` would have the same effect and are
+ * deliberately not covered, so this is a single-purpose guard, not a general
+ * predicate.
+ * @param el - the element to start from (itself included).
+ * @returns true when the element or an ancestor up to `body` is transformed.
  */
 function hasTransformedAncestor(el: Element | null): boolean {
-  for (let node = el?.parentElement ?? null; node !== null && node !== document.body; node = node.parentElement) {
+  for (let node = el; node !== null && node !== document.body; node = node.parentElement) {
     const transform = getComputedStyle(node).transform
-    // `none` is the computed value everywhere; the empty string only shows up where
-    // the property is not computed at all (jsdom), and is not a transform either.
+    // `none` is the computed value for every connected element; the empty string
+    // only appears where the property is not computed at all (jsdom, detached
+    // trees), and is not a transform either.
     if (transform !== 'none' && transform !== '') return true
   }
   return false
@@ -190,13 +197,18 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
   // observer is what catches a width that changes without either.
   const sizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
 
-  /** Watch the live column (the host rebuilds it), falling back to the body. */
+  /**
+   * Point the mutation observer at the live column, keeping a body-level fallback:
+   * a MutationObserver follows the node it was given, so if the host replaces the
+   * column outright, a column-only binding would sit on a detached node and nothing
+   * would ever schedule another measure.
+   */
   const bindObserver = (column: Element | null): void => {
     if (column === boundColumn) return
     boundColumn = column
     observer.disconnect()
-    if (!observing) return
-    observer.observe(column ?? document.body ?? document.documentElement, OBSERVE)
+    observer.observe(document.body ?? document.documentElement, BODY_OBSERVE)
+    observer.observe(column ?? document.body ?? document.documentElement, CLASS_OBSERVE)
   }
 
   /** Keep the size observer on the live column. */
@@ -215,13 +227,14 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     if (on === observing) return
     observing = on
     observer.disconnect()
-    if (on) {
-      observer.observe(boundColumn ?? document.body ?? document.documentElement, OBSERVE)
+    if (!on) {
+      sizeObserver?.disconnect()
+      observedColumn = null
+      boundColumn = null
       return
     }
-    sizeObserver?.disconnect()
-    observedColumn = null
-    boundColumn = null
+    observer.observe(document.body ?? document.documentElement, BODY_OBSERVE)
+    observer.observe(boundColumn ?? document.body ?? document.documentElement, CLASS_OBSERVE)
   }
 
   const apply = (): void => {
@@ -237,11 +250,12 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     // The stylesheet is a set of global selectors, so it applies again by itself
     // once the nodes are back, while clearing it would flash the tools home.
     if (button === null || header === null) return
-    // A transformed ancestor takes over as the containing block for `fixed`, which
-    // invalidates both the viewport coordinates we publish and the transformed
-    // rects we would measure. Hold the last placement until the animation settles
-    // (`animationend` re-enters here).
-    if (hasTransformedAncestor(button)) return
+    // A transformed element takes over as the containing block for `fixed`
+    // descendants, which invalidates both the viewport coordinates we publish and
+    // the rects we would measure. The pinned elements are checked - not the button
+    // alone, since the tools live in the workspace region, a sibling of the button.
+    const pinned = [button, ...[SEARCH_SLOT, HEADER_ACTIONS].map((s) => document.querySelector<HTMLElement>(s))]
+    if (pinned.some((el) => el !== null && hasTransformedAncestor(el))) return
     // The button's parent is the sidebar column: the shell renders the button as
     // a direct child (the tooltip wrapper clones it instead of wrapping it).
     const column = button.parentElement

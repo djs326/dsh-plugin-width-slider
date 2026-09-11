@@ -87,6 +87,9 @@ function install(enabled = true): { handle: SidebarToolsMergeHandle; setEnabled:
   }
 }
 
+/** Wait out the observer microtask plus the scheduled animation frame. */
+const settle = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 40) })
+
 beforeEach(() => {
   document.body.replaceChildren()
   for (const el of Array.from(document.head.querySelectorAll('style'))) el.remove()
@@ -159,18 +162,21 @@ describe('installSidebarToolsMerge', () => {
     expect(injected()).toBe('')
   })
 
-  it('holds the last placement while an ancestor is transformed', () => {
+  it('holds the last placement while a pinned element is transformed', () => {
     const host = mountHost()
     measure(host)
     const { handle } = install()
     const placed = injected()
     expect(placed).toContain('position:fixed')
+    // The geometry changes with it, so a guard that failed to fire would publish a
+    // different stylesheet instead of leaving this one in place.
     transformed.add(host.region)
+    measure(host, 300)
     handle.sync()
     expect(injected()).toBe(placed)
     transformed.delete(host.region)
     handle.sync()
-    expect(injected()).toContain('position:fixed')
+    expect(injected()).toContain('right:1096px')
   })
 
   it('holds the last placement while the host is mid-remount', () => {
@@ -183,7 +189,7 @@ describe('installSidebarToolsMerge', () => {
     expect(injected()).toBe(placed)
   })
 
-  it('yields the row to an expanded search', () => {
+  it('yields the row to an expanded search, and takes it back when it collapses', () => {
     const host = mountHost()
     measure(host)
     const { handle } = install()
@@ -191,6 +197,9 @@ describe('installSidebarToolsMerge', () => {
     host.search.classList.add('_searchSlotExpanded_x1')
     handle.sync()
     expect(injected()).toContain('visibility:hidden')
+    host.search.classList.remove('_searchSlotExpanded_x1')
+    handle.sync()
+    expect(injected()).not.toContain('visibility:hidden')
   })
 
   it('clears the placement when the toggle turns off and restores it after', () => {
@@ -211,5 +220,40 @@ describe('installSidebarToolsMerge', () => {
     expect(document.getElementById(TOOLS_STYLE_ID)).not.toBeNull()
     handle.dispose()
     expect(document.getElementById(TOOLS_STYLE_ID)).toBeNull()
+  })
+
+  it('re-measures by itself when the search expands and collapses', async () => {
+    const host = mountHost()
+    measure(host)
+    install()
+    expect(injected()).not.toContain('visibility:hidden')
+    host.search.classList.add('_searchSlotExpanded_x1')
+    await settle()
+    expect(injected()).toContain('visibility:hidden')
+    host.search.classList.remove('_searchSlotExpanded_x1')
+    await settle()
+    expect(injected()).not.toContain('visibility:hidden')
+  })
+
+  it('re-measures after the host replaces the column', async () => {
+    const host = mountHost()
+    measure(host)
+    install()
+    expect(injected()).toContain('right:1116px')
+    host.column.remove()
+    const replacement = mountHost()
+    measure(replacement, 300)
+    await settle()
+    expect(injected()).toContain('right:1096px')
+  })
+
+  it('stops watching once the toggle is off', async () => {
+    const host = mountHost()
+    measure(host)
+    const { setEnabled } = install()
+    setEnabled(false)
+    host.search.classList.add('_searchSlotExpanded_x1')
+    await settle()
+    expect(injected()).toBe('')
   })
 })

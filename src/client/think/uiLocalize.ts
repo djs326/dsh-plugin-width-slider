@@ -401,23 +401,4 @@ export function installUiLocalize(): () => void {
   return () => observer.disconnect()
 }
 
-// ── 纯函数导出（供潜在单测断言映射，不依赖 DOM）────────────────────────
-
-export function zhToolName(name: string): string | null {
-  return TOOL_NAME_ZH[name] ?? null
-}
-
-export function zhToolDesc(name: string): string | null {
-  return TOOL_DESC_ZH[name] ?? null
-}
-
-export function zhCardTitle(title: string): string | null {
-  return CARD_TITLE_ZH[title] ?? null
-}
-
-/** others 卡片摘要 `工具名 · …` 的工具名前缀替换；不匹配时返回 null。 */
-export function zhCardSummary(text: string): string | null {
-  const m = String(text).match(/^([a-zA-Z][a-zA-Z0-9_]*) · /)
-  if (m && TOOL_NAME_ZH[m[1]] !== undefined) return String(text).replace(m[1], TOOL_NAME_ZH[m[1]])
-  return null
-}
+// ── （映射表仅供本文件内部的本地化替换使用）──────────────────────────

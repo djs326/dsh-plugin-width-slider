@@ -16,10 +16,11 @@ export const PROJECT_MS = 120
 /**
  * Spring stiffness (1/s²) and per-frame damping at 60fps. The pair is tuned for
  * a column that is also a live layout: ωn = √260 ≈ 16.1 1/s with an effective
- * damping ratio ζ ≈ 0.67 settles inside ~0.4s, so the width is usable right
- * after a throw while the ~5% overshoot still reads as momentum. (The handfeel
- * notes' 0.86/0.60 damping presets pair with a much softer k = 60–90 and would
- * leave the column oscillating for over a second at this stiffness.)
+ * damping ratio ζ = -ln(0.66)·60 / (2√260) ≈ 0.77 settles inside ~0.4s, so the
+ * width is usable right after a throw while the ~5% overshoot still reads as
+ * momentum. (The handfeel notes' 0.86/0.60 damping presets pair with a much
+ * softer k = 60–90 and would leave the column oscillating for over a second at
+ * this stiffness.)
  */
 export const SPRING_STIFFNESS = 260
 export const SPRING_DAMPING = 0.66

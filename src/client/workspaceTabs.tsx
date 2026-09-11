@@ -56,6 +56,7 @@ import { createPortal } from 'react-dom'
 import { isZhInterface } from './lang.ts'
 import { getSettings, onSettingsChanged } from './config.ts'
 import { callEndpoint } from './endpointChannel.ts'
+import { primitives } from './primitives.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
@@ -68,15 +69,18 @@ const GROUPS_CACHE_KEY = 'dsh-plugin-width-slider.wsg.cache'
 const GROUPS_DIRTY_KEY = 'dsh-plugin-width-slider.wsg.dirty'
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
+// 官方工作区标题行是 justify-content:flex-end，原先靠搜索按钮自身的
+// margin-left:auto 把内容顶到左边；工具按钮被并入新建会话行后那个 auto 随之
+// 消失（关掉该开关时又回来），所以这里自己用 margin-right:auto 撑住左侧位置。
 const TABS_CSS = `
-[data-dsh-ws-tabs-bar]{display:flex;align-items:center;gap:0;flex:0 1 auto;min-width:0;max-width:62%;height:100%;overflow-x:auto;overflow-y:hidden;padding-left:0;scrollbar-width:none;order:-1}
-[data-dsh-ws-tabs-bar]::-webkit-scrollbar{display:none}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0;font:inherit;font-size:13px;line-height:36px;height:36px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:0;flex:none}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-sep]{display:inline-block;width:1px;height:13px;margin:0 2px;flex:none;background:#000;opacity:.8}
+[data-dsh-ws-tabs-bar]{display:flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;height:100%;overflow:hidden;order:-1;margin-right:auto}
+[data-dsh-ws-tabs-group]{display:inline-flex;align-items:center;gap:2px;flex:0 1 auto;min-width:0;padding:2px;border-radius:10px;background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12));overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+[data-dsh-ws-tabs-group]::-webkit-scrollbar{display:none}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]{appearance:none;background:transparent;border:0;margin:0;padding:0 10px;height:24px;font:inherit;font-size:12.5px;line-height:24px;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;flex:none;border-radius:8px;transition:background 150ms ease-out,color 150ms ease-out}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:hover{color:var(--dsw-alias-label-primary,#e6edf3)}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]{color:var(--dsw-alias-label-primary,#e6edf3);font-weight:600}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px 2px 0 0;background:currentColor}
-[data-dsh-ws-tabs-bar] [data-dsh-ws-add]{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;padding:2px;margin-left:auto;flex:none;border-radius:6px;line-height:0}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab]:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4f9eff);outline-offset:1px}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-tab][aria-selected="true"]{background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#fff));color:var(--dsw-alias-label-primary,#e6edf3);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--dsw-alias-border-l2,rgba(128,128,128,.28))}
+[data-dsh-ws-tabs-bar] [data-dsh-ws-add]{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:pointer;padding:2px;flex:none;border-radius:6px;line-height:0}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add]:hover{color:var(--dsw-alias-label-primary,#e6edf3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add] svg{display:block}
 `
@@ -102,6 +106,13 @@ interface WsListState {
   [key: string]: unknown
 }
 
+/** 页签对话框的目标：`newTab` 是尚未创建的草稿（不落盘），其余指向已存在的页签。 */
+type TabsDialog =
+  | { kind: 'rename'; id: string }
+  | { kind: 'newTab'; id: string }
+  | { kind: 'members'; id: string }
+  | { kind: 'delete'; id: string }
+
 export interface WsGroup {
   id: string
   name: string
@@ -110,11 +121,6 @@ export interface WsGroup {
 
 export interface WsTabsCtx {
   get?: <T = unknown>(name: string) => T | undefined
-  connection?: {
-    rpc: {
-      call: (path: string, method: string, payload?: Record<string, unknown>) => Promise<unknown>
-    }
-  }
   slots?: {
     entries?: (key: string) => Array<{ component?: unknown }>
     subscribe?: (key: string, listener: () => void) => () => void
@@ -135,6 +141,7 @@ const T: Record<string, [string, string]> = {
   'rename.save': ['保存', 'Save'],
   'rename.saving': ['保存中…', 'Saving…'],
   'rename.dup': ['已存在同名页签。', 'A tab with this name already exists.'],
+  'rename.required': ['请输入页签名', 'Enter a tab name'],
   'members.title': ['管理页签「{name}」', 'Manage tab "{name}"'],
   'members.desc': ['勾选 = 放进此页签。工作区同一时间只属于一个位置（默认或某个页签），勾选会把它从原位置移过来。', 'Check to include. A workspace belongs to one place at a time (Default or one tab); checking moves it here.'],
   'members.at': ['位于：{name}', 'In: {name}'],
@@ -159,24 +166,12 @@ function tt(key: string, vars?: Record<string, string>): string {
   return text
 }
 
-// ── primitives（Modal 等；bundle external，运行时 require）──────────────
-let _primitives: { Modal?: unknown } | null = null
-function primitives(): { Modal: any } {
-  if (_primitives === null) {
-    try {
-      const mod = require('@deepseek-ai/dsh-client-ui-primitives') as { Modal?: unknown }
-      _primitives = mod && typeof mod === 'object' ? mod : {}
-    } catch {
-      _primitives = {}
-    }
-  }
-  return _primitives as { Modal: any }
-}
-
 // ── 分组 store（模块级 + useSyncExternalStore；host 落盘）───────────────
 let groupReady = false
 let groupLoadFailed = false
 let groups: WsGroup[] = []
+/** 本地写入序号：每次 commitGroups 递增，供启动读回判定远端结果是否已经过期。 */
+let groupRevision = 0
 const groupSubs = new Set<() => void>()
 let rpcCall: ((method: string, payload?: Record<string, unknown>) => Promise<unknown>) | null = null
 
@@ -263,29 +258,46 @@ function clearDirty(): void {
   } catch { /* 忽略 */ }
 }
 
+/**
+ * 写盘序号：每次 persistGroups 自增；链上真正执行时用它丢弃已被更新过的那一次。
+ */
+let writeSeq = 0
+/**
+ * 写盘串行链：并发 POST 的到达顺序不保证，旧 payload 后到就会成为持久态（内存/缓存是
+ * 新的、重启后回退）。串行 + 只发最新一次，让落盘顺序与本地变更顺序一致。
+ */
+let writeChain: Promise<void> = Promise.resolve()
+
 function persistGroups(): void {
-  if (!rpcCall) {
+  const call = rpcCall
+  if (!call) {
     markDirty()
     return
   }
-  rpcCall('wsGroupsWrite', { groups })
-    .then((res) => {
-      const r = res as { ok?: boolean } | null
+  const seq = ++writeSeq
+  // 快照内容：链上执行时 groups 可能已经变了。
+  const snapshot = groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] }))
+  writeChain = writeChain.then(async () => {
+    // 期间又改过：这次的快照已过期，跳过（更新的那一次会带着最新内容发出去）。
+    if (seq !== writeSeq) return
+    try {
+      const r = (await call('wsGroupsWrite', { groups: snapshot })) as { ok?: boolean } | null
       if (!r || r.ok !== true) {
         console.warn('[width-slider] wsGroupsWrite rejected by host，下次启动将以本地缓存为准重试')
         markDirty()
       } else {
         clearDirty()
       }
-    })
-    .catch((err: unknown) => {
+    } catch (err) {
       console.warn('[width-slider] wsGroupsWrite failed，下次启动将以本地缓存为准重试', err)
       markDirty()
-    })
+    }
+  })
 }
 
 function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
   groups = mutate(groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] })))
+  groupRevision += 1
   groupReady = true
   cacheWrite()
   emitGroups()
@@ -293,6 +305,8 @@ function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
 }
 
 async function loadGroups(): Promise<void> {
+  /** 读回开始时的本地写入序号：期间用户若建/改过页签，远端结果即已过期。 */
+  const startedRevision = groupRevision
   // 先用本地缓存同步给出与上次一致的分组视图，避免「先全量→读回后重排」的闪动。
   const firstCache = cacheRead()
   if (firstCache.length > 0) {
@@ -309,7 +323,13 @@ async function loadGroups(): Promise<void> {
   }
   try {
     const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
-    if (result && result.ok === true) {
+    // 读回期间用户已经建/改过页签：本地是更新的真源，这次远端结果不再赋值（否则刚建的
+    // 页签会被旧列表在内存与缓存里一起覆盖掉，窗口＝RPC 往返）。收尾照常走完，并清掉
+    // 上次的失败标记 —— 本地写入一律经过 commitGroups，revision 变化即代表它已经完成
+    // 了 groupReady／缓存／host 写回。
+    if (groupRevision !== startedRevision) {
+      groupLoadFailed = false
+    } else if (result && result.ok === true) {
       const remote = sanitize(result.value)
       if (remote.length > 0) {
         // 上次写 host 失败过（脏标志）且本地缓存更新 → 以本地为准并重试写回，
@@ -839,11 +859,11 @@ function TabStrip(props: {
       onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
     },
     [
-      tabOf(DEFAULT_TAB),
-      ...groups.flatMap((g) => [
-        h('span', { key: 'sep-' + g.id, 'data-dsh-ws-sep': '', 'aria-hidden': 'true' }),
-        tabOf(g.id),
-      ]),
+      h(
+        'div',
+        { key: '__group', 'data-dsh-ws-tabs-group': '' },
+        [tabOf(DEFAULT_TAB), ...groups.map((g) => tabOf(g.id))],
+      ),
       h(
         'button',
         {
@@ -920,21 +940,41 @@ function btnStyle(opts: { primary?: boolean; danger?: boolean; disabled?: boolea
   return base
 }
 
-function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode {
+/**
+ * 重命名 / 新建页签对话框的 props。草稿分支必带 `onCreate`，所以「开着草稿却没人
+ * 负责创建」这种静默 no-op 组合在类型上无法表达。
+ */
+type RenameDialogProps = {
+  groupId: string
+  onDone: () => void
+} & (
+  | { draft: true; onCreate: (name: string) => void }
+  | { draft?: false; onCreate?: never }
+)
+
+function RenameDialog(props: RenameDialogProps): ReactNode {
   const g = groupOf(props.groupId)
-  const [draft, setDraft] = useState(g?.name || '')
+  // 草稿初值为空串：`sanitize()` 会把宿主返回的空名兜底成「未命名」，若这里也用同一个
+  // 默认名，只要列表里已有一个「未命名」页签，新建对话框一打开就撞重名、保存键直接禁用。
+  // 输入框的占位提示已经足够表达「还没起名」。
+  const [draftName, setDraftName] = useState(g?.name ?? '')
   const [busy, setBusy] = useState(false)
-  if (!g) return null
+  // 草稿对应「尚不存在」的组，重命名对应「已存在」的组；两种反向组合都不该渲染
+  // （草稿传了已存在的 id 会让保存走 onCreate，往列表里追加同 id 的第二个组）。
+  if (props.draft === true ? g !== undefined : g === undefined) return null
   const Modal = primitives().Modal
   if (!Modal) return null
 
-  const trimmed = draft.trim()
-  const duplicate = trimmed !== '' && trimmed !== g.name && groups.some((x) => x.id !== g.id && x.name === trimmed)
+  const trimmed = draftName.trim()
+  const currentName = g?.name ?? ''
+  const duplicate = trimmed !== '' && trimmed !== currentName
+    && groups.some((x) => x.id !== props.groupId && x.name === trimmed)
   const blocked = busy || trimmed === '' || duplicate
   const save = () => {
     if (blocked) return
     setBusy(true)
-    commitGroups((cur) => cur.map((x) => (x.id === g.id ? { ...x, name: trimmed } : x)))
+    if (props.draft === true) props.onCreate(trimmed)
+    else commitGroups((cur) => cur.map((x) => (x.id === props.groupId ? { ...x, name: trimmed } : x)))
     setBusy(false)
     props.onDone()
   }
@@ -946,7 +986,7 @@ function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode
     {
       open: true,
       onClose: close,
-      title: tt('rename.title'),
+      title: props.draft === true ? tt('add.tab') : tt('rename.title'),
       closeLabel: tt('cancel'),
       footer: [
         h('button', { key: 'cancel', type: 'button', onClick: close, style: btnStyle({}, busy) }, tt('cancel')),
@@ -964,10 +1004,10 @@ function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode
         key: 'inp',
         type: 'text',
         autoFocus: true,
-        value: draft,
+        value: draftName,
         maxLength: 40,
         placeholder: tt('rename.placeholder'),
-        onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
+        onChange: (e: { target: { value: string } }) => setDraftName(e.target.value),
         onKeyDown: (e: { key: string }) => {
           if (e.key === 'Enter') save()
         },
@@ -986,7 +1026,9 @@ function RenameDialog(props: { groupId: string; onDone: () => void }): ReactNode
       }),
       duplicate
         ? h('div', { key: 'dup', style: { fontSize: 12, color: 'var(--dsw-alias-state-error-primary,#e5484d)' } }, tt('rename.dup'))
-        : null,
+        : trimmed === ''
+          ? h('div', { key: 'req', style: { fontSize: 12, color: 'var(--dsw-alias-label-caption,#8a8e96)' } }, tt('rename.required'))
+          : null,
     ]),
   )
 }
@@ -1138,7 +1180,8 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const activeIntentRef = useRef<string>(DEFAULT_TAB)
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
-  const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string } | null>(null)
+  // newTab = 新建页签草稿：组此时还不存在（不落盘），用户点「保存」才创建。
+  const [dialog, setDialog] = useState<TabsDialog | null>(null)
   // 工作区行菜单「分配标签」事件桥 → 本地弹窗（Shell 一定挂载，比 overlay 桥更可靠）。
   const [assignTarget, setAssignTarget] = useState<{ workspaceId: string; title: string } | null>(null)
   useEffect(() => {
@@ -1280,7 +1323,9 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     if (active !== DEFAULT_TAB && !groupList.some((g) => g.id === active)) {
       setActive(DEFAULT_TAB)
     }
-    if (dialog && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
+    // 草稿（新建页签）的 id 此时还不存在于 groupList，必须跳过这条校验，
+    // 否则对话框挂载的同一帧就被关掉（表现为点加号没反应/一闪而过）。
+    if (dialog !== null && dialog.kind !== 'newTab' && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
   }, [gs.ready, active, groupList, dialog])
 
   // 标题行处理：官方标题原位替换为页签栏。
@@ -1338,11 +1383,16 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     const gid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? 'g-' + crypto.randomUUID()
       : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
-    const nu: WsGroup = { id: gid, name: tt('new.name'), workspaceIds: [] }
-    commitGroups((cur) => [...cur, nu])
-    setActive(nu.id)
-    activeIntentRef.current = nu.id
-    setDialog({ kind: 'rename', id: nu.id })
+    // 新建先落草稿：此处不建组、不落盘，用户点「保存」才创建；取消/关闭什么都不发生。
+    setDialog({ kind: 'newTab', id: gid })
+  }
+
+  /** 新建草稿被确认：此时才创建组并切过去（activeIntent 供官方新建工作区的自动归属）。 */
+  const createGroup = (id: string, name: string): void => {
+    // 幂等：同一 id 不重复追加（渲染层已挡住「草稿 id 已存在」，这里是单点防护）。
+    commitGroups((cur) => (cur.some((g) => g.id === id) ? cur : [...cur, { id, name, workspaceIds: [] }]))
+    setActive(id)
+    activeIntentRef.current = id
   }
 
   // 过滤 hooks：仅开关开启时用页签作用域驱动官方树；关闭时原样透传（官方原貌）。
@@ -1398,12 +1448,15 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   }
 
   const dialogGroup = dialog ? groupList.find((g) => g.id === dialog.id) : undefined
+  // 重命名对话框只针对已存在的页签；新建草稿走独立分支，其组尚未创建。
+  const renameTarget = dialog !== null && dialog.kind === 'rename' && dialogGroup !== undefined ? dialog : null
+  const newTabTarget = dialog !== null && dialog.kind === 'newTab' ? dialog : null
 
   return h(
     'div',
     { ref: hostRef, 'data-dsh-ws-tabs-host': '', style: { display: 'contents' } },
     [
-      typeof OfficialComp === 'function' ? h(OfficialComp as never, officialProps) : null,
+      typeof OfficialComp === 'function' ? h(OfficialComp as never, { ...officialProps, key: 'official' }) : null,
       header && enabled
         ? createPortal(
             h(TabStrip, {
@@ -1417,19 +1470,30 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
               onAdd,
             }),
             header.row,
+            'tabs',
           )
         : null,
-      dialog && dialog.kind === 'rename' && dialogGroup
-        ? h(RenameDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
+      newTabTarget
+        ? h(RenameDialog, {
+            key: newTabTarget.id,
+            groupId: newTabTarget.id,
+            draft: true,
+            onCreate: (name: string) => createGroup(newTabTarget.id, name),
+            onDone: () => setDialog(null),
+          })
+        : null,
+      renameTarget
+        ? h(RenameDialog, { key: renameTarget.id, groupId: renameTarget.id, onDone: () => setDialog(null) })
         : null,
       dialog && dialog.kind === 'members' && dialogGroup
-        ? h(MembersDialog, { groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })
+        ? h(MembersDialog, { key: 'members', groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })
         : null,
       dialog && dialog.kind === 'delete' && dialogGroup
-        ? h(DeleteDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
+        ? h(DeleteDialog, { key: 'delete', groupId: dialog.id, onDone: () => setDialog(null) })
         : null,
       assignTarget
         ? h(AssignTabPicker, {
+            key: 'assign',
             workspaceId: assignTarget.workspaceId,
             title: assignTarget.title,
             currentOwner: membership.get(assignTarget.workspaceId),
@@ -1619,6 +1683,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     style.remove()
     rpcCall = null
     groupReady = false
+    groupLoadFailed = false
     groups = []
     emitGroups()
   }

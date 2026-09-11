@@ -154,16 +154,23 @@ describe('tuning constants', () => {
   })
 
   it('stays underdamped so the release keeps momentum', () => {
-    // ζ = -ln(damping) * 60 / (2√k) ≈ 0.67: the overshoot is visible while the
-    // oscillation dies out instead of ringing for a second.
+    // ζ = -ln(damping) * 60 / (2√k) ≈ 0.77: the overshoot is visible while the
+    // oscillation dies out instead of ringing for a second. The band is tight
+    // enough to catch a noticeably under-damped pair (a 0.5 lower bound let
+    // "nearly no damping" and "clearly too little" both pass).
     const zeta = -Math.log(SPRING_DAMPING) * 60 / (2 * Math.sqrt(SPRING_STIFFNESS))
-    expect(zeta).toBeGreaterThan(0.5)
+    expect(zeta).toBeGreaterThan(0.7)
     expect(zeta).toBeLessThan(0.85)
   })
 
-  it('treats a slow release as a stop', () => {
-    expect(FLICK_MIN_VELOCITY).toBeGreaterThan(0)
-    expect(PROJECT_MS).toBeGreaterThan(0)
-    expect(REST_VELOCITY).toBeGreaterThan(0)
+  it('pins the release knobs to a usable magnitude', () => {
+    // 原先三条 `toBeGreaterThan(0)` 对写死的常量恒真，把数量级改坏也不会红。这里钉住它们
+    // 实际所在的量级。
+    expect(FLICK_MIN_VELOCITY).toBeGreaterThan(0.01) // 太灵敏会把轻推当成甩动
+    expect(FLICK_MIN_VELOCITY).toBeLessThan(0.2) // 太钝则甩不动
+    expect(PROJECT_MS).toBeGreaterThanOrEqual(50)
+    expect(PROJECT_MS).toBeLessThanOrEqual(300)
+    expect(REST_VELOCITY).toBeGreaterThan(1) // px/s；太低会让余振拖很久
+    expect(REST_VELOCITY).toBeLessThan(200)
   })
 })

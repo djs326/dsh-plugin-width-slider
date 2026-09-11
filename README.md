@@ -163,6 +163,7 @@ dsh-plugin-width-slider/
 | 界面 | tab 栏滚动 | 设置左侧导航超高时显示滚动条 | 开 |
 | 界面 | 会话删除 | 会话行「⋯」菜单新增删除项 | 开 |
 | 界面 | 工作区分页 | 侧栏工作区标题行改为页签栏 | 开 |
+| 界面 | 侧边栏工具并入 | 工作区标题行的搜索 / 视图 / 添加工作区三个按钮并入「新建会话」行，页签行独占整行 | 开 |
 
 ### 样式与预设
 
@@ -196,7 +197,7 @@ dsh-plugin-width-slider/
 
 ### 工作区分页
 
-- 开启后，侧栏顶部「工作区」标题位置变为页签栏：最前是固定的「默认」页签，其后是自建页签，末尾「＋」用于新建页签（新建后立即改名）。
+- 开启后，侧栏顶部「工作区」标题位置变为页签栏：最前是固定的「默认」页签，其后是自建页签，末尾「＋」打开「新建页签」对话框 —— 输入名字并保存才真正创建，取消 / Esc / 点遮罩关闭都不会建出页签。
 - 「默认」页签显示未分组的直属工作区与官方未分组会话；自建页签收纳被分配过去的工作区（同一工作区只属于一个位置）。
 - 把工作区移入页签：展开工作区行右侧「⋯」菜单，点击「分配标签」，在弹窗中选择目标页签（或选择「默认」移回）。
 - 删除页签：右键页签选择删除，其中的工作区自动回到「默认」，不会丢失。
@@ -213,27 +214,27 @@ dsh-plugin-width-slider/
 
 ## 界面预览
 
-> 截图与动图来自 DSH 实测，存放于 `png/` 目录。
+> 截图与动图来自 DSH 实测，存放于 `image/` 目录。
 
 **宽度滑块 · 按下即预览**
 
-![宽度预览（松开或 Esc 返回）](png/宽度全屏预览.png)
+![宽度预览（松开或 Esc 返回）](image/宽度全屏预览.png)
 
 **设置面板窗口化**
 
-![设置面板顶部拖动移动](png/设置页拖动.gif)
+![设置面板顶部拖动移动](image/设置页拖动.gif)
 
-![设置面板右下角把手调整大小](png/设置页调整大小.gif)
+![设置面板右下角把手调整大小](image/设置页调整大小.gif)
 
 **工作区分页**
 
-![侧栏页签栏（固定「默认」+ 自建页签）](png/页签栏.png)
+![侧栏页签栏（固定「默认」+ 自建页签）](image/页签栏.png)
 
-![新建页签后的「重命名页签」对话框](png/重命名页签.png)
+![新建页签对话框（保存后才创建，取消不创建；图为旧版界面）](image/重命名页签.png)
 
-![「分配标签」弹窗（选择目标页签）](png/分配页签.png)
+![「分配标签」弹窗（选择目标页签）](image/分配页签.png)
 
-![工作区行 ⋯ 菜单（重命名 / 分配标签 / 删除工作区）](png/工作区行菜单.png)
+![工作区行 ⋯ 菜单（重命名 / 分配标签 / 删除工作区）](image/工作区行菜单.png)
 
 ## 工作原理
 
@@ -273,9 +274,9 @@ dsh-plugin-width-slider/
 | 项目 | 说明 |
 |---|---|
 | 目标内核 | DSH `0.1.5-rc.1`（当前官方内核）。插件只适配该内核，不为更早版本保留兼容分支 |
-| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject`（在调用者 `inject` 里补 `webServer` 无效）。改用 `connection.fetch.register` 注册 `/api` 下的精确 Fetch 路由 |
+| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject` —— 所以承担路由注册的 fiber 自己必须声明 `webServer` 依赖。注册改走 `connection.fetch.register` 的 `/api` 精确 Fetch 路由 |
 | 端点与围栏 | 客户端 `POST /api/width-slider`，请求体为 `{ method, payload }`，响应体为处理器返回的 JSON；围栏由 connection 的 `/api` 处理器统一施加（可信 Host/Origin + 浏览器认证） |
-| 已核对稳定的契约 | slot（`conversation.chat.node`、`conversation.session.header.actions`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
+| 已核对稳定的契约 | slot（`conversation.chat.node`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
 
 ### 验证状态
 
@@ -311,7 +312,7 @@ lib/
 └── types/           # 类型声明（tsc 产出）
 ```
 
-测试位于 `test/`（`settingsMotion`、`thinkView` 两个用例文件）；仓库内包含若干参考源码副本（`dsh-src/`、`my-dsh-plugins-main/` 等），已在 `vitest.config.ts` 中排除，不参与测试收集。
+测试位于 `test/`（8 个用例文件、约 94 项：设置面板动效、思考块渲染、动效角色映射、弹簧手感、文字擦除、侧边栏工具并入、工作区页签对话框）；仓库内包含 DSH 源码副本（`dsh-src/`），已在 `vitest.config.ts` 中排除，不参与测试收集。
 
 ### 已知问题
 
@@ -345,7 +346,6 @@ dsh-plugin-width-slider/
 │       ├── think/                   # 思考块渲染器与界面中文化词表
 │       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）+ 弹簧手感 + 文字擦除
 │       ├── lang.ts                  # 界面语言判定
-│       ├── icons.ts                 # 图标 data URL 安全校验
 │       └── locales.ts               # zh / en 文案
 ├── test/                            # 单元测试（含 jsdom 动效用例）
 ├── scripts/fix-dts-imports.mjs      # 构建后修正 d.ts 相对导入
@@ -378,6 +378,17 @@ dsh-plugin-width-slider/
 部分能力依赖官方 DOM 结构，官方大幅重构界面时可能失效。此时相关补丁会安静跳过，不影响其它功能；请在 [Issues](https://github.com/djs326/dsh-plugin-width-slider/issues) 反馈并附上 DSH 版本号。
 
 ## 更新日志
+
+### 1.5.0
+
+- **侧边栏工具并入新会话行**：工作区标题行的搜索、视图选项、添加工作区三个按钮改由注入样式表钉到「新建会话」同一行，页签行独占整行。宿主 DOM 全程不被搬动 —— 此前的节点搬移实现会在收起侧边栏时让 React 卸载节点抛 `NotFoundError: removeChild`。
+- **让位宽度改为文案优先**：先按实测文案宽保证按钮文字完整，剩余宽度才给工具；空间偏紧时收紧间距，仍放不下就不并入并保留宿主布局。修复窄侧边栏下「新会话」被裁成「新会」。
+- **避开宿主动画窗口**：宿主的 `rail-in` 关键帧会同时平移「新建会话」按钮与其所在区域，搜索展开时操作区容器自己也带 `translateX` —— 这些 `transform` 一旦出现在被测元素的链上，`position: fixed` 的包含块就会改变、坐标与矩形都不可信，此时跳过测量与发布并保留上一次位置，关键帧结束的 `animationend` 再触发重测。收起落定时先按 rail 宽度还原宿主布局，不必等动画结束。
+- **新建页签改为草稿**：点加号只打开对话框，点「保存」才真正创建页签并切过去，取消 / Esc / 点遮罩关闭都不产生任何写入。修复「点取消页签仍被创建」。
+- 图片目录 `png/` 改名为 `image/`。
+- **修复旧宽度记忆的迁移从未生效**：迁移分支此前返回 `auto: true`（标记为「只挪过位置」），`resolveDialogRect` 据此回落到官方尺寸，旧键里存的宽度被直接丢掉 —— 从旧版本升级的用户永远看不到自己拖定的宽度。
+- **修复「恢复默认」清不干净**：`clearPanelRect()` 只删现行记忆键，而迁移路径仍在读旧键，重置之后弹窗会被重新套回旧宽度。
+- **补测试**：13 文件 / 127 例 → 23 文件 / 222 例，覆盖 host 端点通道与会话删除服务、宽度偏好、设置面板弹窗几何、入场原语与动效引擎、文案与界面语言、`$DSH_HOME` 解析、会话删除菜单注入、界面中文化与设置页；每条断言都逐项变异验证过（确认改坏对应实现会被用例抓住）。
 
 ### 1.0.2
 

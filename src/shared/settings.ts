@@ -55,6 +55,8 @@ export interface FeatureSettings {
   settingsMotionEnabled: boolean
   /** 18 对话行按角色入场（用户消息侧向滑入、助手正文用所选样式、工具与系统行轻微淡入） */
   motionRoleEntrance: boolean
+  /** 19 侧边栏工具并入新建会话行（工作区标题行的搜索/视图/添加工作区三按钮移到「新建会话」旁，页签行独占整行） */
+  sidebarToolsMerge: boolean
 }
 
 export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -76,6 +78,7 @@ export const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   newChatMotionStyle: DEFAULT_NEW_CHAT_MOTION_STYLE,
   settingsMotionEnabled: true,
   motionRoleEntrance: true,
+  sidebarToolsMerge: true,
 }
 
 /** 白名单式合并任意来源（host 文件 / 缺键 / 未知类型）为完整配置。 */
@@ -100,5 +103,6 @@ export function mergeSettings(raw: unknown): FeatureSettings {
     newChatMotionStyle: isNewChatMotionStyle(o.newChatMotionStyle) ? o.newChatMotionStyle : DEFAULT_NEW_CHAT_MOTION_STYLE,
     settingsMotionEnabled: o.settingsMotionEnabled !== false,
     motionRoleEntrance: o.motionRoleEntrance !== false,
+    sidebarToolsMerge: o.sidebarToolsMerge !== false,
   }
 }

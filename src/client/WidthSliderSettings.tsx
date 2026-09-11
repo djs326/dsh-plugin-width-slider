@@ -2,11 +2,11 @@
  * WidthSliderSettings: settings-panel section — 功能总控页。
  *
  * 布局（v0.7.0 排版重写）：每个分组只占一行，开关与控件横向排布，逐条
- * 长说明收进悬停提示（title），子面板（Open With）默认折叠。
+ * 长说明收进悬停提示（title）。
  *   1. 对话宽度   —— 启用开关 + 跟随窗口 + 宽度滑块（WidthSliderControl）
  *   2. 思考与输出 —— 思考块增强 + 强制中文 + 显示方式（分段控件）
- *   3. 界面       —— 中文化 / 弹窗拖拽 / tab 滚动 / 会话删除 / 工作区分页
- *   4. 打开方式   —— Open With 设置 + 头部按钮 + 折叠的管理面板
+ *   3. 动效       —— 对话/侧边栏/新建对话入场 + 设置面板动效 + 预设与微调
+ *   4. 界面       —— 中文化 / 弹窗拖拽 / tab 滚动 / 会话删除 / 工作区分页
  *
  * 数据流（单一读源）：
  * - 读取只发生在 client 入口启动时（一次 readSettings → config store）；
@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
+import { clearPanelRect } from './settingsPanelPatch.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
 import type { WidthSliderKey } from './locales.ts'
 import {
@@ -131,6 +132,7 @@ input.dsws-sw:disabled { cursor: default; }
 .dsws-slider-inline { flex: 1 1 170px; min-width: 150px; display: flex; align-items: center; gap: 10px; padding: 0 8px; }
 .dsws-slider-inline.is-disabled { opacity: .55; pointer-events: none; }
 .dsws-track { position: relative; flex: 1 1 auto; height: 16px; border-radius: 999px; background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.2)); cursor: col-resize; user-select: none; touch-action: none; }
+.dsws-track:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4f9eff); outline-offset: 3px; }
 .dsws-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; background: var(--dsw-alias-state-business-primary, #4f9eff); opacity: .9; pointer-events: none; }
 .dsws-knob { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-state-business-primary, #4f9eff); box-shadow: 0 1px 3px rgba(0,0,0,.3); pointer-events: none; }
 .dsws-num { flex: none; font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -227,11 +229,25 @@ export function WidthSliderSettings({
   // 订阅 config store：入口读回 / 其它来源的配置变化同步到本页。
   useEffect(() => onSettingsChanged((next) => setSettings(next)), [])
 
+  /** 写盘序号与串行链：连点开关时只把最新一份发出去，落盘顺序与本地变更顺序一致。 */
+  const writeSeqRef = useRef(0)
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve())
+
   // 本组件改动后写盘（dirty 由 persist 置位，effect 消费后复位）。
   useEffect(() => {
     if (!dirtyRef.current) return
     dirtyRef.current = false
-    writeSettings(settings).catch((err) => console.warn('[width-slider] writeSettings failed', err))
+    const seq = ++writeSeqRef.current
+    const snapshot = settings
+    writeChainRef.current = writeChainRef.current.then(async () => {
+      // 期间又改过：这一份已过期，跳过（更新的那份会带着最新配置发出）。
+      if (seq !== writeSeqRef.current) return
+      try {
+        await writeSettings(snapshot)
+      } catch (err) {
+        console.warn('[width-slider] writeSettings failed', err)
+      }
+    })
   }, [settings, writeSettings])
 
   /** 应用补丁：以 store 最新值为基 → applySettings 广播热切换 → dirty 写盘。 */
@@ -240,18 +256,20 @@ export function WidthSliderSettings({
     applySettings({ ...getSettings(), ...patch })
   }, [])
 
-  /** 恢复默认：重置开关 + 清宽度/弹窗宽度记忆，刷新页面应用。 */
+  /** 恢复默认：重置开关 + 清宽度与弹窗记忆，写盘完成后刷新页面应用。 */
   const resetAll = useCallback((): void => {
     try {
       localStorage.removeItem('dsh.conversation.contentWidth')
       localStorage.removeItem('dsh.conversation.contentWidthFollow')
-      localStorage.removeItem('dsh.conversation.settingsPanelWidth')
     } catch { /* ignore */ }
+    // 弹窗尺寸/位置的记忆键由 settingsPanelPatch 持有：走它导出的清理函数，避免键名漂移
+    // （此前这里删的是已经废弃的 settingsPanelWidth，导致「恢复默认」重置不了弹窗大小）。
+    clearPanelRect()
     applySettings({ ...DEFAULT_FEATURE_SETTINGS })
-    writeSettings({ ...DEFAULT_FEATURE_SETTINGS }).catch((err) =>
-      console.warn('[width-slider] reset write failed', err))
-    // 宽度/弹窗 UI 均读自记忆与组件本地态，刷新后整体取默认最可靠。
-    window.location.reload()
+    // 先把默认配置写回 host 再刷新：reload 会打断在途写盘，刷新后仍旧读回旧配置。
+    void writeSettings({ ...DEFAULT_FEATURE_SETTINGS })
+      .catch((err) => { console.warn('[width-slider] reset write failed', err) })
+      .finally(() => { window.location.reload() })
   }, [writeSettings])
 
   /** 当前动效取值与某套预设完全一致时，该预设按钮高亮。 */
@@ -468,6 +486,13 @@ export function WidthSliderSettings({
             title={t('enableWsTabsInfo')}
             checked={settings.workspaceTabs}
             onChange={(checked) => persist({ workspaceTabs: checked })}
+          />
+          <SwitchItem
+            id={id('merge-sidebar-tools')}
+            label={t('sidebarToolsMerge')}
+            title={t('sidebarToolsMergeInfo')}
+            checked={settings.sidebarToolsMerge}
+            onChange={(checked) => persist({ sidebarToolsMerge: checked })}
           />
         </div>
       </Group>

@@ -99,7 +99,16 @@ export function whenTransitionSettles(el: HTMLElement, timeoutMs: number): Promi
       resolve()
     }
     const onEnd = (event: TransitionEvent): void => {
-      if (event.target === el) finish()
+      if (event.target !== el) return
+      // 同一元素常有多条并行过渡（面板退出是 opacity 160ms + scale 280ms）：只等最短的
+      // 那条结束就放行，会让较长的那条被截断。仍有动画在跑就继续等，超时兜底。
+      const running = (el as HTMLElement & { getAnimations?: () => Animation[] }).getAnimations
+      if (typeof running === 'function') {
+        try {
+          if (running.call(el).some((animation) => animation.playState === 'running')) return
+        } catch { /* 取不到动画列表时按已结束处理 */ }
+      }
+      finish()
     }
     el.addEventListener('transitionend', onEnd)
     const timer = window.setTimeout(finish, timeoutMs)
@@ -167,6 +176,13 @@ const MAX_SHAKE_MS = 350
 /** One element's pending impact: the loudest source wins, sources are never summed. */
 interface ShakeState {
   amp: number
+  /**
+   * First frame of the entire run. The decay divides by `end - start` (not by the first
+   * caller's duration): an absorbed impact extends `end`, and dividing by the old
+   * duration would compute a decay above 1 - amplifying the shake past the loudest
+   * amplitude any caller asked for.
+   */
+  start: number
   end: number
 }
 
@@ -199,7 +215,7 @@ export function shakeElement(el: HTMLElement, amp: number, durationMs: number): 
     pending.end = Math.max(pending.end, now + duration)
     return
   }
-  const state: ShakeState = { amp, end: now + duration }
+  const state: ShakeState = { amp, start: now, end: now + duration }
   SHAKING.set(el, state)
   const step = (): void => {
     const t = performance.now()
@@ -209,7 +225,10 @@ export function shakeElement(el: HTMLElement, amp: number, durationMs: number): 
       SHAKING.delete(el)
       return
     }
-    const decay = left / duration
+    // 分母是这一整段的实际时长（吸收会延长 end），并夹到 1 以内：用首次调用的 duration
+    // 会让后续更长的影响算出 decay > 1，把振幅放大到超过传入值。
+    const span = Math.max(1, state.end - state.start)
+    const decay = Math.min(1, left / span)
     const s = t / 1000
     el.style.translate =
       `${(Math.sin(s * 47) * state.amp * decay).toFixed(2)}px ${(Math.sin(s * 31 + 1.3) * state.amp * decay).toFixed(2)}px`

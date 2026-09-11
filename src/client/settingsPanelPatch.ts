@@ -38,6 +38,17 @@ import { getSettings, onSettingsChanged } from './config.ts'
 const DIALOG_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
 const RECT_KEY = 'dsh.conversation.settingsPanelWindow'
 const LEGACY_WIDTH_KEY = 'dsh.conversation.settingsPanelWidth'
+
+/**
+ * 清掉弹窗的尺寸/位置记忆（「恢复默认设置」用）。两个键都要清：`RECT_KEY` 是现行记忆键，
+ * 而 `LEGACY_WIDTH_KEY` 仍被迁移路径读取 —— 留着它，「恢复默认」之后弹窗会被重新套回旧宽度。
+ */
+export function clearPanelRect(): void {
+  try {
+    window.localStorage.removeItem(RECT_KEY)
+    window.localStorage.removeItem(LEGACY_WIDTH_KEY)
+  } catch { /* 存储不可用时没有记忆可清 */ }
+}
 const RESIZE_HANDLE_ATTR = 'data-width-slider-resize-handle'
 /** 手动拖拽的尺寸下限。 */
 const MIN_W = 640
@@ -119,8 +130,11 @@ function applyNavScrollPatch(navList: HTMLElement): void {
 }
 
 const patchedNavLists = new WeakSet<HTMLElement>()
-/** 已 patch 过的 navList（保留引用，供开关关闭时还原内联样式）。 */
-const patchedNavListEls = new Set<HTMLElement>()
+/**
+ * 当前已 patch 的 navList。设置面板同时只存在一份，保留单个引用即可 —— 原来用 Set 会
+ * 强引用每一次打开过的 nav 子树（关闭后仍被钉住，每开一次设置就泄漏一棵）。
+ */
+let patchedNavListEl: HTMLElement | null = null
 
 function probeAndPatchNavList(): void {
   if (typeof document === 'undefined') return
@@ -129,7 +143,7 @@ function probeAndPatchNavList(): void {
   const navList = findNavList(dialog)
   if (!navList || patchedNavLists.has(navList)) return
   patchedNavLists.add(navList)
-  patchedNavListEls.add(navList)
+  patchedNavListEl = navList
   applyNavScrollPatch(navList)
 }
 
@@ -143,7 +157,8 @@ export function installNavScrollPatch(): () => void {
   return () => {
     observer.disconnect()
     probe.dispose()
-    for (const navList of patchedNavListEls) {
+    const navList = patchedNavListEl
+    if (navList !== null) {
       navList.style.flex = ''
       navList.style.minHeight = ''
       navList.style.overflowY = ''
@@ -151,8 +166,8 @@ export function installNavScrollPatch(): () => void {
       const nav = navList.parentElement
       if (nav) nav.style.minHeight = ''
       patchedNavLists.delete(navList)
+      patchedNavListEl = null
     }
-    patchedNavListEls.clear()
   }
 }
 
@@ -185,7 +200,9 @@ function readDialogRect(): DialogRect | null {
       const w = Number(legacy)
       if (Number.isFinite(w) && w >= MIN_W) {
         const vh = typeof window === 'undefined' ? OFFICIAL_MAX_H : window.innerHeight
-        return { w: Math.round(w), h: officialSize(w, vh).h, left: NaN, top: NaN, auto: true }
+        // auto:false = 尺寸来自记忆。旧键存的正是用户拖定的宽度；标成 true（只挪过位置）
+        // 会让 resolveDialogRect 改用官方尺寸，迁移等于没做。
+        return { w: Math.round(w), h: officialSize(w, vh).h, left: NaN, top: NaN, auto: false }
       }
     }
   } catch { /* 忽略 */ }

@@ -27,6 +27,7 @@ import { applySavedWidth } from './widthPrefs.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { installSessionDelete } from './sessionDelete.ts'
 import { installWorkspaceTabs } from './workspaceTabs.tsx'
+import { installSidebarToolsMerge } from './sidebarToolsMerge.ts'
 import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
 import { installConversationEntrance, type MotionEngineState } from './motion/motion.ts'
@@ -288,7 +289,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'sessionDel' | 'wsTabs' | 'motion'
+    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'sessionDel' | 'wsTabs' | 'motion' | 'toolsMerge'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -323,6 +324,11 @@ export function apply(ctx: RpcClientContext): void {
       // 工作区分页：组件常驻（启动即包裹一次），开关只切换 wrapper 内 enabled
       // 状态（显示标签/过滤），不再反复安装/卸载组件——开关即时生效。
       ensureSafe('wsTabs', true, () => installWorkspaceTabs(ctx as never))
+      // 侧边栏工具并入新建会话行：同样常驻安装，模块内部按开关搬运/还原。
+      ensureSafe('toolsMerge', true, () => {
+        const merge = installSidebarToolsMerge({ enabled: () => getSettings().sidebarToolsMerge })
+        return () => merge.dispose()
+      })
       // 动效：任一开关开启即安装引擎（引擎内部再按各开关分别门控）。
       ensureSafe('motion', s.motionEnabled || s.sidebarMotionEnabled || s.newChatMotionEnabled || s.settingsMotionEnabled,
         () => installMotionFeature(ctx))
@@ -332,7 +338,7 @@ export function apply(ctx: RpcClientContext): void {
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'sessionDel', 'wsTabs', 'motion'] as const) {
+      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'sessionDel', 'wsTabs', 'motion', 'toolsMerge'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

@@ -18,6 +18,7 @@
  * the group's single row.  Styles live in WidthSliderSettings.tsx (.dsws-*).
  */
 import { createPortal } from 'react-dom'
+import { setPreviewOpen } from './previewState.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -49,8 +50,9 @@ import {
 // bar's rounded end — no flat edge ever shows through the round knob.
 // 8px radius = the 16px track/knob height declared by .dsws-track / .dsws-knob.
 const PANEL_THUMB_R = 8
-/** Track height equals the knob diameter (2 * radius). */
-const PANEL_TRACK_H = PANEL_THUMB_R * 2
+/** 键盘步长（px）：方向键 1px，按住 Shift 加大到 10px。 */
+const KEY_STEP = 1
+const KEY_STEP_LARGE = 10
 /** Overlay preview slider knob radius in px (28px knob / 2). */
 const OVERLAY_THUMB_R = 14
 /** Overlay track height equals the knob diameter. */
@@ -69,7 +71,23 @@ const OVERLAY_TRACK_H = OVERLAY_THUMB_R * 2
  *
  * @param origin - any element inside the settings panel (e.g. our section root).
  */
+/**
+ * Preview 期间被我们隐藏过的元素。还原必须只碰这一批 —— 原来每次 restore 都重新计算
+ * targets，锚点链或 `[data-shell-overlay]` 集合一旦变化，被置 `opacity:0` 的元素就再也
+ * 回不来（面板整块不可见、不可点）。
+ */
+let hiddenByPreview: HTMLElement[] = []
+
 function hideSettingsOverlay(hide: boolean, origin?: HTMLElement | null): void {
+  if (!hide) {
+    for (const el of hiddenByPreview) {
+      el.style.setProperty('opacity', '')
+      el.style.setProperty('pointer-events', '')
+    }
+    hiddenByPreview = []
+    return
+  }
+
   const targets = new Set<HTMLElement>()
 
   // 1. Explicit shell overlay layers.
@@ -100,10 +118,11 @@ function hideSettingsOverlay(hide: boolean, origin?: HTMLElement | null): void {
     }
   }
 
-  targets.forEach(el => {
-    el.style.setProperty('opacity', hide ? '0' : '')
-    el.style.setProperty('pointer-events', hide ? 'none' : '')
-  })
+  hiddenByPreview = [...targets]
+  for (const el of hiddenByPreview) {
+    el.style.setProperty('opacity', '0')
+    el.style.setProperty('pointer-events', 'none')
+  }
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -119,8 +138,10 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     const pref = readPreference()
     const column = readColumnWidth()
     const max = Math.max(MIN_WIDTH, column - EDGE_BUDGET)
+    // 无偏好时也要按当前列宽的上限收敛：窄列下 defaultWidth 的下限（680）会超过 max，
+    // 初值一旦超出量程，百分比读数会落到 0，一拖动就跳变。
     if (pref !== null) return Math.max(MIN_WIDTH, Math.min(pref, max))
-    return defaultWidth(column)
+    return Math.max(MIN_WIDTH, Math.min(defaultWidth(column), max))
   })
   const [preview, setPreview] = useState(false)
   /** Follow-window mode: content width == conversation column, live. */
@@ -236,6 +257,12 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     if (followRef.current) return
     // 重入保护：上一次拖动未结束（多指/快速二击）忽略新按下，防止锚点覆盖跳变。
     if (dragRef.current !== null) return
+    // 甩动惯性可能还在跑（此时 dragRef 已清空）：它的每一帧仍在发布宽度，落定时还会
+    // finishGesture(target) —— 会把用户这次新拖的宽度覆盖掉。先按 release 路径的方式取消它。
+    if (glideRef.current !== null) {
+      cancelAnimationFrame(glideRef.current)
+      glideRef.current = null
+    }
     e.preventDefault()
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)
@@ -309,6 +336,32 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     target.addEventListener('pointerup', onUp)
     target.addEventListener('pointercancel', onUp)
   }, [value, applyWidth, startGlide, finishGesture])
+
+  /**
+   * 键盘调节：方向键 ±1px（Shift ±10px），Home/End 到两端。落值走与手势结束同一条路径
+   * （publish + persist），这样键盘与鼠标不会各写一套。跟随模式与禁用态下不响应，与鼠标一致。
+   */
+  const onTrackKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (followRef.current || disabled) return
+    const max = Math.max(MIN_WIDTH, readColumnWidth() - EDGE_BUDGET)
+    const step = e.shiftKey ? KEY_STEP_LARGE : KEY_STEP
+    let next: number | null = null
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = value - step
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = value + step
+    else if (e.key === 'Home') next = MIN_WIDTH
+    else if (e.key === 'End') next = max
+    if (next === null) return
+    e.preventDefault()
+    const clamped = Math.max(MIN_WIDTH, Math.min(Math.round(next), max))
+    if (clamped !== value) finishGesture(clamped)
+  }, [value, disabled, finishGesture])
+
+  // ── preview 标记：让设置面板动效引擎在预览期间让出 Escape ──
+
+  useEffect(() => {
+    setPreviewOpen(preview)
+    return () => { setPreviewOpen(false) }
+  }, [preview])
 
   // ── keyboard: Escape exits preview ──
 
@@ -569,7 +622,19 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
         )
         : (
           <div className={'dsws-slider-inline' + (disabled ? ' is-disabled' : '')} title={t('info')}>
-            <div ref={panelTrackRef} className="dsws-track" onPointerDown={onPointerDown}>
+            <div
+              ref={panelTrackRef}
+              className="dsws-track"
+              role="slider"
+              tabIndex={disabled ? -1 : 0}
+              aria-label={t('sliderAria')}
+              aria-valuemin={MIN_WIDTH}
+              aria-valuemax={maxValue}
+              aria-valuenow={Math.round(value)}
+              aria-disabled={disabled || undefined}
+              onPointerDown={onPointerDown}
+              onKeyDown={onTrackKeyDown}
+            >
               {/* Fill bar: left edge at the track left, right edge at the knob
                   center plus one thumb radius, so the fill's right end is a
                   semicircle whose center aligns with the knob center.  The knob

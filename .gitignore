@@ -1,8 +1,19 @@
+# 依赖与构建产物（lib/ 由 prepack 构建后进 npm 包，不入库）
 node_modules/
 lib/
 *.tsbuildinfo
-my-dsh-plugins-main
-viz/
-dsh-im-connect-main
+coverage/
+
+# 本地参考副本与生成物（不入库，vitest 也不收集；.tmp-old 曾让 vitest 收到上游测试树）
 dsh-src/
-dsh-client-ui-custom-main/
+viz/
+.tmp-old/
+
+# 环境变量与日志
+.env
+.env.*
+*.log
+
+# 系统 / 编辑器文件
+.DS_Store
+Thumbs.db

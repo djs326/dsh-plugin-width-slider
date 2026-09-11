@@ -105,6 +105,13 @@ interface WsListState {
   [key: string]: unknown
 }
 
+/** 页签对话框的目标：`newTab` 是尚未创建的草稿（不落盘），其余指向已存在的页签。 */
+type TabsDialog =
+  | { kind: 'rename'; id: string }
+  | { kind: 'newTab'; id: string }
+  | { kind: 'members'; id: string }
+  | { kind: 'delete'; id: string }
+
 export interface WsGroup {
   id: string
   name: string
@@ -923,19 +930,26 @@ function btnStyle(opts: { primary?: boolean; danger?: boolean; disabled?: boolea
   return base
 }
 
-function RenameDialog(props: {
+/**
+ * 重命名 / 新建页签对话框的 props。草稿分支必带 `onCreate`，所以「开着草稿却没人
+ * 负责创建」这种静默 no-op 组合在类型上无法表达。
+ */
+type RenameDialogProps = {
   groupId: string
-  /** true = 新建草稿：组还不存在，点「保存」才创建；取消 = 什么都不发生。 */
-  draft?: boolean
-  /** 草稿被确认时由 Shell 创建该组（落盘并切换过去）。 */
-  onCreate?: (name: string) => void
   onDone: () => void
-}): ReactNode {
-  const isDraft = props.draft === true
+} & (
+  | { draft: true; onCreate: (name: string) => void }
+  | { draft?: false; onCreate?: never }
+)
+
+function RenameDialog(props: RenameDialogProps): ReactNode {
   const g = groupOf(props.groupId)
-  const [draftName, setDraftName] = useState(g?.name || tt('new.name'))
+  // 草稿初值为空串：`sanitize()` 会把宿主返回的空名兜底成「未命名」，若这里也用同一个
+  // 默认名，只要列表里已有一个「未命名」页签，新建对话框一打开就撞重名、保存键直接禁用。
+  // 输入框的占位提示已经足够表达「还没起名」。
+  const [draftName, setDraftName] = useState(g?.name ?? '')
   const [busy, setBusy] = useState(false)
-  if (!g && !isDraft) return null
+  if (props.draft !== true && g === undefined) return null
   const Modal = primitives().Modal
   if (!Modal) return null
 
@@ -947,7 +961,7 @@ function RenameDialog(props: {
   const save = () => {
     if (blocked) return
     setBusy(true)
-    if (isDraft) props.onCreate?.(trimmed)
+    if (props.draft === true) props.onCreate(trimmed)
     else commitGroups((cur) => cur.map((x) => (x.id === props.groupId ? { ...x, name: trimmed } : x)))
     setBusy(false)
     props.onDone()
@@ -960,7 +974,7 @@ function RenameDialog(props: {
     {
       open: true,
       onClose: close,
-      title: isDraft ? tt('add.tab') : tt('rename.title'),
+      title: props.draft === true ? tt('add.tab') : tt('rename.title'),
       closeLabel: tt('cancel'),
       footer: [
         h('button', { key: 'cancel', type: 'button', onClick: close, style: btnStyle({}, busy) }, tt('cancel')),
@@ -1152,8 +1166,8 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   const activeIntentRef = useRef<string>(DEFAULT_TAB)
   const hostRef = useRef<HTMLDivElement>(null)
   const [header, setHeader] = useState<{ row: HTMLElement; label: HTMLElement } | null>(null)
-  // draft = 新建页签草稿：组此时还不存在（不落盘），用户点「保存」才创建。
-  const [dialog, setDialog] = useState<{ kind: 'rename' | 'members' | 'delete'; id: string; draft?: boolean } | null>(null)
+  // newTab = 新建页签草稿：组此时还不存在（不落盘），用户点「保存」才创建。
+  const [dialog, setDialog] = useState<TabsDialog | null>(null)
   // 工作区行菜单「分配标签」事件桥 → 本地弹窗（Shell 一定挂载，比 overlay 桥更可靠）。
   const [assignTarget, setAssignTarget] = useState<{ workspaceId: string; title: string } | null>(null)
   useEffect(() => {
@@ -1297,7 +1311,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     }
     // 草稿（新建页签）的 id 此时还不存在于 groupList，必须跳过这条校验，
     // 否则对话框挂载的同一帧就被关掉（表现为点加号没反应/一闪而过）。
-    if (dialog && dialog.draft !== true && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
+    if (dialog !== null && dialog.kind !== 'newTab' && !groupList.some((g) => g.id === dialog.id)) setDialog(null)
   }, [gs.ready, active, groupList, dialog])
 
   // 标题行处理：官方标题原位替换为页签栏。
@@ -1356,7 +1370,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
       ? 'g-' + crypto.randomUUID()
       : 'g-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
     // 新建先落草稿：此处不建组、不落盘，用户点「保存」才创建；取消/关闭什么都不发生。
-    setDialog({ kind: 'rename', id: gid, draft: true })
+    setDialog({ kind: 'newTab', id: gid })
   }
 
   /** 新建草稿被确认：此时才创建组并切过去（activeIntent 供官方新建工作区的自动归属）。 */
@@ -1419,8 +1433,9 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
   }
 
   const dialogGroup = dialog ? groupList.find((g) => g.id === dialog.id) : undefined
-  // 重命名对话框的两个来源：已存在的页签，或尚未创建的新页签草稿。
-  const renameTarget = dialog && dialog.kind === 'rename' && (dialog.draft === true || dialogGroup) ? dialog : null
+  // 重命名对话框只针对已存在的页签；新建草稿走独立分支，其组尚未创建。
+  const renameTarget = dialog !== null && dialog.kind === 'rename' && dialogGroup !== undefined ? dialog : null
+  const newTabTarget = dialog !== null && dialog.kind === 'newTab' ? dialog : null
 
   return h(
     'div',
@@ -1442,13 +1457,17 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
             header.row,
           )
         : null,
-      renameTarget
+      newTabTarget
         ? h(RenameDialog, {
-            groupId: renameTarget.id,
-            draft: renameTarget.draft === true,
-            onCreate: (name: string) => createGroup(renameTarget.id, name),
+            key: newTabTarget.id,
+            groupId: newTabTarget.id,
+            draft: true,
+            onCreate: (name: string) => createGroup(newTabTarget.id, name),
             onDone: () => setDialog(null),
           })
+        : null,
+      renameTarget
+        ? h(RenameDialog, { key: renameTarget.id, groupId: renameTarget.id, onDone: () => setDialog(null) })
         : null,
       dialog && dialog.kind === 'members' && dialogGroup
         ? h(MembersDialog, { groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })

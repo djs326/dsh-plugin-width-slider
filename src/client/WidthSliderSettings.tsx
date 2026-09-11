@@ -132,6 +132,7 @@ input.dsws-sw:disabled { cursor: default; }
 .dsws-slider-inline { flex: 1 1 170px; min-width: 150px; display: flex; align-items: center; gap: 10px; padding: 0 8px; }
 .dsws-slider-inline.is-disabled { opacity: .55; pointer-events: none; }
 .dsws-track { position: relative; flex: 1 1 auto; height: 16px; border-radius: 999px; background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.2)); cursor: col-resize; user-select: none; touch-action: none; }
+.dsws-track:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4f9eff); outline-offset: 3px; }
 .dsws-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; background: var(--dsw-alias-state-business-primary, #4f9eff); opacity: .9; pointer-events: none; }
 .dsws-knob { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-state-business-primary, #4f9eff); box-shadow: 0 1px 3px rgba(0,0,0,.3); pointer-events: none; }
 .dsws-num { flex: none; font-size: 11.5px; color: var(--dsw-alias-label-caption, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }

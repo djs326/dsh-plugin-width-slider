@@ -4,6 +4,7 @@ export interface WidthSliderKey {
   previewHint: string
   info: string
   followLabel: string
+  sliderAria: string
   followInfo: string
   // ── v0.3.0 总控页 ──
   enableWidthInfo: string
@@ -82,6 +83,7 @@ const zh: Record<keyof WidthSliderKey, string> = {
   previewHint: '预览模式 · 松开返回设置',
   info: '拖动滑块调整对话内容区域宽度。按下滑块即进入全屏预览模式，仅显示滑块，方便查看宽度变化效果。',
   followLabel: '跟随窗口宽度',
+  sliderAria: '对话宽度滑块：方向键微调（Shift 加速），Home / End 到两端',
   followInfo: '已开启跟随窗口：对话内容宽度自动等于对话列宽度，窗口放大缩小对话内容实时跟随。手动拖动调节在跟随模式下不可用，关闭后恢复滑块调节。',
   enableWidthInfo: '关闭后恢复官方原生宽度拖拽手柄（手柄隐藏样式联动停用）。',
   enableThinkInfo: '思考块展开/收起交互的总开关；头部与正文外观同官方（思考正文为纯文本），正式回复走官方 Markdown 渲染、不接管围栏（genui / mermaid 等插件照常工作）。关闭本项回退官方默认的单行折叠显示。',
@@ -157,6 +159,7 @@ const en: Record<keyof WidthSliderKey, string> = {
   previewHint: 'Preview mode · release to return',
   info: 'Drag the slider to adjust the conversation content width. Press the slider to enter full-screen preview with only the slider visible.',
   followLabel: 'Follow window width',
+  sliderAria: 'Conversation width slider: arrow keys to fine-tune (Shift for larger steps), Home / End for the ends',
   followInfo: 'Follow mode on: the conversation content width tracks the conversation column and rescales live with the window. Manual drag is disabled until you turn this off.',
   enableWidthInfo: 'Turning off restores the native width drag handles (handle-hiding style is removed too).',
   enableThinkInfo: 'Master toggle for thinking block expand/collapse. Header and body match the official look (thinking body is plain text); reply text uses the official Markdown pipeline and fences are left to genui / mermaid plugins. Off falls back to the built-in single-line collapsed view.',

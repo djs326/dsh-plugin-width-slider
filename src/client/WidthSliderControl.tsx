@@ -50,6 +50,9 @@ import {
 // bar's rounded end — no flat edge ever shows through the round knob.
 // 8px radius = the 16px track/knob height declared by .dsws-track / .dsws-knob.
 const PANEL_THUMB_R = 8
+/** 键盘步长（px）：方向键 1px，按住 Shift 加大到 10px。 */
+const KEY_STEP = 1
+const KEY_STEP_LARGE = 10
 /** Overlay preview slider knob radius in px (28px knob / 2). */
 const OVERLAY_THUMB_R = 14
 /** Overlay track height equals the knob diameter. */
@@ -334,6 +337,25 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     target.addEventListener('pointercancel', onUp)
   }, [value, applyWidth, startGlide, finishGesture])
 
+  /**
+   * 键盘调节：方向键 ±1px（Shift ±10px），Home/End 到两端。落值走与手势结束同一条路径
+   * （publish + persist），这样键盘与鼠标不会各写一套。跟随模式与禁用态下不响应，与鼠标一致。
+   */
+  const onTrackKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (followRef.current || disabled) return
+    const max = Math.max(MIN_WIDTH, readColumnWidth() - EDGE_BUDGET)
+    const step = e.shiftKey ? KEY_STEP_LARGE : KEY_STEP
+    let next: number | null = null
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = value - step
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = value + step
+    else if (e.key === 'Home') next = MIN_WIDTH
+    else if (e.key === 'End') next = max
+    if (next === null) return
+    e.preventDefault()
+    const clamped = Math.max(MIN_WIDTH, Math.min(Math.round(next), max))
+    if (clamped !== value) finishGesture(clamped)
+  }, [value, disabled, finishGesture])
+
   // ── preview 标记：让设置面板动效引擎在预览期间让出 Escape ──
 
   useEffect(() => {
@@ -600,7 +622,19 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
         )
         : (
           <div className={'dsws-slider-inline' + (disabled ? ' is-disabled' : '')} title={t('info')}>
-            <div ref={panelTrackRef} className="dsws-track" onPointerDown={onPointerDown}>
+            <div
+              ref={panelTrackRef}
+              className="dsws-track"
+              role="slider"
+              tabIndex={disabled ? -1 : 0}
+              aria-label={t('sliderAria')}
+              aria-valuemin={MIN_WIDTH}
+              aria-valuemax={maxValue}
+              aria-valuenow={Math.round(value)}
+              aria-disabled={disabled || undefined}
+              onPointerDown={onPointerDown}
+              onKeyDown={onTrackKeyDown}
+            >
               {/* Fill bar: left edge at the track left, right edge at the knob
                   center plus one thumb radius, so the fill's right end is a
                   semicircle whose center aligns with the knob center.  The knob

@@ -56,6 +56,7 @@ import { createPortal } from 'react-dom'
 import { isZhInterface } from './lang.ts'
 import { getSettings, onSettingsChanged } from './config.ts'
 import { callEndpoint } from './endpointChannel.ts'
+import { primitives } from './primitives.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
@@ -168,31 +169,6 @@ function tt(key: string, vars?: Record<string, string>): string {
   let text = isZhInterface() ? pair[0] : pair[1]
   if (vars) for (const k of Object.keys(vars)) text = text.replace('{' + k + '}', vars[k])
   return text
-}
-
-// ── primitives（Modal 等；bundle external，运行时 require）──────────────
-let _primitives: { Modal?: unknown } | null = null
-
-/**
- * 测试专用注入缝：vitest 的 ESM 环境里 `require` 由 runner 提供，解析不到宿主的
- * `@deepseek-ai/dsh-client-ui-primitives`（optional peer），`primitives()` 会静默
- * 降级、整个安装被跳过，组件级测试因此无从渲染。生产路径始终走 `require`。
- * @param mod - 假 primitives（含 Modal），或 null 恢复未读取状态。
- */
-export function setPrimitivesForTest(mod: { Modal?: unknown } | null): void {
-  _primitives = mod
-}
-
-function primitives(): { Modal: any } {
-  if (_primitives === null) {
-    try {
-      const mod = require('@deepseek-ai/dsh-client-ui-primitives') as { Modal?: unknown }
-      _primitives = mod && typeof mod === 'object' ? mod : {}
-    } catch {
-      _primitives = {}
-    }
-  }
-  return _primitives as { Modal: any }
 }
 
 // ── 分组 store（模块级 + useSyncExternalStore；host 落盘）───────────────

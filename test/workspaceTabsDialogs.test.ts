@@ -42,8 +42,17 @@ vi.mock('../src/client/endpointChannel.ts', () => ({
 // Pin the interface language so the dialog copy the assertions look for is stable.
 vi.mock('../src/client/lang.ts', () => ({ isZhInterface: () => true }))
 
+// The host's Modal arrives through the plugin's own primitives module; mocking that
+// local module works, whereas mocking the host package does not - the plugin's
+// `require` is a build-time shim that bypasses Vite's alias and mock tables.
+// `vi.hoisted` gives the factory a holder it may read at call time.
+const host = vi.hoisted(() => ({ modal: null as unknown }))
+vi.mock('../src/client/primitives.ts', () => ({
+  primitives: () => ({ Modal: host.modal }),
+}))
+
 import { DEFAULT_FEATURE_SETTINGS, applySettings } from '../src/client/config.ts'
-import { WS_TABS_MARK, installWorkspaceTabs, setPrimitivesForTest } from '../src/client/workspaceTabs.tsx'
+import { WS_TABS_MARK, installWorkspaceTabs } from '../src/client/workspaceTabs.tsx'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -209,16 +218,14 @@ beforeEach(() => {
   writeOk = true
   window.localStorage.clear()
   document.body.replaceChildren()
-  // The plugin reaches the host's Modal through `require`, which resolves against the
-  // runner's module table in this environment; inject the stand-in instead.
-  setPrimitivesForTest({ Modal: FakeModal })
+  // The plugin reads the host's Modal through the mocked primitives module.
+  host.modal = FakeModal
 })
 
 afterEach(() => {
   mounted?.cleanup()
   mounted = null
-  // The seam and the settings store are module-level, so leave them as they were found.
-  setPrimitivesForTest(null)
+  // The settings store is module-level, so leave it as it was found.
   applySettings({ ...DEFAULT_FEATURE_SETTINGS })
 })
 

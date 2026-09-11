@@ -1469,7 +1469,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
     'div',
     { ref: hostRef, 'data-dsh-ws-tabs-host': '', style: { display: 'contents' } },
     [
-      typeof OfficialComp === 'function' ? h(OfficialComp as never, officialProps) : null,
+      typeof OfficialComp === 'function' ? h(OfficialComp as never, { ...officialProps, key: 'official' }) : null,
       header && enabled
         ? createPortal(
             h(TabStrip, {
@@ -1483,6 +1483,7 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
               onAdd,
             }),
             header.row,
+            'tabs',
           )
         : null,
       newTabTarget
@@ -1498,13 +1499,14 @@ function WorkspaceTabsShell(innerProps: ShellProps): ReactNode {
         ? h(RenameDialog, { key: renameTarget.id, groupId: renameTarget.id, onDone: () => setDialog(null) })
         : null,
       dialog && dialog.kind === 'members' && dialogGroup
-        ? h(MembersDialog, { groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })
+        ? h(MembersDialog, { key: 'members', groupId: dialog.id, items: itemsAll, membership, onDone: () => setDialog(null) })
         : null,
       dialog && dialog.kind === 'delete' && dialogGroup
-        ? h(DeleteDialog, { groupId: dialog.id, onDone: () => setDialog(null) })
+        ? h(DeleteDialog, { key: 'delete', groupId: dialog.id, onDone: () => setDialog(null) })
         : null,
       assignTarget
         ? h(AssignTabPicker, {
+            key: 'assign',
             workspaceId: assignTarget.workspaceId,
             title: assignTarget.title,
             currentOwner: membership.get(assignTarget.workspaceId),

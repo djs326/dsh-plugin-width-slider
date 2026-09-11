@@ -33,4 +33,25 @@ describe('shakeElement', () => {
     vi.stubGlobal('requestAnimationFrame', undefined)
     expect(() => shakeElement(document.createElement('div'), 3, 200)).not.toThrow()
   })
+
+  it('keeps each axis inside the requested amplitude', async () => {
+    const el = document.createElement('div')
+    shakeElement(el, 4, 200)
+    await frame()
+    const axes = el.style.translate.split(' ').map((part) => Math.abs(Number.parseFloat(part)))
+    expect(axes).toHaveLength(2)
+    expect(Math.max(...axes)).toBeGreaterThan(0)
+    expect(Math.max(...axes)).toBeLessThanOrEqual(4.01)
+  })
+
+  it('does not amplify the amplitude when a longer impact is absorbed', async () => {
+    const el = document.createElement('div')
+    shakeElement(el, 2, 60)
+    // 吸收分支会延长 end；衰减的分母必须跟着走 —— 原先用首次调用的 duration，会算出
+    // decay > 1 并把振幅放大到超过传入值。
+    shakeElement(el, 2, 300)
+    await frame()
+    const axes = el.style.translate.split(' ').map((part) => Math.abs(Number.parseFloat(part)))
+    expect(Math.max(...axes)).toBeLessThanOrEqual(2.01)
+  })
 })

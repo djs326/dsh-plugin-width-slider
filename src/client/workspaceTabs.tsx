@@ -145,6 +145,7 @@ const T: Record<string, [string, string]> = {
   'rename.save': ['保存', 'Save'],
   'rename.saving': ['保存中…', 'Saving…'],
   'rename.dup': ['已存在同名页签。', 'A tab with this name already exists.'],
+  'rename.required': ['请输入页签名', 'Enter a tab name'],
   'members.title': ['管理页签「{name}」', 'Manage tab "{name}"'],
   'members.desc': ['勾选 = 放进此页签。工作区同一时间只属于一个位置（默认或某个页签），勾选会把它从原位置移过来。', 'Check to include. A workspace belongs to one place at a time (Default or one tab); checking moves it here.'],
   'members.at': ['位于：{name}', 'In: {name}'],
@@ -187,6 +188,8 @@ function primitives(): { Modal: any } {
 let groupReady = false
 let groupLoadFailed = false
 let groups: WsGroup[] = []
+/** 本地写入序号：每次 commitGroups 递增，供启动读回判定远端结果是否已经过期。 */
+let groupRevision = 0
 const groupSubs = new Set<() => void>()
 let rpcCall: ((method: string, payload?: Record<string, unknown>) => Promise<unknown>) | null = null
 
@@ -296,6 +299,7 @@ function persistGroups(): void {
 
 function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
   groups = mutate(groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] })))
+  groupRevision += 1
   groupReady = true
   cacheWrite()
   emitGroups()
@@ -303,6 +307,8 @@ function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
 }
 
 async function loadGroups(): Promise<void> {
+  /** 读回开始时的本地写入序号：期间用户若建/改过页签，远端结果即已过期。 */
+  const startedRevision = groupRevision
   // 先用本地缓存同步给出与上次一致的分组视图，避免「先全量→读回后重排」的闪动。
   const firstCache = cacheRead()
   if (firstCache.length > 0) {
@@ -319,6 +325,9 @@ async function loadGroups(): Promise<void> {
   }
   try {
     const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
+    // 读回期间用户已经建/改过页签：本地是更新的真源，弃用这次的远端结果，否则刚建的
+    // 页签会被旧列表在内存与缓存里一起覆盖掉（窗口＝RPC 往返）。
+    if (groupRevision !== startedRevision) return
     if (result && result.ok === true) {
       const remote = sanitize(result.value)
       if (remote.length > 0) {
@@ -949,7 +958,9 @@ function RenameDialog(props: RenameDialogProps): ReactNode {
   // 输入框的占位提示已经足够表达「还没起名」。
   const [draftName, setDraftName] = useState(g?.name ?? '')
   const [busy, setBusy] = useState(false)
-  if (props.draft !== true && g === undefined) return null
+  // 草稿对应「尚不存在」的组，重命名对应「已存在」的组；两种反向组合都不该渲染
+  // （草稿传了已存在的 id 会让保存走 onCreate，往列表里追加同 id 的第二个组）。
+  if (props.draft === true ? g !== undefined : g === undefined) return null
   const Modal = primitives().Modal
   if (!Modal) return null
 
@@ -1014,7 +1025,9 @@ function RenameDialog(props: RenameDialogProps): ReactNode {
       }),
       duplicate
         ? h('div', { key: 'dup', style: { fontSize: 12, color: 'var(--dsw-alias-state-error-primary,#e5484d)' } }, tt('rename.dup'))
-        : null,
+        : trimmed === ''
+          ? h('div', { key: 'req', style: { fontSize: 12, color: 'var(--dsw-alias-label-caption,#8a8e96)' } }, tt('rename.required'))
+          : null,
     ]),
   )
 }

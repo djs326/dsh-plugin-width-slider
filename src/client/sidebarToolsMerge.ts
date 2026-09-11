@@ -24,15 +24,15 @@
  * `fixed` rather than `absolute`: the tool containers sit inside ancestors that
  * clip with `overflow: hidden` (section header, region area, sidebar column), so
  * an absolutely positioned child across that chain is painted nowhere. `fixed`
- * brings its own trap - a transformed element takes over as the containing block
- * - and the host animates one: `_regionArea` carries the `rail-in` keyframes with
- * `translate(49px)`. The guard in `apply` therefore walks the chain of the pinned
- * elements themselves, never the button's: the tools live in the workspace region,
- * a *sibling* of the new-chat button, so a check rooted at the button cannot see
- * it. In the host this was written against, that region unmounts in the very frame
- * the animation starts (and a rail column is too narrow for the tools anyway), so
- * the guard is a backstop for a host that keeps it mounted rather than a live path.
- * The keyframes end with `animationend`, not `transitionend`, hence that listener.
+ * brings its own trap - a transformed element takes over as the containing block -
+ * and the host animates several: `rail-in` translates `.newSession` (whose box
+ * feeds the measured `top`/`left`) and `_regionArea` (an ancestor of the tools),
+ * while `.headerActionsHidden` translates the actions container itself when the
+ * search expands. The guard therefore checks the button *including itself* and the
+ * tool containers *through their ancestors only*: a container's own transform
+ * belongs to its descendants, and its box is never measured. While any of them is
+ * transformed the previous placement is kept; the keyframes end with
+ * `animationend`, not `transitionend`, hence that listener too.
  */
 import { onSettingsChanged } from './config.ts'
 
@@ -192,23 +192,33 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
   }
 
   const observer = new MutationObserver(schedule)
+  /**
+   * Body-level fallback: a MutationObserver follows the node it was given, so when
+   * the host replaces the column outright, a column-only binding would sit on a
+   * detached node and nothing would ever schedule another measure. It also sees
+   * every edit of the conversation, so it only reacts while the bound column is
+   * actually gone - re-measuring per streamed frame is pure read cost.
+   */
+  const bodyObserver = new MutationObserver(() => {
+    if (boundColumn !== null && boundColumn.isConnected) return
+    schedule()
+  })
   // A rail toggle and the search's expand/collapse change classes without touching
   // the DOM, so the observer above can see them only through `attributes`; the size
   // observer is what catches a width that changes without either.
   const sizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
 
   /**
-   * Point the mutation observer at the live column, keeping a body-level fallback:
-   * a MutationObserver follows the node it was given, so if the host replaces the
-   * column outright, a column-only binding would sit on a detached node and nothing
-   * would ever schedule another measure.
+   * Point both observers at the live column; the body-level one is the fallback for
+   * a column the host replaces outright.
    */
   const bindObserver = (column: Element | null): void => {
     if (column === boundColumn) return
     boundColumn = column
     observer.disconnect()
-    observer.observe(document.body ?? document.documentElement, BODY_OBSERVE)
+    bodyObserver.disconnect()
     observer.observe(column ?? document.body ?? document.documentElement, CLASS_OBSERVE)
+    bodyObserver.observe(document.body ?? document.documentElement, BODY_OBSERVE)
   }
 
   /** Keep the size observer on the live column. */
@@ -227,14 +237,15 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     if (on === observing) return
     observing = on
     observer.disconnect()
+    bodyObserver.disconnect()
     if (!on) {
       sizeObserver?.disconnect()
       observedColumn = null
       boundColumn = null
       return
     }
-    observer.observe(document.body ?? document.documentElement, BODY_OBSERVE)
     observer.observe(boundColumn ?? document.body ?? document.documentElement, CLASS_OBSERVE)
+    bodyObserver.observe(document.body ?? document.documentElement, BODY_OBSERVE)
   }
 
   const apply = (): void => {
@@ -250,12 +261,6 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     // The stylesheet is a set of global selectors, so it applies again by itself
     // once the nodes are back, while clearing it would flash the tools home.
     if (button === null || header === null) return
-    // A transformed element takes over as the containing block for `fixed`
-    // descendants, which invalidates both the viewport coordinates we publish and
-    // the rects we would measure. The pinned elements are checked - not the button
-    // alone, since the tools live in the workspace region, a sibling of the button.
-    const pinned = [button, ...[SEARCH_SLOT, HEADER_ACTIONS].map((s) => document.querySelector<HTMLElement>(s))]
-    if (pinned.some((el) => el !== null && hasTransformedAncestor(el))) return
     // The button's parent is the sidebar column: the shell renders the button as
     // a direct child (the tooltip wrapper clones it instead of wrapping it).
     const column = button.parentElement
@@ -268,11 +273,26 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     const columnRect = column.getBoundingClientRect()
     const buttonRect = button.getBoundingClientRect()
     // Rail mode, or a column the host has not laid out yet: there is no row to
-    // share, so the host layout stands and nothing is positioned.
+    // share, so the host layout stands and nothing is positioned. Settled before the
+    // transform guard below - a rail toggle animates the button itself, and waiting
+    // for that animation to end would leave the tools floating at their expanded
+    // coordinates over the conversation for its whole duration (`_regionArea` stays
+    // mounted in the rail).
     if (columnRect.width < MIN_COLUMN_WIDTH || buttonRect.height === 0) {
       publish('')
       return
     }
+    // A transformed element takes over as the containing block for `fixed`
+    // descendants, which invalidates both the viewport coordinates we publish and
+    // the rects we would measure. The button is checked including itself (its box
+    // feeds `top`/`left`); the tool containers only through their ancestors - their
+    // own transforms belong to their own descendants, and their boxes are never
+    // measured. Only the header's own containers count, so a second installation
+    // cannot make this read another sidebar's tool row.
+    const toolsTransformed = [SEARCH_SLOT, HEADER_ACTIONS]
+      .map((selector) => header.querySelector<HTMLElement>(selector)?.parentElement ?? null)
+      .some((el) => hasTransformedAncestor(el))
+    if (hasTransformedAncestor(button) || toolsTransformed) return
     // The label is measured first and keeps its full width; what is left over is
     // the room the tools may take. Measuring it as 0 would read as "plenty of
     // room" and narrow the button back into the clipping this exists to prevent,
@@ -337,6 +357,7 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
       if (frame !== 0) cancelAnimationFrame(frame)
       frame = 0
       observer.disconnect()
+      bodyObserver.disconnect()
       sizeObserver?.disconnect()
       window.removeEventListener('resize', schedule)
       document.removeEventListener('transitionend', schedule, true)

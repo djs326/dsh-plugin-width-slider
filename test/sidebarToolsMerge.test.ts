@@ -32,6 +32,7 @@ interface Host {
   label: HTMLElement
   region: HTMLElement
   search: HTMLElement
+  actions: HTMLElement
 }
 
 /** Mount a host-shaped slice: column > (new-chat button, region > header > tools). */
@@ -58,7 +59,7 @@ function mountHost(): Host {
   region.appendChild(header)
   column.append(button, region)
   document.body.appendChild(column)
-  return { column, button, label, region, search }
+  return { column, button, label, region, search, actions }
 }
 
 /** The host geometry: a 280px column on a 1400px viewport, 42px-wide label. */
@@ -202,6 +203,31 @@ describe('installSidebarToolsMerge', () => {
     expect(injected()).not.toContain('visibility:hidden')
   })
 
+  it('yields the row even though the host transforms the actions container itself', () => {
+    const host = mountHost()
+    measure(host)
+    const { handle } = install()
+    // Expanded, the host adds `.headerActionsHidden{transform:translateX(4px)}` to the
+    // actions container itself; a container's own transform is not our containing block
+    // and must not block the yield rule.
+    transformed.add(host.actions)
+    host.search.classList.add('_searchSlotExpanded_x1')
+    handle.sync()
+    expect(injected()).toContain('visibility:hidden')
+  })
+
+  it('drops the placement on a rail column without waiting for the toggle animation', () => {
+    const host = mountHost()
+    measure(host)
+    const { handle } = install()
+    expect(injected()).toContain('position:fixed')
+    // Collapse settling: the column is rail-wide and the button itself is mid rail-in.
+    measure(host, 56)
+    transformed.add(host.button)
+    handle.sync()
+    expect(injected()).toBe('')
+  })
+
   it('clears the placement when the toggle turns off and restores it after', () => {
     const host = mountHost()
     measure(host)
@@ -252,8 +278,12 @@ describe('installSidebarToolsMerge', () => {
     measure(host)
     const { setEnabled } = install()
     setEnabled(false)
+    // rAF is the only path from an observer to a re-measure, so counting it separates
+    // "the observers are really gone" from "apply publishes an empty sheet either way".
+    const raf = vi.spyOn(window, 'requestAnimationFrame')
     host.search.classList.add('_searchSlotExpanded_x1')
     await settle()
+    expect(raf).not.toHaveBeenCalled()
     expect(injected()).toBe('')
   })
 })

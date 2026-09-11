@@ -34,6 +34,12 @@ export const SETTINGS_MASK_CLOSING_CLASS = 'dsu-settings-mask-closing'
 
 /** The settings dialog: a modal dialog that owns a nav rail. */
 const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
+/**
+ * The layer the shell mounts the settings mask and panel in. It is the one
+ * structural fact that tells the settings modal apart from any other modal that
+ * happens to render a nav rail.
+ */
+const OVERLAY_ROLE = 'presentation'
 /** The settings trigger: the shell button that opens the dialog. */
 const TRIGGER_SELECTOR = 'button[aria-haspopup="dialog"]'
 /** Upper bound for the exit transition (opacity 160ms + scale 280ms, plus margin). */
@@ -80,11 +86,31 @@ export interface SettingsMotionHandle {
 }
 
 /**
- * True for the host settings dialog (modal dialog + nav rail).
+ * True for the host settings dialog: a modal dialog with a nav rail, mounted in
+ * the shell's `role="presentation"` layer next to its own mask. Requiring that
+ * layer and the mask sibling matters - "modal + nav" alone also accepts other
+ * plugins' navigable modals, and taking one of those for the panel made this
+ * engine intercept clicks that are none of its business.
  * @param node - a candidate dialog element.
  */
 function isSettingsDialog(node: Element): boolean {
-  return node.matches(DIALOG_SELECTOR) && node.querySelector('nav') !== null
+  if (!node.matches(DIALOG_SELECTOR) || node.querySelector('nav') === null) return false
+  const parent = node.parentElement
+  if (parent === null || parent.getAttribute('role') !== OVERLAY_ROLE) return false
+  return maskOf(node) !== null
+}
+
+/**
+ * The panel's own mask: the `aria-hidden` sibling immediately before it. A
+ * sibling that CONTAINS the panel is a container, not a mask - returning it would
+ * make `mask.contains(target)` true for every click in the page and swallow them
+ * all.
+ * @param dialog - the settings dialog.
+ */
+function maskOf(dialog: Element): HTMLElement | null {
+  const sibling = dialog.previousElementSibling
+  if (!(sibling instanceof HTMLElement) || sibling.getAttribute('aria-hidden') !== 'true') return null
+  return sibling.contains(dialog) ? null : sibling
 }
 
 /** The mounted settings dialog, or null. */
@@ -206,8 +232,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     if (disposed || panel === dialog) return
     detach()
     panel = dialog
-    const overlay = dialog.parentElement
-    mask = overlay?.querySelector<HTMLElement>('[aria-hidden="true"]') ?? null
+    mask = maskOf(dialog)
     lastEnabled = options.enabled()
     if (!lastEnabled) return
     const origin = triggerOrigin(dialog, pressedButton)
@@ -278,6 +303,13 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     const target = event.target
     if (!(target instanceof Element)) return
     const dialog = panel
+    // A panel the host unmounted or replaced must not keep intercepting clicks;
+    // re-check the structure so a stale reference can never swallow a close.
+    if (!dialog.isConnected || !isSettingsDialog(dialog)) {
+      detach()
+      return
+    }
+    if (mask !== null && !mask.isConnected) mask = null
     const button = target.closest('button')
     const onMask = mask !== null && (target === mask || mask.contains(target))
     const onClose = button !== null && dialog.contains(button)

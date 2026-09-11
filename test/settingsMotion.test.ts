@@ -58,6 +58,7 @@ function mountDialog(): {
   mask: HTMLElement
 } {
   const overlay = document.createElement('div')
+  overlay.setAttribute('role', 'presentation')
   const mask = document.createElement('div')
   mask.setAttribute('aria-hidden', 'true')
   const dialog = document.createElement('div')
@@ -106,6 +107,48 @@ describe('installSettingsMotion', () => {
     document.body.append(plain)
     await flushObserver()
     expect(plain.classList.contains(SETTINGS_PANEL_CLASS)).toBe(false)
+    handle.dispose()
+  })
+
+  it('leaves another plugin\'s navigable modal alone', async () => {
+    // "Modal + nav" also matches other plugins' dialogs. Taking one of those for
+    // the settings panel used to intercept its close control and, with the mask
+    // resolved from the wrong subtree, could swallow clicks page-wide.
+    const h = harness()
+    const handle = installSettingsMotion(h.options)
+    const foreign = document.createElement('div')
+    foreign.setAttribute('role', 'dialog')
+    foreign.setAttribute('aria-modal', 'true')
+    const nav = document.createElement('nav')
+    const close = document.createElement('button')
+    close.textContent = '关闭'
+    let delivered = 0
+    close.addEventListener('click', () => { delivered += 1 })
+    foreign.append(nav, close)
+    document.body.append(foreign)
+    await flushObserver()
+    expect(foreign.classList.contains(SETTINGS_PANEL_CLASS)).toBe(false)
+    close.click()
+    expect(delivered).toBe(1)
+    expect(foreign.classList.contains(SETTINGS_CLOSING_CLASS)).toBe(false)
+    handle.dispose()
+  })
+
+  it('ignores a settings-shaped layer that carries no mask sibling', async () => {
+    // Without the mask there is no exit to animate, and it is the mask
+    // resolution that must never be guessed.
+    const h = harness()
+    const handle = installSettingsMotion(h.options)
+    const overlay = document.createElement('div')
+    overlay.setAttribute('role', 'presentation')
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    dialog.setAttribute('aria-modal', 'true')
+    dialog.append(document.createElement('nav'))
+    overlay.append(dialog)
+    document.body.append(overlay)
+    await flushObserver()
+    expect(dialog.classList.contains(SETTINGS_PANEL_CLASS)).toBe(false)
     handle.dispose()
   })
 

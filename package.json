@@ -37,7 +37,8 @@
     }
   },
   "scripts": {
-    "build": "tsdown && tsc -p tsconfig.json && node scripts/fix-dts-imports.mjs",
+    "clean": "node scripts/clean-lib.mjs",
+    "build": "node scripts/clean-lib.mjs && tsdown && tsc -p tsconfig.json && node scripts/fix-dts-imports.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.test.json --noEmit && vitest run"

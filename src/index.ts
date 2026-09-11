@@ -228,7 +228,10 @@ export function apply(baseCtx: Context): void {
             return { ok: true, value: { groups: currentGroups } }
           }
           if (endpoint === 'wsGroupsWrite') {
-            const groups = normalizeGroups((body as { groups?: unknown }).groups)
+            // normalizeGroups 读的是 `raw.groups`（文件对象形状）；client 发来的 payload
+            // 本身是 `{ groups: [...] }`，直接把数组传进去会得到空分组并「成功」落盘 ——
+            // 页签重启后消失且不触发脏标记兜底。这里补上那层包装。
+            const groups = normalizeGroups({ groups: (body as { groups?: unknown }).groups })
             try {
               writeGroupsSync(groups)
             } catch (err) {

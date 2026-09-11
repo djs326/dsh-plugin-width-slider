@@ -273,7 +273,7 @@ dsh-plugin-width-slider/
 | 项目 | 说明 |
 |---|---|
 | 目标内核 | DSH `0.1.5-rc.1`（当前官方内核）。插件只适配该内核，不为更早版本保留兼容分支 |
-| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject`（在调用者 `inject` 里补 `webServer` 无效）。改用 `connection.fetch.register` 注册 `/api` 下的精确 Fetch 路由 |
+| Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject` —— 所以承担路由注册的 fiber 自己必须声明 `webServer` 依赖。注册改走 `connection.fetch.register` 的 `/api` 精确 Fetch 路由 |
 | 端点与围栏 | 客户端 `POST /api/width-slider`，请求体为 `{ method, payload }`，响应体为处理器返回的 JSON；围栏由 connection 的 `/api` 处理器统一施加（可信 Host/Origin + 浏览器认证） |
 | 已核对稳定的契约 | slot（`conversation.chat.node`、`conversation.session.header.actions`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
 

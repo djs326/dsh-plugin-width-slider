@@ -17,6 +17,7 @@
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { isZhInterface } from './lang.ts'
 import { callEndpoint } from './endpointChannel.ts'
+import { primitives } from './primitives.ts'
 import { shakeElement } from './motion/animate.ts'
 
 interface SessCtx {
@@ -61,19 +62,8 @@ function tt(key: string): string {
   return isZhInterface() ? pair[0] : pair[1]
 }
 
-// ── primitives（Modal/图标；bundle external，运行时 require）────────
-let _primitives: { Modal?: unknown; IconTrashOutline16?: unknown } | null = null
-function primitives(): { Modal: any; IconTrashOutline16: any } {
-  if (_primitives === null) {
-    try {
-      const mod = require('@deepseek-ai/dsh-client-ui-primitives') as { Modal?: unknown; IconTrashOutline16?: unknown }
-      _primitives = mod && typeof mod === 'object' ? mod : {}
-    } catch {
-      _primitives = {}
-    }
-  }
-  return _primitives as { Modal: any; IconTrashOutline16: any }
-}
+// primitives（Modal / IconTrashOutline16）走统一读取入口 src/client/primitives.ts：
+// 缓存、失败降级与告警都在那一处，这里不再自建一份。
 
 // ── 会话服务句柄（sessions list 供 title/running 展示与刷新）────────
 let sessionsSvc: { list?: { getSnapshot: () => { byId: Record<string, { title?: string; running?: boolean } | undefined> } }; refreshList?: () => unknown } | null = null

@@ -18,6 +18,7 @@
  * the group's single row.  Styles live in WidthSliderSettings.tsx (.dsws-*).
  */
 import { createPortal } from 'react-dom'
+import { setPreviewOpen } from './previewState.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -69,7 +70,23 @@ const OVERLAY_TRACK_H = OVERLAY_THUMB_R * 2
  *
  * @param origin - any element inside the settings panel (e.g. our section root).
  */
+/**
+ * Preview 期间被我们隐藏过的元素。还原必须只碰这一批 —— 原来每次 restore 都重新计算
+ * targets，锚点链或 `[data-shell-overlay]` 集合一旦变化，被置 `opacity:0` 的元素就再也
+ * 回不来（面板整块不可见、不可点）。
+ */
+let hiddenByPreview: HTMLElement[] = []
+
 function hideSettingsOverlay(hide: boolean, origin?: HTMLElement | null): void {
+  if (!hide) {
+    for (const el of hiddenByPreview) {
+      el.style.setProperty('opacity', '')
+      el.style.setProperty('pointer-events', '')
+    }
+    hiddenByPreview = []
+    return
+  }
+
   const targets = new Set<HTMLElement>()
 
   // 1. Explicit shell overlay layers.
@@ -100,10 +117,11 @@ function hideSettingsOverlay(hide: boolean, origin?: HTMLElement | null): void {
     }
   }
 
-  targets.forEach(el => {
-    el.style.setProperty('opacity', hide ? '0' : '')
-    el.style.setProperty('pointer-events', hide ? 'none' : '')
-  })
+  hiddenByPreview = [...targets]
+  for (const el of hiddenByPreview) {
+    el.style.setProperty('opacity', '0')
+    el.style.setProperty('pointer-events', 'none')
+  }
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -315,6 +333,13 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     target.addEventListener('pointerup', onUp)
     target.addEventListener('pointercancel', onUp)
   }, [value, applyWidth, startGlide, finishGesture])
+
+  // ── preview 标记：让设置面板动效引擎在预览期间让出 Escape ──
+
+  useEffect(() => {
+    setPreviewOpen(preview)
+    return () => { setPreviewOpen(false) }
+  }, [preview])
 
   // ── keyboard: Escape exits preview ──
 

@@ -21,6 +21,7 @@
 
 import { Component, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { isZhInterface, pickText } from '../lang.ts'
+import { primitives } from '../primitives.ts'
 
 // ── 样式（取值对齐官方 ReasoningRow / AssistantMarkdown 的 CSS 模块）──
 export const THINK_STYLES = `
@@ -94,19 +95,18 @@ interface Primitives {
 
 let resolvedPrimitives: Primitives | null | undefined
 
-/** 解析一次并缓存 primitives 相关组件；缺失/异常返回 null。 */
+/** 解析一次并缓存 primitives 相关组件；缺失返回 null（读取、缓存与降级都在 primitives.ts）。 */
 function resolvePrimitives(): Primitives | null {
   if (resolvedPrimitives !== undefined) return resolvedPrimitives
-  try {
-    // require 来自 __ModuleLoader__ factory 注入的模块加载器（见 env.d.ts 声明）。
-    const mod = require('@deepseek-ai/dsh-client-ui-primitives') as Primitives
-    resolvedPrimitives = mod ?? null
-    if (!mod?.MarkdownText || !mod?.DisclosureRow) {
-      console.warn('[width-slider] primitives 缺少 MarkdownText/DisclosureRow，相关块降级纯文本')
-    }
-  } catch (err) {
+  const mod = primitives() as Primitives
+  if (Object.keys(mod).length === 0) {
     resolvedPrimitives = null
-    console.warn('[width-slider] 未找到 @deepseek-ai/dsh-client-ui-primitives（文本与思考块降级纯文本）', err)
+    console.warn('[width-slider] 未找到 @deepseek-ai/dsh-client-ui-primitives（文本与思考块降级纯文本）')
+    return resolvedPrimitives
+  }
+  resolvedPrimitives = mod
+  if (!mod.MarkdownText || !mod.DisclosureRow) {
+    console.warn('[width-slider] primitives 缺少 MarkdownText/DisclosureRow，相关块降级纯文本')
   }
   return resolvedPrimitives
 }

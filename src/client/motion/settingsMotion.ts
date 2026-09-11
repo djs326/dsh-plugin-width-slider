@@ -20,6 +20,7 @@
  * to change.
  */
 import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
+import { isPreviewOpen } from '../previewState.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */
 export const SETTINGS_PANEL_CLASS = 'dsu-settings-panel'
@@ -332,6 +333,9 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape' || disposed || bypass || closing || panel === null || !options.enabled()) return
+    // 预览（拖宽度时面板被隐藏）开着时，这次 Escape 属于预览：既不拦、也不放行关闭，
+    // 否则一次按键会同时退出预览并关掉整个设置面板。
+    if (isPreviewOpen()) return
     // Escape belongs to an open Menu or nested modal first.
     if (innerLayerOpen(panel)) return
     event.preventDefault()

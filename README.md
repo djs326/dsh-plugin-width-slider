@@ -379,6 +379,10 @@ dsh-plugin-width-slider/
 
 ## 更新日志
 
+### 1.0.2
+
+- 修复「所有关闭按钮失效」：设置面板动效此前用「模态弹窗 + 导航栏」识别面板、并在该弹窗的父容器里取第一个 `aria-hidden` 元素当遮罩，其它插件带导航的弹窗会被误认，遮罩判断随之命中全页点击并被吞掉。现在只认官方结构（`role="presentation"` 层 + 紧邻的 `aria-hidden` 遮罩兄弟），并在每次点击前复核面板仍然存在；结构不匹配时动效安静降级，不再触碰任何点击。
+
 ### 1.0.1
 
 - **只适配 DSH `0.1.5-rc.1` 内核**：插件端点从 `connection.rpc.handle` 迁到 `connection.fetch.register` 的 `/api/width-slider` 精确 Fetch 路由，修复桌面端 2.0.8 上 `cannot get property "webServer" without inject` 导致的插件树加载失败。

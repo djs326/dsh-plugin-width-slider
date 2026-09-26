@@ -384,6 +384,20 @@ src/
 
 **批次④ 新增的遗留项**：① `workspaceTabs.tsx:1532-1553` 的 `assignRaf` / `scheduleAssign` / `assignObserver` 与 `core/domObserver.ts` 的 `debouncedProbe` **完全同构**（只多一层 `setAssignObserving` 启停），批次⑥ 应直接套用、启停部分留在外层包装；② **`isPreviewOpen` 注入线零测试覆盖** —— `test/settingsMotion.test.ts` 的 harness 传 `() => false`，端口是否真接到 `core/overlayState.ts` 的 `isPreviewOpen` 既无单测也非产物比对能证，批次⑤ 起应补「预览开启（`documentElement` 带 `data-dsw-preview`）时按 Escape 应放行」用例；③ `settingsMotion.ts:286` 是全仓唯一「body 级 childList 却不做 rAF 合并」的观察器（套原语等于引入一帧延迟），已成 `domObserver` 不能一刀切的反例，理由写在该模块头注释里。
 
+**批次⑦ 的规格裁定**（只读调研已完成，因批次⑥ 尚未开工而暂缓实施；以下行号以 `0e6a38f` 工作树为实测口径，`src/client/index.ts` 实测 **393 行**，比本计划第 1 节的 385 行多 8 行）：
+
+- **Q1 `motionStateOf` 落点**：拆成纯函数放 `motion/state.ts`，签名收为 `motionStateOf(settings, blank)`；读会话账本 `ctx.sessions.list.getSnapshot()` 的部分留在装配层（`client/index.ts`），把 `blank` 作参数传入。理由与批次④ 切断 `motion/ → core/overlayState.ts` 同源——`motion/` 不该知道业务状态，只接受信号。模块级 `ledgerWarned`（`:136`）随 `motionStateOf` 迁移。
+- **Q2 注册表是否保留「常驻安装」语义**：**保留**。`wsTabs`（`:337`）与 `toolsMerge`（`:339-342`）的 gate 实测是 `true` 恒真，真正的门控在各自模块内部（`workspaceTabs.tsx:390-391`、`sidebarToolsMerge.ts:255-260`）。**不得把它们改成真门控** —— `toolsMerge` 关闭时模块内只 `publish('')`，若改由入口跳过安装会连带跳过 `style.remove()`（`sidebarToolsMerge.ts:371`），属静默行为变更。
+- **Q3 `merge.sync()` 死导出面**：本批**不动**（改它会动 `lib/client.js` 字节，且属批次⑨ 的导出面收敛）。已在批次⑨ 待办里记一条。
+- **Q4 删 `RpcClientContext` 与去 ctx 参数**：**做**。`rpcReadSettings`（`:275`）与 `rpcWriteSettings`（`:287`）的 ctx 实测未使用；`RpcClientContext`（`:267-273`）里的 `connection.rpc.call` 仓内零调用（真路径是 `core/endpointChannel.ts` 的 `callEndpoint`），且 `ClientContext` 在 `src/env.d.ts:15-17` 本就是 `any` 桩。`apply` 签名改回 `ClientContext`，**返回值必须是 `void`**（`:293`；cordis client loader 契约 + `tsdown.config.ts:73-75` 的 `module.exports` 握手），清理全靠 5 条 `ctx.effect` 的 cleanup。
+- **Q5「3 → 8 文件」口径**：确认就是 7 新 + 1 改 —— 新建 `core/features.ts`、`core/rpc.ts`、`motion/state.ts`、`features/width/index.ts`、`features/think/index.ts`、`features/motion/index.ts`、`shared/types.ts`（收 `Disposer`，消掉与 `widthPrefs.ts:27` 的重复），`client/index.ts` 留作装配。计划第 1 节点名的「4 个内联大函数」实测**确为 4 个**（`installWidthFeature` 25 行 / `installThinkRenderer` 38 行 / `motionStateOf` 35 行 / `installMotionFeature` 65 行），但按 >40 行度量只有 1 个达标 —— 计划是按「职责块」称呼它们，不是行数阈值。
+- **Q6 `src/index.ts:125` 的 `webServer`/`subprocess` 零使用**：**不删**。cordis 的 `inject` 是依赖声明，删掉可能改变加载顺序或服务可用性，收益不明。记入批次⑧ 一并核查。
+- **Q7 是否允许批次⑦ 内新建测试文件**：**允许**，与重构分开提交。优先补两条：`test/features.test.ts`（注册表开关矩阵 —— 假 installer 计数，断言装 / 卸 / 重试 / 顺序恒定，这是「注册表拆错就静默失效」的唯一网）、`test/motionState.test.ts`（`motionStateOf` 派生矩阵 —— `motionMode` × reduced-motion 桩 × 账本 `blank` × 账本抛错降级为 `false` 且告警只出现一次）。
+
+**批次⑦ 的行号偏移更正**（本计划第 1、2 节的 client 侧行号以批次① 前的工作树为准，经批次①③④ 后已整体偏移）：三处 `<style>` 实测 `:72-78`（hide-handles）/ `:96-102`（think-styles）/ `:196-202`（motion-styles）；上游冲突探测 `:252-263`；动效状态派生 `:138-176`；RPC 封装 `:275-289`；slot 名单实际出现 **3 次**（`:304` 的类型联合、`:330-347` 的 `sync` 调用序列、`:354` 的卸载数组），不只是计划说的 2 次；类型逃逸 6 处实测为 `:113` / `:114` / `:118` / `:148` / `:334` / `:337`。
+
+**另一处计划更正**：第 1.2 节末尾写「`src/index.ts`（host）仅间接覆盖」**不准确** —— `test/hostEndpoints.test.ts:17`（`typeof import('../src/index.ts')`）与 `:43`（`apply(baseCtx as never)`）是对 host 入口的**直接覆盖**，且覆盖 5 个 method 与损坏文件恢复路径。真正零测试覆盖的只有 `src/client/index.ts`。
+
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 
 **批次 9 之后**：可选补测试（第 10 节待定项 1）。

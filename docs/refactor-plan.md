@@ -372,7 +372,11 @@ src/
 | **8** | host 拆分：`jsonFile.ts`/`settingsStore.ts`/`workspaceGroupsStore.ts`/`chinesePrompt.ts`/`api.ts` | 1 → 7 | 无 | 低 |
 | **9** | 统一命名与导出面；`shared/dshHome.ts` 迁入 `host/`；同步 README 结构树、更新日志、第三方声明 | 全仓 | 无 | 低 |
 
-**进度**：批次① 已完成并提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
+**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
+
+**批次③ 的三处裁定**（记录以备复查）：① `320ms`（`frames.ts` 的 `PANEL_DURATION_MS` 对 `settingsMotion.ts` 的 `PANEL_REPLAY_MS`）与 `200ms`（`PAGE_REPLAY_MS` 对 `MASK_ENTRANCE_MS`）经核实均为**数值巧合** —— 元素、动画属性、缓动曲线全不同，**未合并**，只在各处加注释说明为何不同源；② 两份同名不同口径的 `findSettingsDialog` 合并后，宽口径改名 `findDialogWithNavRail`（严口径保留原名，它是"这是不是设置弹窗"的判定）；③ `SETTINGS_DIALOG_SELECTOR` 取带 `div` 前缀者（宿主四个 modal 实测均为 `<div role="dialog" aria-modal="true">`）—— 这是本批唯一的潜在行为面收窄，宿主若改用非 `div` 容器会让严口径静默失效。
+
+**批次③ 新增的遗留项**：`PANEL_FRAMES` 在 `motion/frames.ts`（opacity + `translate`）与 `motion/settingsMotion.ts`（opacity + `scale 0.62`）同名不同物，留给批次⑨ 命名统一时处理；`MOTION_CSS` 全仓零测试覆盖，本批把它改为常量插值后唯一的回归网是产物比对，建议批次⑨ 前补一条字符串快照断言。
 
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 

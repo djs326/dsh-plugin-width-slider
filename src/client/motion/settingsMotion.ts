@@ -123,24 +123,68 @@ function findSettingsDialog(): HTMLElement | null {
 }
 
 /**
+ * Pick the button the panel opened from. The pointer's own button wins. A
+ * shortcut-opened panel has none, and the shell trigger is no longer unique:
+ * since 0.1.7 the context meter, the stats pills and the usage panels all
+ * declare `aria-haspopup="dialog"`, so taking the document's first match can
+ * anchor the panel to a control on the far side of the viewport.
+ * @param dialog - the live settings dialog.
+ * @param pressed - the most recent button pressed by the pointer, if any.
+ */
+function settingsTrigger(dialog: HTMLElement, pressed: HTMLElement | null): HTMLElement | null {
+  // A button inside the panel is never its own trigger; a stale reference from
+  // a previous dialog must not win either.
+  if (pressed !== null && pressed.isConnected && !dialog.contains(pressed)) return pressed
+  const outside = Array.from(document.querySelectorAll<HTMLElement>(TRIGGER_SELECTOR))
+    .filter((element) => !dialog.contains(element))
+  // The open trigger is the one the shell marks expanded. When no candidate
+  // carries the marker, the nearest one to the panel is the best available
+  // reading of "the button you pressed".
+  const expanded = outside.filter((element) => element.getAttribute('aria-expanded') === 'true')
+  const pool = expanded.length > 0 ? expanded : outside
+  const panelRect = dialog.getBoundingClientRect()
+  const panelX = panelRect.left + panelRect.width / 2
+  const panelY = panelRect.top + panelRect.height / 2
+  let best: HTMLElement | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const element of pool) {
+    const rect = element.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) continue
+    const dx = rect.left + rect.width / 2 - panelX
+    const dy = rect.top + rect.height / 2 - panelY
+    const distance = dx * dx + dy * dy
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = element
+    }
+  }
+  return best
+}
+
+/**
  * The scale anchor for the panel: the centre of the settings trigger in the
  * panel's own coordinate space, so the panel grows out of the button instead
- * of the viewport centre. Returns null when neither a recently pressed button
- * nor the shell trigger is measurable (jsdom, detached markup).
+ * of the viewport centre. Returns null when no trigger is measurable (jsdom,
+ * detached markup).
  * @param dialog - the live settings dialog.
  * @param pressed - the most recent button pressed by the pointer, if any.
  */
 function triggerOrigin(dialog: HTMLElement, pressed: HTMLElement | null): { x: number; y: number } | null {
-  const trigger = pressed?.isConnected === true ? pressed : document.querySelector<HTMLElement>(TRIGGER_SELECTOR)
+  const trigger = settingsTrigger(dialog, pressed)
   if (trigger === null) return null
   const panelRect = dialog.getBoundingClientRect()
   const triggerRect = trigger.getBoundingClientRect()
   if (panelRect.width === 0 || panelRect.height === 0 || triggerRect.width === 0 || triggerRect.height === 0) {
     return null
   }
+  // Clamp the anchor into the panel's own box. A trigger above or beside the
+  // dialog would otherwise put the origin outside it, and the panel reads as
+  // flying in from empty space instead of growing out of the button. On the
+  // boundary the direction still shows - top edge for a button above, left edge
+  // for one on the side - which is the "from the button" motion itself.
   return {
-    x: triggerRect.left + triggerRect.width / 2 - panelRect.left,
-    y: triggerRect.top + triggerRect.height / 2 - panelRect.top,
+    x: Math.min(Math.max(triggerRect.left + triggerRect.width / 2 - panelRect.left, 0), panelRect.width),
+    y: Math.min(Math.max(triggerRect.top + triggerRect.height / 2 - panelRect.top, 0), panelRect.height),
   }
 }
 

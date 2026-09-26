@@ -16,7 +16,6 @@ export interface WidthSliderKey {
   thinkModeKeepInfo: string
   enableChineseInfo: string
   groupUi: string
-  enableLocalizeInfo: string
   enableResizeInfo: string
   dialogAdaptiveInfo: string
   enableNavScrollInfo: string
@@ -33,7 +32,6 @@ export interface WidthSliderKey {
   shortEnableWidth: string
   shortThink: string
   shortChinese: string
-  shortLocalize: string
   shortResize: string
   shortDialogAdaptive: string
   shortNavScroll: string
@@ -43,38 +41,35 @@ export interface WidthSliderKey {
   sidebarToolsMergeInfo: string
   // ── v0.8.0 动效组（整合自 dsh-client-ui-custom；设置值存本插件 settings.json）──
   groupMotion: string
-  motionTranscript: string
-  motionSidebar: string
-  motionNewChat: string
-  motionSettings: string
-  motionTranscriptInfo: string
-  motionSidebarInfo: string
-  motionNewChatInfo: string
-  motionSettingsInfo: string
-  motionRole: string
-  motionRoleInfo: string
-  motionStyleTranscriptInfo: string
-  motionStyleSidebarInfo: string
-  motionStyleNewChatInfo: string
+  // ── v2.0.0 动效重做：总闸 + 一块预览 + 四张风格卡 ──
+  /** 动效模式（三态分段控件的无障碍标签；页面上这一行不再另起标签）。 */
+  motionMode: string
+  motionModeOff: string
+  motionModeSystem: string
+  motionModeOn: string
+  motionModeOffInfo: string
+  motionModeSystemInfo: string
+  motionModeOnInfo: string
+  /** 总闸关闭时，风格区下方的一行说明。 */
+  motionInactiveHint: string
+  /** 预览区的小标题。 */
+  motionPreviewLabel: string
+  /** 预览区的重播按钮。 */
+  motionPreviewReplay: string
+  /** 预览区里那条模拟消息的正文（占位，只为让入场看得出方向）。 */
+  motionPreviewMessage: string
+  /** 预览区里那条模拟侧栏项的正文（占位）。 */
+  motionPreviewSidebar: string
+  /** 风格区的行标签。 */
   motionPreset: string
-  motionPresetFluid: string
-  motionPresetElegant: string
-  motionPresetMinimal: string
-  motionPresetFluidInfo: string
-  motionPresetElegantInfo: string
-  motionPresetMinimalInfo: string
-  styleFadeUp: string
-  styleFade: string
-  styleRiseScale: string
-  styleSlideIn: string
-  styleBlurIn: string
-  styleScaleIn: string
-  styleSlideLeft: string
-  styleExpand: string
-  styleSlideDown: string
-  styleReveal: string
-  styleBloom: string
-  styleZoom: string
+  motionLookSoft: string
+  motionLookRise: string
+  motionLookGlide: string
+  motionLookVeil: string
+  motionLookSoftInfo: string
+  motionLookRiseInfo: string
+  motionLookGlideInfo: string
+  motionLookVeilInfo: string
 }
 
 const zh: Record<keyof WidthSliderKey, string> = {
@@ -94,7 +89,6 @@ const zh: Record<keyof WidthSliderKey, string> = {
   thinkModeKeepInfo: '默认展开，可点击收起（与上游 dsh-think-zh-expand 默认行为一致）。',
   enableChineseInfo: '向模型注入最高优先级的语言规则：无论提问语言，思考过程与回复均使用简体中文（代码与术语保持原文）。',
   groupUi: '界面',
-  enableLocalizeInfo: '把官方界面残留的硬编码英文标签替换为中文（如 Tool Call→工具调用、Thinking→思考）。',
   enableResizeInfo: '官方设置弹窗变普通窗口：没动过时保持官方尺寸与居中位置（并随窗口大小自动适配）；右下角把手拖宽高、顶部空白拖动移动，双击把手复位为官方尺寸与位置；尺寸与位置会被记住。',
   dialogAdaptiveInfo: '弹窗尺寸改按窗口比例自适应（宽 62%、高 82%，并留出视口边距），窗口缩放时弹窗跟着缩放；只改外框、不缩放内容与字号。开启后不再是官方 800px 尺寸，也不能手动拖拽改尺寸（位置仍可拖）。',
   enableNavScrollInfo: '设置面板左侧功能列表条目过多时出现纵向滚动条，不再被挤压截断。',
@@ -104,13 +98,12 @@ const zh: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: '恢复默认设置',
   resetAllInfo: '重置全部开关与记忆（宽度、弹窗宽度），刷新后生效。',
   pageTitle: '宽度滑块与界面增强',
-  pageSubtitle: '15 项开关 · 改动即时生效',
+  pageSubtitle: '12 项开关 · 改动即时生效',
   groupWidthShort: '对话宽度',
   groupThinkOutput: '思考与输出',
   shortEnableWidth: '启用对话宽度滑块',
   shortThink: '思考块增强渲染',
   shortChinese: '思考/回复强制中文',
-  shortLocalize: '界面中文化',
   shortResize: '弹窗可拖拽',
   shortDialogAdaptive: '弹窗按比例跟随',
   shortNavScroll: 'tab 栏滚动',
@@ -119,38 +112,27 @@ const zh: Record<keyof WidthSliderKey, string> = {
   sidebarToolsMerge: '工具按钮并入新会话',
   sidebarToolsMergeInfo: '把工作区标题行右侧的「搜索会话 / 视图选项 / 添加工作区」三个按钮移到「新建会话」旁边，页签行因此独占整行宽度。关闭后三个按钮回到工作区标题行。',
   groupMotion: '动效',
-  motionTranscript: '对话入场',
-  motionSidebar: '侧边栏',
-  motionNewChat: '新建对话',
-  motionSettings: '设置界面',
-  motionTranscriptInfo: '载入或切换对话时，消息以动效出现而不是瞬间跳出；关闭后恢复原生表现。',
-  motionSidebarInfo: '打开 Web 时侧边栏树逐项出现，展开工作区时对话框浮现。',
-  motionNewChatInfo: '新建对话时，欢迎界面和输入区淡入出现。',
-  motionSettingsInfo: '打开设置时面板从设置按钮处展开，切换左侧标签时页面内容淡入，关闭时面板缩回。',
-  motionRole: '按角色入场',
-  motionRoleInfo: '用户消息从侧面滑入、助手正文用上面选择的样式、工具与系统行只做轻微淡入——不再所有内容共用同一种入场。',
-  motionStyleTranscriptInfo: '对话内容的出现方式。',
-  motionStyleSidebarInfo: '侧边栏会话树的出现方式，与对话动效独立选择。',
-  motionStyleNewChatInfo: '新建对话时欢迎界面的出现方式。',
-  motionPreset: '预设',
-  motionPresetFluid: '流畅',
-  motionPresetElegant: '优雅',
-  motionPresetMinimal: '极简',
-  motionPresetFluidInfo: '层叠上浮与滑动，明快活泼。',
-  motionPresetElegantInfo: '柔和模糊与绽放，安静高级。',
-  motionPresetMinimalInfo: '仅保留轻微淡入，近乎无感。',
-  styleFadeUp: '淡入上浮',
-  styleFade: '轻柔淡入',
-  styleRiseScale: '上浮放大',
-  styleSlideIn: '右侧滑入',
-  styleBlurIn: '模糊显影',
-  styleScaleIn: '轻盈缩放',
-  styleSlideLeft: '左侧滑入',
-  styleExpand: '纵向展开',
-  styleSlideDown: '自上而下',
-  styleReveal: '轻柔显影',
-  styleBloom: '柔和绽放',
-  styleZoom: '柔和缩放',
+  motionMode: '动效模式',
+  motionModeOff: '关闭',
+  motionModeSystem: '跟随系统',
+  motionModeOn: '开启',
+  motionModeOffInfo: '关闭全部界面动效，界面表现与官方一致。',
+  motionModeSystemInfo: '跟随操作系统的「减少动态效果」设置：系统要求减少动态时自动不播放动效。',
+  motionModeOnInfo: '始终播放动效，不理会系统的减少动态设置。',
+  motionInactiveHint: '动效已关闭。选「跟随系统」或「开启」后就能挑风格了。',
+  motionPreviewLabel: '预览',
+  motionPreviewReplay: '再看一遍',
+  motionPreviewMessage: '消息在这里出现',
+  motionPreviewSidebar: '会话',
+  motionPreset: '风格',
+  motionLookSoft: '轻柔',
+  motionLookRise: '上浮',
+  motionLookGlide: '滑入',
+  motionLookVeil: '显影',
+  motionLookSoftInfo: '只有淡入淡出，不做位移与缩放。',
+  motionLookRiseInfo: '内容从下方轻轻浮起并落定。',
+  motionLookGlideInfo: '内容从侧面滑入，方向明确。',
+  motionLookVeilInfo: '由模糊到清晰，像表面自己成形。',
 }
 
 const en: Record<keyof WidthSliderKey, string> = {
@@ -170,7 +152,6 @@ const en: Record<keyof WidthSliderKey, string> = {
   thinkModeKeepInfo: 'Expanded by default, click to collapse (same as upstream dsh-think-zh-expand default).',
   enableChineseInfo: 'Injects a top-priority language rule: thinking and replies are always in Simplified Chinese regardless of the question language (code and terms stay verbatim).',
   groupUi: 'Interface',
-  enableLocalizeInfo: 'Replaces leftover hard-coded English UI labels with Chinese (Tool Call to 工具调用, Thinking to 思考, etc.).',
   enableResizeInfo: 'Turns the official settings dialog into a window: untouched it keeps the official size and centered position (and adapts to the window); drag the bottom-right grip to resize, drag the header to move, double-click the grip to reset to the official size and position; size and position are remembered.',
   dialogAdaptiveInfo: 'Sizes the dialog by the window ratio instead (62% width, 82% height, minus viewport margins), so it scales with the window; only the box changes, never content or font size. It no longer matches the official 800px size and cannot be resized by dragging (moving still works).',
   enableNavScrollInfo: 'Adds a vertical scrollbar to the left settings nav when there are too many entries, instead of squeezing them.',
@@ -180,13 +161,12 @@ const en: Record<keyof WidthSliderKey, string> = {
   resetAllLabel: 'Reset all settings',
   resetAllInfo: 'Resets every toggle and stored widths; page refresh applies.',
   pageTitle: 'Width slider & interface enhancements',
-  pageSubtitle: '15 switches · changes apply instantly',
+  pageSubtitle: '12 switches · changes apply instantly',
   groupWidthShort: 'Conversation width',
   groupThinkOutput: 'Thinking & output',
   shortEnableWidth: 'Conversation width slider',
   shortThink: 'Thinking block rendering',
   shortChinese: 'Force Chinese output',
-  shortLocalize: 'Localize interface',
   shortResize: 'Draggable dialog',
   shortDialogAdaptive: 'Dialog follows window',
   shortNavScroll: 'Scrollable nav',
@@ -195,38 +175,27 @@ const en: Record<keyof WidthSliderKey, string> = {
   sidebarToolsMerge: 'Merge toolbar into New chat',
   sidebarToolsMergeInfo: 'Moves the Search, View options and Add workspace buttons from the workspace header next to New chat, so the tab row gets the full width. Turning it off puts the three buttons back on the workspace header.',
   groupMotion: 'Motion',
-  motionTranscript: 'Conversation entrance',
-  motionSidebar: 'Sidebar',
-  motionNewChat: 'New conversation',
-  motionSettings: 'Settings panel',
-  motionTranscriptInfo: 'Messages arrive with a motion effect when a conversation loads or switches; off restores the stock behavior.',
-  motionSidebarInfo: 'The sidebar tree cascades in on web load; workspace rows fade in when their group expands.',
-  motionNewChatInfo: 'A brand-new conversation welcome dialog and composer fade in.',
-  motionSettingsInfo: 'The settings dialog grows out of the settings button, page content fades in on nav switch, and the panel shrinks back on close.',
-  motionRole: 'Arrive by role',
-  motionRoleInfo: 'Your messages slide in from the side, assistant prose uses the style above, and tool or system rows settle in lightly — instead of every row sharing one entrance.',
-  motionStyleTranscriptInfo: 'How conversation content arrives.',
-  motionStyleSidebarInfo: 'How the sidebar session tree arrives, independent of the transcript style.',
-  motionStyleNewChatInfo: 'How the welcome dialog of a new conversation arrives.',
-  motionPreset: 'Presets',
-  motionPresetFluid: 'Fluid',
-  motionPresetElegant: 'Elegant',
-  motionPresetMinimal: 'Minimal',
-  motionPresetFluidInfo: 'Cascading rise and slide, bright and lively.',
-  motionPresetElegantInfo: 'Soft blur and bloom, quiet and refined.',
-  motionPresetMinimalInfo: 'Barely-there fades only, almost imperceptible.',
-  styleFadeUp: 'Fade up',
-  styleFade: 'Gentle fade',
-  styleRiseScale: 'Rise and scale',
-  styleSlideIn: 'Slide in',
-  styleBlurIn: 'Blur in',
-  styleScaleIn: 'Gentle scale',
-  styleSlideLeft: 'Slide in from left',
-  styleExpand: 'Expand',
-  styleSlideDown: 'Drop in',
-  styleReveal: 'Soft reveal',
-  styleBloom: 'Gentle bloom',
-  styleZoom: 'Soft zoom',
+  motionMode: 'Motion mode',
+  motionModeOff: 'Off',
+  motionModeSystem: 'System',
+  motionModeOn: 'On',
+  motionModeOffInfo: 'Turns every interface animation off; the UI behaves exactly like the stock app.',
+  motionModeSystemInfo: 'Follows the operating system "reduce motion" setting: animations stay off while the system asks for reduced motion.',
+  motionModeOnInfo: 'Always plays animations, ignoring the system reduce-motion setting.',
+  motionInactiveHint: 'Motion is off. Pick System or On to choose a style.',
+  motionPreviewLabel: 'Preview',
+  motionPreviewReplay: 'Replay',
+  motionPreviewMessage: 'A message arrives here',
+  motionPreviewSidebar: 'Session',
+  motionPreset: 'Style',
+  motionLookSoft: 'Soft',
+  motionLookRise: 'Rise',
+  motionLookGlide: 'Glide',
+  motionLookVeil: 'Veil',
+  motionLookSoftInfo: 'Opacity only — no travel and no scale.',
+  motionLookRiseInfo: 'Content floats up from below and settles.',
+  motionLookGlideInfo: 'Content slides in from the side, clearly directional.',
+  motionLookVeilInfo: 'Sharpening out of blur, as if the surface formed itself.',
 }
 
 export { zh, en }

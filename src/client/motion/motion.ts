@@ -193,6 +193,17 @@ const ENTRANCE: Record<EntranceStyle, { frames: Keyframe[]; durationMs: number; 
 }
 
 /**
+ * Pure: the entrance spec (keyframes, duration, easing) for a transcript style.
+ *
+ * Exported so the settings page can play the very same entrance in its preview
+ * instead of keeping a second copy of the keyframes — a preview that drifts from
+ * the engine is worse than no preview, because it teaches the wrong thing.
+ */
+export function entranceSpec(style: EntranceStyle): { frames: Keyframe[]; durationMs: number; easing: string } {
+  return ENTRANCE[style]
+}
+
+/**
  * Role entrances. The user's message travels sideways on the glide curve (280ms,
  * `standard` band): it reads as having been sent from the composer, and sideways
  * travel is too directional for the 3% overshoot of EASE_SETTLE. Process rows

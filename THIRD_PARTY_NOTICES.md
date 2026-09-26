@@ -9,14 +9,12 @@
 - 上游仓库：https://github.com/baosfeng/my-dsh-plugins
 - 参考版本：v0.4.7（插件目录 LICENSE 为 MIT）
 - 整合用途（v0.3.0）：思考/回复强制中文（host system prompt 注入）、
-  思考块增强渲染（assistant-step 渲染器替换）、界面硬编码英文中文化。
+  思考块增强渲染（assistant-step 渲染器替换）。
 - 本地转写文件（非逐字拷贝；类名/注册名/默认行为/降级逻辑有改动）：
   - src/client/think/thinkView.tsx —— 对应上游 lib/parts/assistant.part.js
     （渲染器/思考块；THINK_STYLES 样式常量迁移于此）
   - src/client/index.ts —— 对应上游 lib/parts/apply.part.js（装配：样式注入/
     assistant-step 渲染器注册）
-  - src/client/think/uiLocalize.ts —— 对应上游 lib/parts/zh-tables.part.js
-    与 zh-localize.part.js
   - src/index.ts —— 对应上游 lib/index.js（PROMPT_TEXT 与注入方式）
 - 上游许可全文（原文）:
 

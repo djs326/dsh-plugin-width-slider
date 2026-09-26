@@ -5,8 +5,7 @@
  * 1. 对话宽度滑块设置区块 —— 总控页（WidthSliderSettings）；
  * 2. 思考块增强渲染（assistant-step 覆盖，整合自 dsh-think-zh-expand）：
  *    只为思考块提供展开/收起（外观同官方）；正式回复走官方 MarkdownText，不接管围栏；
- * 3. 界面硬编码英文中文化；
- * 4. 隐藏官方原生宽度拖拽手柄（跟随「宽度滑块」开关联动）。
+ * 3. 隐藏官方原生宽度拖拽手柄（跟随「宽度滑块」开关联动）。
  *
  * 生命周期模型：apply 内建一个受控生命周期 effect —— sync() 依据
  * config store 当前值安装/卸载各功能（installX 返回 disposer）；配置变化
@@ -22,17 +21,17 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { WidthSliderSettings } from './WidthSliderSettings.tsx'
 import { en, zh, type WidthSliderKey } from './locales.ts'
 import { AssistantStepView, THINK_STYLES } from './think/thinkView.tsx'
-import { installUiLocalize } from './think/uiLocalize.ts'
 import { applySavedWidth } from './widthPrefs.ts'
 import { installDialogResizePatch, installNavScrollPatch } from './settingsPanelPatch.ts'
 import { installSessionDelete } from './sessionDelete.ts'
 import { installWorkspaceTabs } from './workspaceTabs.tsx'
 import { installSidebarToolsMerge } from './sidebarToolsMerge.ts'
-import { isZhInterface } from './lang.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './config.ts'
 import { installConversationEntrance, type MotionEngineState } from './motion/motion.ts'
 import { installSettingsMotion } from './motion/settingsMotion.ts'
 import { MOTION_CSS } from './motion/styles.ts'
+import { prefersReducedMotion } from './motion/animate.ts'
+import { motionAllowed, motionLookOf } from '../shared/motionSettings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -104,10 +103,14 @@ function installThinkRenderer(ctx: ClientContext): Disposer {
         priority: -1,
         registrant: 'dsh-plugin-width-slider',
       },
-      (props: { node?: unknown; renderMessageImages?: unknown }) =>
+      (props: { node?: unknown; renderMessageImages?: unknown; groupPart?: unknown }) =>
         createElement(AssistantStepView, {
           node: props.node as never,
           renderMessageImages: props.renderMessageImages as never,
+          // 0.1.7 起宿主把同一个 assistant-step 分别以 'reasoning'（过程折叠组
+          // 成员）与 'response'（正文条目）渲染两次，必须透传，渲染器才能按
+          // 官方语义过滤块——不透传会让思考块与回复在两处各出现一遍。
+          groupPart: props.groupPart as never,
           collapseAfterRun: getSettings().thinkMode === 'auto-collapse',
         }),
     ),
@@ -150,14 +153,19 @@ function motionStateOf(ctx: RpcClientContext): MotionEngineState {
       console.warn('[width-slider] motion: session ledger unavailable', err)
     }
   }
+  // 总闸先行：`off` 一律不放行，`system` 档读系统的「减少动态效果」。总闸
+  // 放行即三处场景全开——场景不再单独暴露（见 shared/motionSettings.ts 顶部
+  // 说明）；样式则整组来自当前风格档，不再逐场景各读一个字段。
+  const on = motionAllowed(settings.motionMode, prefersReducedMotion())
+  const look = motionLookOf(settings.motionLook)
   return {
-    transcript: settings.motionEnabled,
-    sidebar: settings.sidebarMotionEnabled,
-    newChat: settings.newChatMotionEnabled,
-    style: settings.motionStyle,
-    sidebarStyle: settings.sidebarMotionStyle,
-    newChatStyle: settings.newChatMotionStyle,
-    roleEntrance: settings.motionRoleEntrance,
+    transcript: on,
+    sidebar: on,
+    newChat: on,
+    style: look.motionStyle,
+    sidebarStyle: look.sidebarMotionStyle,
+    newChatStyle: look.newChatMotionStyle,
+    roleEntrance: on,
     blank,
   }
 }
@@ -202,10 +210,17 @@ function installMotionFeature(ctx: RpcClientContext): Disposer {
     disposers.push(engine.dispose)
 
     const settingsMotion = installSettingsMotion({
-      enabled: () => getSettings().settingsMotionEnabled,
+      enabled: () => motionAllowed(getSettings().motionMode, prefersReducedMotion()),
       subscribe: (listener) => onSettingsChanged(listener),
     })
     disposers.push(settingsMotion.dispose)
+
+    // 「跟随系统」档要实时跟随系统的「减少动态效果」：matchMedia 的变化不经过
+    // settings store，这里手动广播一次，让引擎与上面的安装条件重新判定。
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onReduceMotionChange = (): void => { applySettings({ ...getSettings() }) }
+    reduceMotion.addEventListener('change', onReduceMotionChange)
+    disposers.push(() => reduceMotion.removeEventListener('change', onReduceMotionChange))
 
     let lastSessionId: string | undefined
     const syncSession = (): void => {
@@ -223,17 +238,6 @@ function installMotionFeature(ctx: RpcClientContext): Disposer {
   }
 
   return cleanup
-}
-
-/** 界面英文中文化（开关=开 且 界面语言为中文时生效）。 */
-function installLocalize(): Disposer {
-  // 语言门控：en 界面默认不中文化官方标签，避免中英混杂（开关保留，供
-  // 中文界面用户控制）。
-  if (!isZhInterface()) {
-    console.info('[width-slider] 界面语言非中文，界面中文化未启用')
-    return () => {}
-  }
-  return installUiLocalize()
 }
 
 /** 上游 dsh-think-zh-expand 冲突提示（仅提示，不阻断）。 */
@@ -289,7 +293,7 @@ export function apply(ctx: RpcClientContext): void {
 
   // 受控生命周期：依据配置开关安装/卸载各功能；配置变化即时热切换。
   ctx.effect(() => {
-    type Slot = 'handle' | 'think' | 'localize' | 'resize' | 'nav' | 'sessionDel' | 'wsTabs' | 'motion' | 'toolsMerge'
+    type Slot = 'handle' | 'think' | 'resize' | 'nav' | 'sessionDel' | 'wsTabs' | 'motion' | 'toolsMerge'
     const installed: Partial<Record<Slot, Disposer>> = {}
 
     const ensure = (slot: Slot, want: boolean, installer: () => Disposer): void => {
@@ -317,7 +321,6 @@ export function apply(ctx: RpcClientContext): void {
       const s = getSettings()
       ensureSafe('handle', s.widthSlider, () => installWidthFeature())
       ensureSafe('think', s.thinkRender, () => installThinkRenderer(ctx))
-      ensureSafe('localize', s.uiLocalize, () => installLocalize())
       ensureSafe('resize', s.dialogResize, () => installDialogResizePatch())
       ensureSafe('nav', s.navScroll, () => installNavScrollPatch())
       ensureSafe('sessionDel', s.sessionDelete, () => installSessionDelete(ctx as never))
@@ -329,8 +332,10 @@ export function apply(ctx: RpcClientContext): void {
         const merge = installSidebarToolsMerge({ enabled: () => getSettings().sidebarToolsMerge })
         return () => merge.dispose()
       })
-      // 动效：任一开关开启即安装引擎（引擎内部再按各开关分别门控）。
-      ensureSafe('motion', s.motionEnabled || s.sidebarMotionEnabled || s.newChatMotionEnabled || s.settingsMotionEnabled,
+      // 动效：总闸放行即安装引擎。场景不再有独立开关，引擎拿到 on 之后
+      // 三处入场与设置面板动效一齐生效，总闸关闭时整块卸载。
+      ensureSafe('motion',
+        motionAllowed(s.motionMode, prefersReducedMotion()),
         () => installMotionFeature(ctx))
     }
 
@@ -338,7 +343,7 @@ export function apply(ctx: RpcClientContext): void {
     sync()
     return () => {
       unsubscribe()
-      for (const slot of ['handle', 'think', 'localize', 'resize', 'nav', 'sessionDel', 'wsTabs', 'motion', 'toolsMerge'] as const) {
+      for (const slot of ['handle', 'think', 'resize', 'nav', 'sessionDel', 'wsTabs', 'motion', 'toolsMerge'] as const) {
         if (installed[slot] !== undefined) {
           installed[slot]!()
           installed[slot] = undefined

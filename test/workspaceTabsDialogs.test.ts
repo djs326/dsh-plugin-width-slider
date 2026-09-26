@@ -220,6 +220,9 @@ beforeEach(() => {
   document.body.replaceChildren()
   // The plugin reads the host's Modal through the mocked primitives module.
   host.modal = FakeModal
+  // These cases exercise the tab bar itself, so the feature must be on — it is off by
+  // default now, and `mount` renders the official component untouched while it is off.
+  applySettings({ ...DEFAULT_FEATURE_SETTINGS, workspaceTabs: true })
 })
 
 afterEach(() => {

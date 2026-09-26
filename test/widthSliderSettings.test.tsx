@@ -97,18 +97,35 @@ describe('渲染', () => {
   it('disables the think-mode segmented control while think rendering is off', async () => {
     cfg.current = { ...DEFAULT_FEATURE_SETTINGS, thinkRender: false }
     const { container } = await renderSettings()
-    const seg = container.querySelector('.dsws-seg')
+    const seg = container.querySelector('#dsh-plugin-width-slider-think-mode')
     expect(seg?.classList.contains('is-disabled')).toBe(true)
     for (const button of Array.from(seg?.querySelectorAll('button') ?? [])) {
       expect((button as HTMLButtonElement).disabled).toBe(true)
     }
   })
 
-  it('disables a style select while its motion toggle is off', async () => {
-    cfg.current = { ...DEFAULT_FEATURE_SETTINGS, motionEnabled: false }
+  it('renders the preview and the four style cards', async () => {
     const { container } = await renderSettings()
-    const select = container.querySelector<HTMLSelectElement>('.dsws-select')
-    expect(select?.disabled).toBe(true)
+    expect(container.querySelector('.dsws-preview')).not.toBeNull()
+    expect(container.querySelectorAll('.dsws-look')).toHaveLength(4)
+  })
+
+  it('grays out and disables the style cards while the master switch is off', async () => {
+    cfg.current = { ...DEFAULT_FEATURE_SETTINGS, motionMode: 'off' }
+    const { container } = await renderSettings()
+    for (const card of Array.from(container.querySelectorAll<HTMLButtonElement>('.dsws-look'))) {
+      expect(card.disabled).toBe(true)
+    }
+    // 关着的档不给点，否则会出现"选了却不生效"的卡片。
+    expect(container.querySelector('.dsws-preview')?.classList.contains('is-off')).toBe(true)
+  })
+
+  it('enables the style cards once the master switch allows motion', async () => {
+    cfg.current = { ...DEFAULT_FEATURE_SETTINGS, motionMode: 'on' }
+    const { container } = await renderSettings()
+    for (const card of Array.from(container.querySelectorAll<HTMLButtonElement>('.dsws-look'))) {
+      expect(card.disabled).toBe(false)
+    }
   })
 })
 
@@ -143,17 +160,37 @@ describe('改动落盘', () => {
     expect(last.chinesePrompt).toBe(!DEFAULT_FEATURE_SETTINGS.chinesePrompt)
   })
 
-  it('applies a whole preset in one go', async () => {
+  it('applies a whole look in one go', async () => {
+    cfg.current = { ...DEFAULT_FEATURE_SETTINGS, motionMode: 'on' }
     const { container } = await renderSettings()
-    const presetButtons = Array.from(container.querySelectorAll<HTMLButtonElement>('.dsws-seg button'))
-    // 最后一组是预设按钮（fluid / elegant / minimal）。
-    const elegant = presetButtons.at(-2)
+    const veil = container.querySelector<HTMLButtonElement>('#dsh-plugin-width-slider-motion-look-veil')
     await act(async () => {
-      elegant?.click()
+      veil?.click()
     })
-    expect(cfg.current.motionStyle).toBe('blur-in')
-    expect(cfg.current.sidebarMotionStyle).toBe('fade')
-    expect(cfg.current.newChatMotionStyle).toBe('bloom')
+    // 一档风格是一次完整决策：落盘只写 look，三个样式取值由它决定。
+    expect(cfg.current.motionLook).toBe('veil')
+  })
+
+  it('marks the chosen look card', async () => {
+    cfg.current = { ...DEFAULT_FEATURE_SETTINGS, motionMode: 'on', motionLook: 'glide' }
+    const { container } = await renderSettings()
+    const on = container.querySelectorAll('.dsws-look.on')
+    expect(on).toHaveLength(1)
+    expect(on[0]?.id).toBe('dsh-plugin-width-slider-motion-look-glide')
+  })
+
+  it('writes only the master switch when it changes', async () => {
+    cfg.current = { ...DEFAULT_FEATURE_SETTINGS, motionMode: 'off', motionEnabled: true }
+    const { container } = await renderSettings()
+    const mode = container.querySelector('#dsh-plugin-width-slider-motion-mode')
+    const system = Array.from(mode?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      .find((button) => button.textContent === 'motionModeSystem')
+    await act(async () => {
+      system?.click()
+    })
+    // 总闸只写自己那一个字段：场景不再单独暴露，也就不存在"顺手打开别的开关"。
+    expect(cfg.current.motionMode).toBe('system')
+    expect(cfg.current.motionEnabled).toBe(true)
   })
 })
 

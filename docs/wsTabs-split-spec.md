@@ -16,10 +16,12 @@
 | `messages.ts` | `T:134-161` + `tt:162-168` + `T_WS:507-514` + `ttw:515-521` | ~60 | `tt, ttw` |
 | `scope.ts` | R3 `:396-452` + `useWsTabsEnabled:388-394` + 三个类型 `:89-108` | ~95 | `filterSessions, filterWorkspaces, unownedSessionIds, useWsTabsEnabled` + 类型 |
 | `domContract.ts` | R4 `:454-493` + `:524-552` | ~90 | `locateHeader, findOpenProjectRow, workspaceInfoFromRow` |
-| `assignMenuItem.ts` | R5 的 `:496-505`、`:554-601` | ~130 | `ensureWorkspaceAssignMenuItem, assignWsToTab, WS_ASSIGN_MENU_ATTR, ASSIGN_TAB_EVENT` |
+| `assignMenuItem.ts` | R5 的 `:554-601`（`I` 图标不在此，见下方更正） | 实测 **69**（原估 ~130 偏高） | `ensureWorkspaceAssignMenuItem, assignWsToTab, WS_ASSIGN_MENU_ATTR, ASSIGN_TAB_EVENT` |
 | `TabStrip.tsx` | R7 `:679-886` + `TABS_CSS:76-87` | ~220 | `TabStrip, TABS_CSS` |
 | `dialogs.tsx` | R8 `:888-1128` + `AssignTabPicker:604-677` | ~330 | `RenameDialog, MembersDialog, DeleteDialog, AssignTabPicker` |
 | `index.tsx` | R1 余部（注释/import/类型/`WS_TABS_MARK`）+ R9 `:1130-1661` | ~400 | `installWorkspaceTabs, WS_TABS_MARK` + re-export `WsGroup, WsTabsCtx` |
+
+**实施期更正（`I` 图标的归属）**：`I`（原 `:496`）**落 `TabStrip.tsx` 而非 `assignMenuItem.ts`**。上表的归属列写的是「行号来源」，是个描述性字段；照它字面执行会强制 `assignMenuItem.ts` 导出一个本该内部的常量，并凭空多一条 `TabStrip → assignMenuItem` 边。真正的判据是**「唯一消费者在哪」**——`I` 的唯一消费点是 `TabStrip` 的渲染。
 
 `src/client/workspaceTabs.tsx` **退化为 re-export 壳**（约 4 行）：
 
@@ -33,7 +35,7 @@ export type { WsGroup, WsTabsCtx } from './patches/wsTabs/index.tsx'
 ### 三次提交的切分
 
 - **提交 1（纯逻辑、零 UI）**：新建 `groupsStore.ts` + `messages.ts` + `scope.ts` + `domContract.ts`；`workspaceTabs.tsx` 改为 import 这四个。
-- **提交 2（UI 组件）**：新建 `TabStrip.tsx` + `dialogs.tsx`。
+- **提交 2（UI 组件）**：新建 `TabStrip.tsx` + `dialogs.tsx` + **`assignMenuItem.ts`**（**实施期更正**：原切分漏排此文件，但 `dialogs.tsx` 的 `AssignTabPicker` 调 `assignWsToTab`，而本规格禁止复制该逻辑，故提交 2 不建它就不编译）。
 - **提交 3（壳与装配）**：新建 `index.tsx`；`workspaceTabs.tsx` 退化为 re-export 壳。
 
 提交 1 的危险类型是**状态语义**，提交 2/3 是**时序与引用相等**；分开提交是为了让 `vitest` 失败能定位到更小范围。
@@ -52,11 +54,14 @@ export type { WsGroup, WsTabsCtx } from './patches/wsTabs/index.tsx'
 
 ```
 index.tsx  →  groupsStore, messages, scope, domContract, assignMenuItem, TabStrip, dialogs
-dialogs    →  groupsStore, messages
+dialogs    →  groupsStore, messages, assignMenuItem, scope
 assignMenuItem → groupsStore, messages, domContract, official/menuInjection
+TabStrip   →  groupsStore, messages
 groupsStore → messages
 messages   →  core/lang.ts        ← 只此一条，不得 import 任何其它 wsTabs 文件
 ```
+
+最后一行的两条边（`TabStrip → groupsStore, messages`）与 `dialogs` 的后两条边（`→ assignMenuItem, scope`）是**实施期实测补齐**的：起草本图时按「行号来源」推断了归属，漏掉了 `AssignTabPicker` 调 `assignWsToTab`（`dialogs → assignMenuItem`）、`dialogs` 需要 `WorkspaceLike` 类型（`dialogs → scope`）、以及 `TabStrip` 读分组与 `ttw`（`TabStrip → groupsStore, messages`）。实测无环，方向不变。
 
 `messages.ts` 若 import 其它 wsTabs 文件，会与 `groupsStore`（其 `sanitize` 依赖 `tt`）成环。
 
@@ -270,7 +275,8 @@ CSS `:76-87`（选择器 `[data-dsh-ws-tabs-bar]` / `[data-dsh-ws-tabs-group]` /
 
 ## 7. 九项裁定（主会话已定，不再询问）
 
-- **Q1 不套用 `observeBodyDebounced`**。`core/domObserver.ts` 只有「立即 observe」一种形态，套用要么给共享层加 `start`/`stop`（会波及 `sessionDelete.ts:412` 等消费方），要么把启停改写成「建/毁 + 补一次 `probe.schedule()`」；收益约 8 行，代价是语义改写与触碰共享层。**`assignRaf` / `scheduleAssign` / `assignObserver` 原样搬进 `assignMenuItem.ts`，启停留在 install。**
+- **Q1 不套用 `observeBodyDebounced`**。`core/domObserver.ts` 只有「立即 observe」一种形态，套用要么给共享层加 `start`/`stop`（会波及 `sessionDelete.ts:412` 等消费方），要么把启停改写成「建/毁 + 补一次 `probe.schedule()`」；收益约 8 行，代价是语义改写与触碰共享层。
+  **实施期更正（本规格内部口径冲突）**：本节原写「`assignRaf` / `scheduleAssign` / `assignObserver` 原样搬进 `assignMenuItem.ts`，启停留在 install」，与 §4 `:130` 把 `assignRaf`/`observing` 列为「install 内局部（非模块级）」冲突。**裁定按 §4 `:130` 执行：观察器整体留在 install，随 `index.tsx` 进提交 3。**理由：install 在 `:1231-1232` 读**并写** `assignRaf`（`if (assignRaf !== 0) cancelAnimationFrame(assignRaf)`），跨模块后 `tsc` 禁止对 import 绑定赋值，而 §1 `:19` 的导出面无任何探针出口。Q1 的可执行内核是**「不套用 `observeBodyDebounced`」**，两种落点都满足它。
 - **Q2 `T` 与 `T_WS` 不合并**。合并要改 6 处调用点与两个函数，收益为 0。
 - **Q3 `WS_ASSIGN_MENU_ATTR` 与 `ASSIGN_TAB_EVENT` 由 `assignMenuItem.ts` 导出**，`index.tsx` 显式 import。
 - **Q4 四个宿主 DOM 函数本批放 `domContract.ts`**，**不搬 `official/`**。理由见计划文件。**记入批次⑨**。
@@ -303,7 +309,7 @@ CSS `:76-87`（选择器 `[data-dsh-ws-tabs-bar]` / `[data-dsh-ws-tabs-group]` /
 
 ## 9. 测试现状与要补的 3 条
 
-`test/workspaceTabsDialogs.test.ts`（357 行，10 用例）。
+`test/workspaceTabsDialogs.test.ts`（357 行，实测 **9** 用例 —— 原写 10，多算了一条）。
 
 **已覆盖**：草稿三出口（保存 `:252-276` / 取消 `:278-285` / 宿主 onClose `:287-295`）；空名守卫 `:297-302`；重名判定含「未命名」不误判 `:304-316`；读回竞态保护 `:318-333`；写盘失败置 dirty `:335-344`；重复点加号幂等 `:346-356`。
 
@@ -329,11 +335,18 @@ npm run build
 
 **产物等价性判据**：`workspaceTabs.tsx` 全在 client bundle（`src/index.ts:20-26` 的 import 不含任何 `client/` 路径），因此批次⑥ **只对 `lib/index.mjs` 逐字节不变**成立。`lib/client.js` 必然变化（模块边界与打包顺序），**不得**作为等价性判据 —— 本计划 7.2 对批次⑥ 的表述据此作废。
 
-**每批额外**：
+**每批额外的等价性核对**（**已更正** —— 原写的 `git diff --stat lib/index.mjs` 是无效判据）：
 
 ```powershell
-git diff --stat lib/index.mjs    # 必须为空
+# ❌ 作废：lib/ 在 .gitignore 里，这个命令恒为空，什么也没证明
+# git diff --stat lib/index.mjs
+
+# ✅ 唯一有效判据：与开工前的基线副本逐字节比对
+$b = "$env:TEMP\wsTabs-base\index.mjs"
+(Get-FileHash lib/index.mjs -Algorithm SHA256).Hash -eq (Get-FileHash $b -Algorithm SHA256).Hash
 ```
+
+基线副本须在批次⑥ 开工前用 `Copy-Item lib/index.mjs "$env:TEMP\wsTabs-base\index.mjs"` 建立。批次⑥ 全程该 sha256 恒为 `22715745A86B9C89A9E469FB50C3288DEF6D0253CC781D4CF43D8179E0FD2410`（25039 B）。
 
 **归因方法**：用 `git diff --no-index -U0` 把 `lib/client.js` 的差异切成 hunk 逐条归因（比 `Compare-Object` 的逐行计数更易定位），再加上「去空行/注释/region/`$N` 后缀」的归一化多重集比对，确认差异只落在 wsTabs 相关的 region 与调用点上。
 
@@ -344,3 +357,39 @@ git diff --stat lib/index.mjs    # 必须为空
 1. 三次提交各自独立可编译、可测试；提交消息用中文，格式 `refactor(client): 批次⑥-N <内容>`。
 2. 交付报告必须包含：每批的 `tsc` / `vitest` / `build` 实测结果、`lib/index.mjs` 的差异条数、`lib/client.js` 的 hunk 归因、以及本规格 §2 那 5 行的最终写法。
 3. 任何与本文档不符的实现决定，**先停下来说明**，不要自行裁定。
+
+---
+
+## 12. 实施结果（批次⑥ 已完成，留档）
+
+**4 次提交**（分支 `feat/motion-settings-followup`，起点 `8edc40e`，未 push）：
+
+| 提交 | 内容 | 变更 |
+|---|---|---|
+| `a69c6d4` | ⑥-1 分组 store / 文案 / 作用域 / 宿主 DOM 契约 | 5 文件 +534/−452 |
+| `03aaa65` | ⑥-2 页签栏与对话框组件 | 4 文件 +646/−609 |
+| `033e4b3` | ⑥-3 壳与装配，原文件退化为 re-export | 2 文件 +639/−634 |
+| `4a7d92b` | 补 3 条单测 | 3 文件 +281/−0 |
+
+每次提交 `tsc` exit 0、`vitest` 全过、`build` exit 0、`lib/index.mjs` sha256 不变。测试由 22 文件 / 228 用例增至 **25 文件 / 247 用例**。
+
+**最终文件度量**（行 / 字节）：`patches/wsTabs/index.tsx` 635/29059、`dialogs.tsx` 332/13567、`groupsStore.ts` 264/10376、`TabStrip.tsx` 240/10617、`scope.ts` 98/3893、`domContract.ts` 80/3706、`assignMenuItem.ts` 69/4147、`messages.ts` 63/3710、`src/client/workspaceTabs.tsx`（壳）4/371。合计 **1785 / 79446**（起点单文件 1661 / 54860）。
+
+**`lib/client.js` hunk 数**：⑥-1 = 20（+223/−165）、⑥-2 = 8（+360/−331）、⑥-3 = 1（+1/−1），base→final 累计 28（+501/−414）。
+
+**归一化多重集**（去空行 / 整行注释含 `//#region` / `$N` 后缀）：base 5118 → **lost 10 / added 16**，且**全部来自 ⑥-1**；⑥-2、⑥-3、补测提交各自 **lost 0 / added 0**。那 26 行差额 = 7 处 `DEFAULT_TAB` ↔ 字面量 `"__default__"` 的跨模块常量内联策略变化（新产物里 `const DEFAULT_TAB = "__default__"` 仍在、同值）+ §2 那 5 行改动的两侧对应写法 + 两个新函数声明与闭合括号。**提交 2/3/4 在代码行层面零增删。**
+
+**最终 region 顺序**：`wsTabs/messages.ts` → `groupsStore.ts` → `TabStrip.tsx` → `domContract.ts` → `assignMenuItem.ts` → `dialogs.tsx` → `scope.ts` → `index.tsx` → `sidebarToolsMerge.ts` → `index.ts`。
+
+**壳的最终全文**（4 行）：
+
+```tsx
+/** 兼容壳（批次⑥）：实现已搬到 ./patches/wsTabs/index.tsx，这里保留原路径的导出面，
+ *  让 src/client/index.ts:29 与 test/workspaceTabsDialogs.test.ts:55 的 import 路径零改动。 */
+export { WS_TABS_MARK, installWorkspaceTabs } from './patches/wsTabs/index.tsx'
+export type { WsGroup, WsTabsCtx } from './patches/wsTabs/index.tsx'
+```
+
+三处外部引用零改动（实测）：`src/client/index.ts:29`、`src/client/index.ts:337`、`test/workspaceTabsDialogs.test.ts:55`。
+
+**新测试须加 `// @vitest-environment jsdom`** —— `vitest.config.ts:8-18` 只配了 `exclude`，默认是 node 环境。`core/lang.ts` 可安全直导，无需 mock。

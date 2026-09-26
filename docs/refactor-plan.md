@@ -57,6 +57,8 @@
 
 另外：`src/client/` 根目录实际是 **14 个文件**；`src/shared/` 是 3 个文件（含常被漏列的 `motionSettings.ts`）。
 
+> **本节是批次① 开工前的基线，不再随重构更新** —— 保留它是为了让每批的「搬了多少」有对照物。批次⑤ 后的实测基线：`src/` 38 个文件 / 8528 行、`test/` 22 个文件 / 3695 行；批次⑥ 后实测 `src/` **46 个文件 / 8662 行**、`test/` **25 个文件 / 3807 行**。
+
 ### 1.2 无测试覆盖的源码
 
 | 文件 | 现状 |
@@ -294,12 +296,13 @@ src/
     │   │   └── dialog.tsx               # DeleteSessionDialog（:99-208）
     │   ├── wsTabs/
     │   │   ├── index.tsx                # 壳 + install（对外只暴露 installWorkspaceTabs 与 WS_TABS_MARK）
-    │   │   ├── groupsStore.ts           # 分组数据单一真源（:169-393）
-    │   │   ├── scope.ts                 # 作用域派生与引用稳定缓存（:395-451）
-    │   │   ├── messages.ts              # 文案表（合并 T 与 T_WS）
-    │   │   ├── TabStrip.tsx             # 页签栏 UI（:708-915）
-    │   │   ├── dialogs.tsx              # 重命名/成员/删除对话框 + 分配选择器（:632-706, :917-1157）
-    │   │   └── assignMenuItem.ts        # 工作区行菜单注入与事件桥（:494-630）
+    │   │   ├── groupsStore.ts           # 分组数据单一真源
+    │   │   ├── scope.ts                 # 作用域派生与引用稳定缓存
+    │   │   ├── messages.ts              # 文案表（T 与 T_WS 两表并存 —— Q2 裁定不合并）
+    │   │   ├── domContract.ts           # locateHeader / findOpenProjectRow / workspaceInfoFromRow（Q4 裁定本批不搬 official/）
+    │   │   ├── TabStrip.tsx             # 页签栏 UI + TABS_CSS + I 图标
+    │   │   ├── dialogs.tsx              # 重命名/成员/删除对话框 + 分配选择器
+    │   │   └── assignMenuItem.ts        # 工作区行菜单注入与事件桥
     │   └── sidebarToolsMerge/
     │       └── index.ts
     └── motion/
@@ -321,8 +324,8 @@ src/
 - `official/` 与 `patches/`：`patches/` 消费 `official/`，反之禁止。`settingsDom.ts` 同时供 `motion/settingsMotion.ts` 使用（消掉 4 份弹窗结构假设）；`chatDom.ts` 供 `motion/conversation.ts` 与 `patches/wsTabs/scope.ts` 使用。
 - `client/core/domObserver.ts`：消掉 5 份 rAF 节流 + MutationObserver 重复。
 - `features/width/` 拆成 8 文件的理由：`WidthSliderControl.tsx:135` 是 521 行的单函数（指针 + 键盘 + 惯性 + portal + 跟随全在里面），只挪文件无法降低复杂度。
-- `patches/wsTabs/` 拆成 7 文件（保守方案 3 文件：`groupsStore` + `officialDom` + 壳）——见第 10 节待定项 2。
-- **保持对外 re-export**：`client/index.ts:27` 与 `test/workspaceTabsDialogs.test.ts:55` 只 import `installWorkspaceTabs`/`WS_TABS_MARK`，拆分后仍是这两个符号，调用点不动。
+- `patches/wsTabs/` 拆成 **8 文件**（保守方案 3 文件：`groupsStore` + `officialDom` + 壳）——**已实施**，最终划分与结果见 `docs/wsTabs-split-spec.md`。
+- **保持对外 re-export**：`client/index.ts:29` 与 `test/workspaceTabsDialogs.test.ts:55` 只 import `installWorkspaceTabs`/`WS_TABS_MARK`，拆分后仍是这两个符号，调用点不动。批次⑥ 实测三处引用（含 `client/index.ts:337`）零改动，`src/client/workspaceTabs.tsx` 退化为 4 行壳。
 
 ---
 
@@ -369,12 +372,12 @@ src/
 | **3** | 抽 `official/settingsDom.ts`：`settingsMotion.ts` 与 `patches/settingsPanel/` 改为消费同一模块；`styles.ts` 类名与 TS 常量同源；消掉 4 份弹窗结构假设与 `320ms`/`200ms` 重复 | 4 → 8 | 无 | 中 |
 | **4** | 抽 `official/chatDom.ts` 与 `core/domObserver.ts`；`motion/conversation.ts`、四个补丁模块的 Observer 统一。**已做**（`patches/wsTabs/scope.ts` 当时尚不存在，留批次⑥） | 6 → 10 | 无 | 中 |
 | **5** | 抽 `official/menuInjection.ts`，`patches/sessionDelete` 与 `patches/wsTabs/assignMenuItem` 共用 | 3 → 6 | 无 | 中 |
-| **6** | `workspaceTabs.tsx`（1661）拆成 `patches/wsTabs/` 8 个文件，分 3 次提交 | 1 → 9 | 无 | **高（时序敏感，见 P7）** |
+| **6** | `workspaceTabs.tsx`（1661）拆成 `patches/wsTabs/` 8 个文件，分 3 次提交。**已做**（实为 4 次 —— 补测试单独一次） | 1 → 9 | 无 | **高（时序敏感，见 P7）** |
 | **7** | `client/index.ts` 抽 `core/features.ts` 功能注册表，4 个内联大函数外移，`motionStateOf` 移入 `motion/`，清 dead param 与过期类型 | 3 → 8 | 无 | 中 |
 | **8** | host 拆分：`jsonFile.ts`/`settingsStore.ts`/`workspaceGroupsStore.ts`/`chinesePrompt.ts`/`api.ts` | 1 → 7 | 无 | 低 |
 | **9** | 统一命名与导出面；`shared/dshHome.ts` 迁入 `host/`；同步 README 结构树、更新日志、第三方声明 | 全仓 | 无 | 低 |
 
-**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）；批次④ 已提交 `281e60b`（`official/chatDom.ts` + `core/domObserver.ts`，`lib/index.mjs` 逐行零差异），其裁定与遗留项提交 `0e6a38f`；批次⑦ 规格裁定提交 `63e7d59`；批次⑤ 已提交 `5700aa6`（`official/menuInjection.ts`，两处菜单注入共用），其裁定提交 `c80d613`。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
+**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）；批次④ 已提交 `281e60b`（`official/chatDom.ts` + `core/domObserver.ts`，`lib/index.mjs` 逐行零差异），其裁定与遗留项提交 `0e6a38f`；批次⑦ 规格裁定提交 `63e7d59`；批次⑤ 已提交 `5700aa6`（`official/menuInjection.ts`，两处菜单注入共用），其裁定提交 `c80d613`。批次⑥ 已完成（4 次提交 `a69c6d4` / `03aaa65` / `033e4b3` / `4a7d92b`，`lib/index.mjs` 的 sha256 全程不变，测试由 22 文件 / 228 用例增至 **25 文件 / 247 用例**），实施结果留档在 `docs/wsTabs-split-spec.md` 第 12 节。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
 
 **批次③ 的三处裁定**（记录以备复查）：① `320ms`（`frames.ts` 的 `PANEL_DURATION_MS` 对 `settingsMotion.ts` 的 `PANEL_REPLAY_MS`）与 `200ms`（`PAGE_REPLAY_MS` 对 `MASK_ENTRANCE_MS`）经核实均为**数值巧合** —— 元素、动画属性、缓动曲线全不同，**未合并**，只在各处加注释说明为何不同源；② 两份同名不同口径的 `findSettingsDialog` 合并后，宽口径改名 `findDialogWithNavRail`（严口径保留原名，它是"这是不是设置弹窗"的判定）；③ `SETTINGS_DIALOG_SELECTOR` 取带 `div` 前缀者（宿主四个 modal 实测均为 `<div role="dialog" aria-modal="true">`）—— 这是本批唯一的潜在行为面收窄，宿主若改用非 `div` 容器会让严口径静默失效。
 
@@ -405,7 +408,7 @@ src/
 - **D3** 原语把 `setAttribute(attr, '1')` 统一放在分支内（对齐 `sessionDelete`），使 `workspaceTabs` 注入项的**属性序列化顺序**由 `type,role,style,…,attr` 变为 `type,role,attr,style,…`。该元素此刻尚未挂载，属性顺序对 CSS / ARIA / JS 均无语义，只有 `outerHTML` 可观察。**接受，不加 `attrTiming` 参数** —— 加参数会把实现细节升格成公共契约。
 - **E3 裁定**：`isPreviewOpen` 的 Escape 放行用例**不在批次⑤ 补**，并入批次⑦ 已裁定的补测试清单（`test/features.test.ts`、`test/motionState.test.ts`，再加一条 `isPreviewOpen` 注入线用例）。批次④ 遗留项② 里「批次⑤ 起应补」的表述据此作废。
 
-**批次⑥ 的规格裁定**（只读调研已完成，行号以 `5700aa6` 工作树为实测口径；`workspaceTabs.tsx` 实测 **1661 行**，旧调研的 1690 行与那 12 条契约的行号已整体失效，复核后实为 **17 条**）：
+**批次⑥ 的规格裁定（已完成）**（行号以 `5700aa6` 工作树为实测口径；`workspaceTabs.tsx` 实测 **1661 行**，旧调研的 1690 行与那 12 条契约的行号已整体失效，复核后实为 **17 条**。实施规格与最终结果见 `docs/wsTabs-split-spec.md`）：
 
 - **拆 8 个文件、分 3 次提交**（Q5 + Q6）：目标目录 `src/client/patches/wsTabs/`。**提交 1（纯逻辑、零 UI）**：`groupsStore.ts`(~230)、`messages.ts`(~60)、`scope.ts`(~95)、`domContract.ts`(~90)；**提交 2（UI 组件）**：`TabStrip.tsx`(~220，含 `TABS_CSS`)、`dialogs.tsx`(~330)；**提交 3（壳与装配）**：`index.tsx`(~400)。`src/client/workspaceTabs.tsx` **必须保留为 re-export 壳**（约 4 行）—— 这是 `src/client/index.ts:29`、`:337` 与 `test/workspaceTabsDialogs.test.ts:55` 三处零改动的唯一办法。分 3 次而非本计划建议的 2 次，理由是提交 1 的危险类型是**状态语义**、提交 2/3 是**时序与引用相等**，分开能让 `vitest` 的失败定位到更小范围。
 - **Q1 不套用 `observeBodyDebounced`**：见上文对批次④ 遗留项① 的更正。
@@ -420,6 +423,14 @@ src/
 - **两处旧调研错误更正**：① 旧调研单列的 R6「归属写入原语 `:617-630`」已不存在，现为 `assignWsToTab:589-601`，紧贴菜单注入块；② 旧调研把 `AssignTabPicker` 归到 R8（写 `:632-706`），实测它属 R5 的范围 —— 若按旧图把它留在 R5，会与 R8 形成循环依赖。
 - **不建议拆的部分**（与实施规格一致）：`WorkspaceTabsShell`（`:1140-1477`，338 行，内部 15 个 hook 彼此耦合，且 `activeIntentRef`/`header`/`dialog`/`assignTarget` 四个状态被 Portal 与 5 个对话框共享）、`installWorkspaceTabs`（`:1480-1661`，182 行，`kickRender`/`sync`/`unwrap`/`trySyncOnce` 共享 `originalComp`/`wrappedEntry`/`synced`/`timer` 四个闭包变量）。两者都留在 `index.tsx`。
 
+**批次⑥ 实施期的五处更正**（记录以备复查；详情见 `docs/wsTabs-split-spec.md` 相应小节）：
+
+1. **`assignMenuItem.ts` 未排进任何一次提交** —— 原切分只列了 7 个文件。因 `dialogs.tsx` 的 `AssignTabPicker` 调 `assignWsToTab`，**并入提交 2**。
+2. **Q1 观察器归属的口径冲突** —— 上文 Q1 写「搬进 `assignMenuItem.ts`」，与规格 §4 把 `assignRaf`/`observing` 列为「install 内局部」冲突。**按 §4 执行：观察器整体留在 install**（随 `index.tsx` 进提交 3）。install 读**并写** `assignRaf`（原 `:1231-1232`），跨模块后 `tsc` 禁止对 import 绑定赋值，且导出面无探针出口。Q1 的可执行内核是「不套用 `observeBodyDebounced`」，两种落点都满足。
+3. **`I` 图标落 `TabStrip.tsx`**，不按上表「行号来源」列字面归属 —— 判据是「唯一消费者在哪」。
+4. **规格依赖图漏 3 条边**（`dialogs → assignMenuItem, scope`；`TabStrip → groupsStore, messages`），实测无环。
+5. **`lib/` 在 `.gitignore` 里** —— 本计划 7.2 写的 `git diff --stat lib/index.mjs` 是**空判据**，恒为空、什么也没证明。批次⑥ 的真实等价性证据改为与开工前基线副本（`$env:TEMP\wsTabs-base\index.mjs`）的 sha256 逐字节比对。**这条对批次⑧⑨ 同样适用，7.2 已据此改写。**
+
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 
 **批次 9 之后**：可选补测试（第 10 节待定项 1）。
@@ -432,13 +443,23 @@ src/
 
 ```bash
 npx tsc -p tsconfig.test.json --noEmit    # 类型检查
-npx vitest run                            # 228 项测试
+npx vitest run                            # 247 项测试（25 文件）
 npm run build                             # tsdown + tsc d.ts
 ```
 
 ### 7.2 纯搬移批次（1、2、8、9）追加产物等价性检查
 
 移动文件不改变打包结果，`lib/index.mjs` 与 `lib/client.js` 应与重构前**逐字节一致**（若仅注释中路径变化，允许差异并逐条核对）。这条检查是纯搬移批次最便宜、最强的回归网——**它能在没有任何测试覆盖的情况下发现 import 图错误**。
+
+**判据的正确写法（批次⑥ 实施期更正）**：`lib/` 在 `.gitignore` 里，所以 `git diff --stat lib/...` **恒为空、是空判据**（这条曾写进批次⑥ 的实施规格并被执行了一轮，什么也没证明）。必须在每批开工前先建立基线副本，之后用 sha256 比对：
+
+```powershell
+Copy-Item lib/index.mjs "$env:TEMP\refactor-base\index.mjs"   # 开工前
+(Get-FileHash lib/index.mjs -Algorithm SHA256).Hash `
+  -eq (Get-FileHash "$env:TEMP\refactor-base\index.mjs" -Algorithm SHA256).Hash
+```
+
+**并且要按批次判断哪个产物才是判据**：批次⑥ 实测 `workspaceTabs.tsx` 全在 client bundle，因此只对 `lib/index.mjs` 逐字节不变成立，`lib/client.js` 必然变化（模块边界与打包顺序变了），**不得**作为等价性判据 —— 对它只做 hunk 归因与归一化多重集比对。
 
 ### 7.3 行为敏感批次（3、4、5、6、7）追加手工验证清单
 

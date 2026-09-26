@@ -398,6 +398,13 @@ src/
 
 **另一处计划更正**：第 1.2 节末尾写「`src/index.ts`（host）仅间接覆盖」**不准确** —— `test/hostEndpoints.test.ts:17`（`typeof import('../src/index.ts')`）与 `:43`（`apply(baseCtx as never)`）是对 host 入口的**直接覆盖**，且覆盖 5 个 method 与损坏文件恢复路径。真正零测试覆盖的只有 `src/client/index.ts`。
 
+**批次⑤ 的三处裁定**（批次⑤ 已提交 `5700aa6`：新建 `official/menuInjection.ts`，`sessionDelete` 与 `workspaceTabs` 的菜单注入共用）：
+
+- **D1** `sessionDelete` 兜底按钮的 `cssText` 首条对齐声明写作 `'alignItems:center'`（驼峰），`cssText` 解析时会整条丢弃，**该按钮实际没有垂直居中**；`workspaceTabs` 那边写的是合法的 `'align-items:center'`。本批按「零行为变化」保留两种写法、用 `alignItemsProperty` 参数化，**未顺手修好** —— 修它是一次真实的行为变更，应单列一批。已记入第 9 节已知限制。
+- **D2** `workspaceTabs` 的模板排除表里写死的 `'data-ws-assign-item'` 与它自己的 `WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'` 不同，该条 `hasAttribute` 恒为 `false`，是死条件（自身排除由第一条承担）。**逐字保留**，删它属批次⑨ 的导出面与死代码收敛。
+- **D3** 原语把 `setAttribute(attr, '1')` 统一放在分支内（对齐 `sessionDelete`），使 `workspaceTabs` 注入项的**属性序列化顺序**由 `type,role,style,…,attr` 变为 `type,role,attr,style,…`。该元素此刻尚未挂载，属性顺序对 CSS / ARIA / JS 均无语义，只有 `outerHTML` 可观察。**接受，不加 `attrTiming` 参数** —— 加参数会把实现细节升格成公共契约。
+- **E3 裁定**：`isPreviewOpen` 的 Escape 放行用例**不在批次⑤ 补**，并入批次⑦ 已裁定的补测试清单（`test/features.test.ts`、`test/motionState.test.ts`，再加一条 `isPreviewOpen` 注入线用例）。批次④ 遗留项② 里「批次⑤ 起应补」的表述据此作废。
+
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 
 **批次 9 之后**：可选补测试（第 10 节待定项 1）。
@@ -483,6 +490,7 @@ npm run build                             # tsdown + tsc d.ts
 - 不动 `dsh-src/`、`docs/` 下的既有上游文档。
 - **不在本计划批准前改动任何源码**。
 - 不做与结构无关的顺手改动（每一批只做该批的事）。
+- **不修** `sessionDelete` 兜底菜单项的对齐声明笔误（`cssText` 里写成驼峰 `'alignItems:center'`，非法属性名导致整条被丢弃，该按钮实际没有垂直居中；`workspaceTabs` 的同位写法是正确的 `'align-items:center'`）。它只在「官方菜单里找不到任何可用模板项」这条罕见兜底路径上生效，而修它是一次真实的行为变更，应单列一批并配验证。
 
 ---
 

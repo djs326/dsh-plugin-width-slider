@@ -17,12 +17,13 @@
  * 全部返回/登记 disposer，随功能开关卸载。
  */
 
+import { observeBodyDebounced } from './core/domObserver.ts'
+import type { Disposer } from '../shared/types.ts'
+
 export const WIDTH_PREF_KEY = 'dsh.conversation.contentWidth'
 export const FOLLOW_PREF_KEY = 'dsh.conversation.contentWidthFollow'
 export const MIN_WIDTH = 640
 export const EDGE_BUDGET = 176
-
-export type Disposer = () => void
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -90,25 +91,18 @@ function createFollowWatcher(): Disposer {
   apply()
   window.addEventListener('resize', apply)
   // 根元素出现/消失感知（宽度跟随由 ResizeObserver 负责；这里只需在根
-  // 数量变化时重新钉一次，rAF 节流避免流式输出每 token 全文档扫描）。
+  // 数量变化时重新钉一次，body 变化经 rAF 合并，见 core/domObserver.ts）。
   let knownRoots = document.querySelectorAll('[data-phase]').length
-  let rafId = 0
-  const checkRoots = (): void => {
-    rafId = 0
+  const rootsProbe = observeBodyDebounced(() => {
     const roots = document.querySelectorAll('[data-phase]').length
     if (roots !== knownRoots) {
       knownRoots = roots
       apply()
     }
-  }
-  const mo = new MutationObserver(() => {
-    if (rafId === 0) rafId = requestAnimationFrame(checkRoots)
   })
-  mo.observe(document.body, { childList: true, subtree: true })
   return () => {
     ro.disconnect()
-    mo.disconnect()
-    if (rafId !== 0) cancelAnimationFrame(rafId)
+    rootsProbe.dispose()
     window.removeEventListener('resize', apply)
   }
 }
@@ -141,21 +135,16 @@ function publishSavedFixedWhenRootReady(): Disposer {
   }
   publish()
   if (document.querySelector('[data-phase]') !== null) return () => {}
-  let rafId = 0
-  const mo = new MutationObserver(() => {
-    if (rafId !== 0) return
-    rafId = requestAnimationFrame(() => {
-      rafId = 0
-      if (document.querySelector('[data-phase]') !== null) {
-        publish()
-        mo.disconnect()
-      }
-    })
+  // 命中一次即自停：rootsProbe.dispose() 就是原来的 mo.disconnect()
+  // （帧回调先清 rafId 再跑回调，见 core/domObserver.ts）。
+  const rootsProbe = observeBodyDebounced(() => {
+    if (document.querySelector('[data-phase]') !== null) {
+      publish()
+      rootsProbe.dispose()
+    }
   })
-  mo.observe(document.body, { childList: true, subtree: true })
   return () => {
-    mo.disconnect()
-    if (rafId !== 0) cancelAnimationFrame(rafId)
+    rootsProbe.dispose()
   }
 }
 

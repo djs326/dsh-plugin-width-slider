@@ -19,8 +19,20 @@
  * the host's class names are CSS-module hashes; nothing in the host markup has
  * to change.
  */
-import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
-import { isPreviewOpen } from '../previewState.ts'
+import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './waapi.ts'
+// 弹窗结构契约（选择器、遮罩、关闭控件、内层浮层）统一由 official/ 层描述，这里只
+// 消费、不再自带一份 —— 原先 settingsPanelPatch.ts 与这里各写一份，两份已经漂移
+// （dialog 选择器一份带 div 前缀、一份不带）。
+import {
+  contentOf,
+  findSettingsDialog,
+  innerLayerOpen,
+  isCloseButton,
+  isHeaderCloseButton,
+  isSettingsDialog,
+  maskOf,
+  triggerOrigin,
+} from '../official/settingsDom.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */
 export const SETTINGS_PANEL_CLASS = 'dsu-settings-panel'
@@ -33,21 +45,26 @@ export const SETTINGS_CLOSING_CLASS = 'dsu-settings-closing'
 /** Applied to the live mask while the panel shrinks out. */
 export const SETTINGS_MASK_CLOSING_CLASS = 'dsu-settings-mask-closing'
 
-/** The settings dialog: a modal dialog that owns a nav rail. */
-const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
-/**
- * The layer the shell mounts the settings mask and panel in. It is the one
- * structural fact that tells the settings modal apart from any other modal that
- * happens to render a nav rail.
- */
-const OVERLAY_ROLE = 'presentation'
-/** The settings trigger: the shell button that opens the dialog. */
-const TRIGGER_SELECTOR = 'button[aria-haspopup="dialog"]'
 /** Upper bound for the exit transition (opacity 160ms + scale 280ms, plus margin). */
 export const EXIT_TIMEOUT_MS = 380
-/** Page cross-fade duration (ms); a lightweight swap, so it sits in the `fast` band. */
+/**
+ * Page cross-fade duration (ms); a lightweight swap, so it sits in the `fast` band.
+ *
+ * 与 MASK_ENTRANCE_MS 同为 200 但不同源：这条是内容列的交叉淡入（位移 4px、
+ * EASE_GLIDE，随 nav 切换反复重播），那条是遮罩的纯不透明度淡入（EASE_FADE，
+ * 每次开面板只跑一次）。数值重合只是因为两者都落在 `fast` 设计带（150–200ms）。
+ */
 const PAGE_REPLAY_MS = 200
-/** Panel re-entrance duration when the toggle is switched back on; `standard` for a surface this large. */
+/**
+ * Panel re-entrance duration when the toggle is switched back on; `standard` for a
+ * surface this large.
+ *
+ * 与 motion/frames.ts 的 PANEL_DURATION_MS 同为 320 但不同源：那是对话里面板的
+ * 重播（PANEL_FRAMES 为 opacity+translate、EASE_SETTLE），这条是设置弹窗的重播
+ * （下面的 SETTINGS_PANEL_FRAMES 为 opacity+scale 0.62、EASE_SPRING）—— 元素、关键帧与
+ * 曲线都不同，320 只是同一 `standard` 设计带的重合。合并两者会让两个独立决策
+ * 被一次改动同时推动。
+ */
 const PANEL_REPLAY_MS = 320
 
 /** Page cross-fade frames for the reused content column. */
@@ -56,21 +73,14 @@ const PAGE_FRAMES: readonly Keyframe[] = [
   { opacity: 1, translate: '0 0' },
 ]
 /** Panel entrance frames, replayed when the toggle is switched back on. */
-const PANEL_FRAMES: readonly Keyframe[] = [
+const SETTINGS_PANEL_FRAMES: readonly Keyframe[] = [
   { opacity: 0, scale: 0.62 },
   { opacity: 1, scale: 1 },
 ]
 /** Mask entrance frames. */
 const MASK_FRAMES: readonly Keyframe[] = [{ opacity: 0 }, { opacity: 1 }]
+/** 遮罩淡入时长；与 PAGE_REPLAY_MS 同为 200 的关系见该常量的说明（不同源）。 */
 const MASK_ENTRANCE_MS = 200
-
-/**
- * Words that name a close control. The host close button carries its
- * accessible name as visually-hidden slot text, so the button's own text IS
- * the localized word for "close". The length cap keeps a long paragraph that
- * happens to start with one of these words from matching.
- */
-const CLOSE_LABEL = /^(close|dismiss|关闭|關閉|閉じる|닫기|schließen|fermer|cerrar|chiudi|sluiten|zamknij|fechar|закрыть|kapat|đóng)/i
 
 /** Engine wiring: the settings-motion toggle. */
 export interface SettingsMotionOptions {
@@ -78,110 +88,23 @@ export interface SettingsMotionOptions {
   enabled: () => boolean
   /** Subscribe to toggle changes; returns the disposer. */
   subscribe: (listener: () => void) => () => void
+  /**
+   * Whether the width-slider preview is open (the panel hidden behind the
+   * floating slider). Escape belongs to the preview then - neither swallowing it
+   * nor letting it through, or one keypress would leave the preview *and* close
+   * the panel. Injected by the wiring (client/index.ts) so motion/ never reads
+   * core/ state on its own.
+   *
+   * Not to be confused with `innerLayerOpen()`: that one is a Menu or a nested
+   * modal *inside* the panel.
+   */
+  isPreviewOpen: () => boolean
 }
 
 /** Installed settings-motion handle. */
 export interface SettingsMotionHandle {
   /** Stop observing and drop every applied class. */
   dispose: () => void
-}
-
-/**
- * True for the host settings dialog: a modal dialog with a nav rail, mounted in
- * the shell's `role="presentation"` layer next to its own mask. Requiring that
- * layer and the mask sibling matters - "modal + nav" alone also accepts other
- * plugins' navigable modals, and taking one of those for the panel made this
- * engine intercept clicks that are none of its business.
- * @param node - a candidate dialog element.
- */
-function isSettingsDialog(node: Element): boolean {
-  if (!node.matches(DIALOG_SELECTOR) || node.querySelector('nav') === null) return false
-  const parent = node.parentElement
-  if (parent === null || parent.getAttribute('role') !== OVERLAY_ROLE) return false
-  return maskOf(node) !== null
-}
-
-/**
- * The panel's own mask: the `aria-hidden` sibling immediately before it. A
- * sibling that CONTAINS the panel is a container, not a mask - returning it would
- * make `mask.contains(target)` true for every click in the page and swallow them
- * all.
- * @param dialog - the settings dialog.
- */
-function maskOf(dialog: Element): HTMLElement | null {
-  const sibling = dialog.previousElementSibling
-  if (!(sibling instanceof HTMLElement) || sibling.getAttribute('aria-hidden') !== 'true') return null
-  return sibling.contains(dialog) ? null : sibling
-}
-
-/** The mounted settings dialog, or null. */
-function findSettingsDialog(): HTMLElement | null {
-  for (const dialog of document.querySelectorAll<HTMLElement>(DIALOG_SELECTOR)) {
-    if (isSettingsDialog(dialog)) return dialog
-  }
-  return null
-}
-
-/**
- * The scale anchor for the panel: the centre of the settings trigger in the
- * panel's own coordinate space, so the panel grows out of the button instead
- * of the viewport centre. Returns null when neither a recently pressed button
- * nor the shell trigger is measurable (jsdom, detached markup).
- * @param dialog - the live settings dialog.
- * @param pressed - the most recent button pressed by the pointer, if any.
- */
-function triggerOrigin(dialog: HTMLElement, pressed: HTMLElement | null): { x: number; y: number } | null {
-  const trigger = pressed?.isConnected === true ? pressed : document.querySelector<HTMLElement>(TRIGGER_SELECTOR)
-  if (trigger === null) return null
-  const panelRect = dialog.getBoundingClientRect()
-  const triggerRect = trigger.getBoundingClientRect()
-  if (panelRect.width === 0 || panelRect.height === 0 || triggerRect.width === 0 || triggerRect.height === 0) {
-    return null
-  }
-  return {
-    x: triggerRect.left + triggerRect.width / 2 - panelRect.left,
-    y: triggerRect.top + triggerRect.height / 2 - panelRect.top,
-  }
-}
-
-/** The panel's scrolling content column (the nav rail's sibling). */
-function contentOf(dialog: HTMLElement): HTMLElement | null {
-  const content = dialog.querySelector('nav')?.nextElementSibling
-  return content instanceof HTMLElement ? content : null
-}
-
-/** Whether a button names itself as a close control. */
-function isCloseButton(button: HTMLElement): boolean {
-  const label = (button.getAttribute('aria-label') ?? button.getAttribute('title') ?? button.textContent ?? '').trim()
-  return label.length > 0 && label.length <= 24 && CLOSE_LABEL.test(label)
-}
-
-/**
- * Whether the button is the dialog header's own close control. The header is
- * the content column's first child and the close button is its direct child
- * (the action seat sits in a nested element); this structural check keeps the
- * exit working when the localized label changes.
- * @param dialog - the live settings dialog.
- * @param button - the pressed button.
- */
-function isHeaderCloseButton(dialog: HTMLElement, button: HTMLElement): boolean {
-  const header = contentOf(dialog)?.firstElementChild
-  return header instanceof HTMLElement && button.parentElement === header
-}
-
-/**
- * Whether an inner floating layer owns the interaction: an open Menu (the
- * settings page renders several, portaled to the body) or a nested modal.
- * Those consume Escape and outside-clicks themselves, so the close paths must
- * let the event through instead of shrinking the whole panel.
- * @param dialog - the live settings dialog.
- */
-function innerLayerOpen(dialog: HTMLElement): boolean {
-  if (document.querySelector('[role="menu"]') !== null) return true
-  for (const other of document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) {
-    if (other !== dialog) return true
-  }
-  return false
 }
 
 /**
@@ -246,7 +169,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     // transition could see the class, so a declarative start state would never
     // apply - the panel would simply appear.
     dialog.classList.add(SETTINGS_PANEL_CLASS)
-    replayEntrance(dialog, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
+    replayEntrance(dialog, SETTINGS_PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
     if (mask !== null) {
       mask.classList.add(SETTINGS_MASK_CLASS)
       replayEntrance(mask, MASK_FRAMES, { duration: MASK_ENTRANCE_MS, easing: EASE_FADE })
@@ -335,7 +258,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     if (event.key !== 'Escape' || disposed || bypass || closing || panel === null || !options.enabled()) return
     // 预览（拖宽度时面板被隐藏）开着时，这次 Escape 属于预览：既不拦、也不放行关闭，
     // 否则一次按键会同时退出预览并关掉整个设置面板。
-    if (isPreviewOpen()) return
+    if (options.isPreviewOpen()) return
     // Escape belongs to an open Menu or nested modal first.
     if (innerLayerOpen(panel)) return
     event.preventDefault()
@@ -379,7 +302,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     }
     panel.classList.add(SETTINGS_PANEL_CLASS)
     mask?.classList.add(SETTINGS_MASK_CLASS)
-    replayEntrance(panel, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
+    replayEntrance(panel, SETTINGS_PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
     const content = contentOf(panel)
     if (content !== null) replayPage(content)
   })

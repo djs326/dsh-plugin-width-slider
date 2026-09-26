@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { PREVIEW_ATTR, isPreviewOpen, setPreviewOpen } from '../src/client/previewState.ts'
+import { PREVIEW_ATTR, isPreviewOpen, setPreviewOpen } from '../src/client/core/overlayState.ts'
 
 afterEach(() => {
   // 先恢复全局：上一个用例可能把 document 换掉了，之后才能碰 DOM。

@@ -5,16 +5,21 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  DEFAULT_MOTION_STYLE,
-  DEFAULT_NEW_CHAT_MOTION_STYLE,
-  DEFAULT_SIDEBAR_MOTION_STYLE,
-  MOTION_PRESETS,
+  DEFAULT_MOTION_LOOK,
+  DEFAULT_MOTION_MODE,
+  MOTION_LOOKS,
+  MOTION_LOOK_PRESETS,
+  MOTION_MODES,
   MOTION_STYLES,
   NEW_CHAT_MOTION_STYLES,
   SIDEBAR_MOTION_STYLES,
+  isMotionLook,
+  isMotionMode,
   isMotionStyle,
   isNewChatMotionStyle,
   isSidebarMotionStyle,
+  motionAllowed,
+  motionLookOf,
 } from '../src/shared/motionSettings.ts'
 
 describe('样式守卫', () => {
@@ -42,12 +47,6 @@ describe('样式守卫', () => {
     expect(isSidebarMotionStyle('reveal')).toBe(false)
   })
 
-  it('keeps the defaults valid', () => {
-    expect(isMotionStyle(DEFAULT_MOTION_STYLE)).toBe(true)
-    expect(isSidebarMotionStyle(DEFAULT_SIDEBAR_MOTION_STYLE)).toBe(true)
-    expect(isNewChatMotionStyle(DEFAULT_NEW_CHAT_MOTION_STYLE)).toBe(true)
-  })
-
   it('has no duplicate ids inside a set', () => {
     expect(new Set(MOTION_STYLES).size).toBe(MOTION_STYLES.length)
     expect(new Set(SIDEBAR_MOTION_STYLES).size).toBe(SIDEBAR_MOTION_STYLES.length)
@@ -55,21 +54,72 @@ describe('样式守卫', () => {
   })
 })
 
-describe('动效预设', () => {
+describe('风格档', () => {
   it('uses unique ids', () => {
-    const ids = MOTION_PRESETS.map((preset) => preset.id)
+    const ids = MOTION_LOOK_PRESETS.map((look) => look.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('holds only valid style ids', () => {
-    for (const { id, config } of MOTION_PRESETS) {
-      expect(isMotionStyle(config.motionStyle), `${id}.motionStyle`).toBe(true)
-      expect(isSidebarMotionStyle(config.sidebarMotionStyle), `${id}.sidebarMotionStyle`).toBe(true)
-      expect(isNewChatMotionStyle(config.newChatMotionStyle), `${id}.newChatMotionStyle`).toBe(true)
-      expect(typeof config.motionEnabled).toBe('boolean')
-      expect(typeof config.sidebarMotionEnabled).toBe('boolean')
-      expect(typeof config.newChatMotionEnabled).toBe('boolean')
-      expect(typeof config.settingsMotionEnabled).toBe('boolean')
+    for (const look of MOTION_LOOK_PRESETS) {
+      expect(isMotionStyle(look.motionStyle), `${look.id}.motionStyle`).toBe(true)
+      expect(isSidebarMotionStyle(look.sidebarMotionStyle), `${look.id}.sidebarMotionStyle`).toBe(true)
+      expect(isNewChatMotionStyle(look.newChatMotionStyle), `${look.id}.newChatMotionStyle`).toBe(true)
     }
+  })
+
+  it('accepts exactly the four look ids', () => {
+    for (const id of MOTION_LOOKS) expect(isMotionLook(id), id).toBe(true)
+    expect(isMotionLook('nope')).toBe(false)
+    expect(isMotionLook('')).toBe(false)
+    expect(isMotionLook(undefined)).toBe(false)
+    expect(isMotionLook(true)).toBe(false)
+  })
+
+  it('keeps the default id valid', () => {
+    expect(isMotionLook(DEFAULT_MOTION_LOOK)).toBe(true)
+  })
+
+  it('falls back to the default look for an unknown id', () => {
+    // 存档里可能是旧版本的 look id：查不到必须回落到默认档，而不是让引擎拿到 undefined。
+    expect(motionLookOf('nope' as never).id).toBe(DEFAULT_MOTION_LOOK)
+    expect(motionLookOf('nope' as never).motionStyle).toBe(motionLookOf(DEFAULT_MOTION_LOOK).motionStyle)
+  })
+
+  it('resolves every id to itself', () => {
+    for (const id of MOTION_LOOKS) expect(motionLookOf(id).id).toBe(id)
+  })
+})
+
+describe('动效总闸', () => {
+  it('accepts exactly the three modes', () => {
+    for (const mode of MOTION_MODES) expect(isMotionMode(mode), mode).toBe(true)
+    expect(isMotionMode('nope')).toBe(false)
+    expect(isMotionMode('')).toBe(false)
+    expect(isMotionMode(undefined)).toBe(false)
+    expect(isMotionMode(true)).toBe(false)
+  })
+
+  it('keeps the default valid', () => {
+    expect(isMotionMode(DEFAULT_MOTION_MODE)).toBe(true)
+  })
+})
+
+describe('总闸判定', () => {
+  it('never allows anything while off, whatever the system says', () => {
+    expect(motionAllowed('off', true)).toBe(false)
+    expect(motionAllowed('off', false)).toBe(false)
+  })
+
+  it('hands the decision to the system in system mode', () => {
+    // 系统要求减少动态 → 不放行；系统没要求 → 放行。
+    expect(motionAllowed('system', true)).toBe(false)
+    expect(motionAllowed('system', false)).toBe(true)
+  })
+
+  it('stays on in on mode even when the system reduces motion', () => {
+    // 「开启」是用户明确覆盖系统的表态，不能因为系统设置反向失效。
+    expect(motionAllowed('on', true)).toBe(true)
+    expect(motionAllowed('on', false)).toBe(true)
   })
 })

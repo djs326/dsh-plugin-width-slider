@@ -7,7 +7,9 @@
  * 2. 类名前缀 dsh-ws-（与上游 dsh-think-zh-expand- 互不干扰）；
  * 3. 行为默认「思考中展开、思考完自动收起」（上游为始终默认展开）；
  * 4. 思考块外观与官方 ReasoningRow 一致：头部用官方 primitives 的
- *    DisclosureRow + IconThinkOutline14，正文纯文本；样式逐条对齐官方
+ *    DisclosureRow + 思考图标（0.1.5 为 IconThinkOutline14；0.1.7 改名为
+ *    IconThinkOutlineRegular / IconThinkOutlineMedium，按新名优先回退解析），
+ *    正文纯文本；样式逐条对齐官方
  *    ReasoningRow.module.css（折叠高度、扫描动画、字号变量、summary 跟随）。
  *    官方类名是 CSS 模块 hash、无法跨包复用，故用同名自有类 + 相同声明复刻；
  * 5. 正式回复 text 块走官方 primitives 的 MarkdownText（官方 DOM 结构 +
@@ -20,8 +22,10 @@
  */
 
 import { Component, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
-import { isZhInterface, pickText } from '../lang.ts'
-import { primitives } from '../primitives.ts'
+import { isZhInterface, pickText } from '../core/lang.ts'
+import { primitives } from '../core/primitives.ts'
+// 思考块正文类名的契约在 official/chatDom.ts（选择器与 CSS / className 同源）。
+import { THINK_BODY, THINK_BODY_CLASS } from '../official/chatDom.ts'
 
 // ── 样式（取值对齐官方 ReasoningRow / AssistantMarkdown 的 CSS 模块）──
 export const THINK_STYLES = `
@@ -42,7 +46,7 @@ export const THINK_STYLES = `
 .dsh-ws-think-summary-text{text-overflow:ellipsis;display:block;overflow:hidden}
 .dsh-ws-think-summary[data-follow-end]{justify-content:flex-end;display:flex}
 .dsh-ws-think-summary[data-follow-end] .dsh-ws-think-summary-text{text-align:start;text-overflow:clip;flex:none;width:max-content;min-width:100%;overflow:visible}
-.dsh-ws-think-body{padding:4px 0 4px calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;word-break:break-word}
+${THINK_BODY}{padding:4px 0 4px calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;word-break:break-word}
 .dsh-ws-plain{white-space:pre-wrap;word-break:break-word}
 .dsh-ws-unknown{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--dsw-font-markdown-code-block,monospace);font-size:var(--dsh-content-font-size-secondary,13px)}
 .dsh-ws-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -90,12 +94,20 @@ type IconComponent = ComponentType<{ size?: number; className?: string }>
 interface Primitives {
   MarkdownText?: MarkdownTextComponent
   DisclosureRow?: DisclosureRowComponent
+  /**
+   * 思考块图标。0.1.5 导出 IconThinkOutline14（与 IconThinkOutline16 同族）；
+   * 0.1.7 改名为 IconThinkOutlineRegular（1px 描边）与 IconThinkOutlineMedium
+   * （1.3px 描边），14 号旧名不再导出。按新名优先、旧名回退解析，两个宿主
+   * 版本下都能拿到图标。
+   */
+  IconThinkOutlineRegular?: IconComponent
+  IconThinkOutlineMedium?: IconComponent
   IconThinkOutline14?: IconComponent
 }
 
 let resolvedPrimitives: Primitives | null | undefined
 
-/** 解析一次并缓存 primitives 相关组件；缺失返回 null（读取、缓存与降级都在 primitives.ts）。 */
+/** 解析一次并缓存 primitives 相关组件；缺失返回 null（读取、缓存与降级都在 core/primitives.ts）。 */
 function resolvePrimitives(): Primitives | null {
   if (resolvedPrimitives !== undefined) return resolvedPrimitives
   const mod = primitives() as Primitives
@@ -233,9 +245,13 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
 
   const primitives = resolvePrimitives()
   const DisclosureRow = primitives?.DisclosureRow
-  const ThinkIcon = primitives?.IconThinkOutline14
+  // 0.1.7 改名：新名优先，旧名回退（详见 Primitives 注释）。
+  const ThinkIcon =
+    primitives?.IconThinkOutlineRegular ??
+    primitives?.IconThinkOutlineMedium ??
+    primitives?.IconThinkOutline14
   // 官方组件缺失时降级：直接显示纯文本正文，不影响内容可读性。
-  if (DisclosureRow === undefined) return <div className="dsh-ws-think-body">{cleanText}</div>
+  if (DisclosureRow === undefined) return <div className={THINK_BODY_CLASS}>{cleanText}</div>
 
   return (
     <div
@@ -271,7 +287,7 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
         }
       >
         {/* 正文与官方 ReasoningRow 一致：纯文本（不渲染 Markdown）。 */}
-        <div className="dsh-ws-think-body">{cleanText}</div>
+        <div className={THINK_BODY_CLASS}>{cleanText}</div>
       </DisclosureRow>
     </div>
   )
@@ -347,6 +363,9 @@ function renderBlock(
   }
 }
 
+/** 宿主的分组标签（0.1.7 起）：同一 assistant-step 会分别以这两个值各渲染一次。 */
+export type GroupPart = 'reasoning' | 'response'
+
 /** 渲染 blocks 全列表：返回元素数组；图片组只渲染一次（消费整组）。 */
 function renderBlocks(
   blocks: unknown[],
@@ -354,12 +373,19 @@ function renderBlocks(
   zh: boolean,
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode,
   collapseAfterRun?: boolean,
+  groupPart?: GroupPart,
 ): ReactNode[] {
   const last = blocks.length - 1
   const rendered: ReactNode[] = []
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i] as { kind?: string } | null | undefined
     if (!block) continue
+    // 分组过滤（复刻官方 AssistantMarkdown:5824-5825）：0.1.7 的宿主把同一个
+    // assistant-step 渲染两次——一次作为过程折叠组成员（'reasoning'），一次
+    // 作为正文条目（'response'）。官方靠这两行跳块才不重复；忽略它会让思考块
+    // 与回复在过程区、正文各出现一遍。旧宿主不传 groupPart，行为保持不变。
+    if (groupPart === 'reasoning' && block.kind !== 'reasoning') continue
+    if (groupPart === 'response' && block.kind === 'reasoning') continue
     const el = renderBlock(blocks, i, streaming, last, zh, renderMessageImages, collapseAfterRun)
     if (el === null || el === undefined) continue
     // 与 renderBlock 的分支条件对齐：只有真的渲染了整组（renderMessageImages 可用）才
@@ -376,12 +402,18 @@ export interface AssistantStepViewProps {
   renderMessageImages?: (props: RenderMessageImagesProps) => ReactNode
   /** true=思考完自动收起（默认）；false=始终展开（上游语义）。 */
   collapseAfterRun?: boolean
+  /**
+   * 宿主分组标签：'reasoning'=过程折叠组内的那次渲染，'response'=正文条目的
+   * 那次渲染；0.1.5 及更早的宿主不传（此时按旧行为渲染全部块）。
+   */
+  groupPart?: GroupPart
 }
 
 export function AssistantStepView({
   node,
   renderMessageImages,
   collapseAfterRun = true,
+  groupPart,
 }: AssistantStepViewProps) {
   const data = node && node.data ? node.data : null
   if (!data || !Array.isArray(data.blocks)) return null
@@ -393,8 +425,14 @@ export function AssistantStepView({
   const blocks = data.blocks as Array<{ kind?: string } | null | undefined>
   const hasContent = blocks.some((b) => b !== null && b !== undefined && b.kind !== 'tool-call')
   if (!(streaming || interrupted === true || hasContent)) return null
-  const rendered = renderBlocks(data.blocks, streaming, isZhInterface(), renderMessageImages, collapseAfterRun)
-  if (interrupted) {
+  const rendered = renderBlocks(data.blocks, streaming, isZhInterface(), renderMessageImages, collapseAfterRun, groupPart)
+  // 「已停止」标签的显示条件复刻官方（AssistantMarkdown:5877）：只在正文条目
+  // （groupPart 未定义 / 'response'）或该节点除思考、工具外没有其它内容时渲染，
+  // 否则过程组与正文会各挂一个标签。
+  const bareOfReply = !blocks.some(
+    (b) => b !== null && b !== undefined && b.kind !== 'reasoning' && b.kind !== 'tool-call',
+  )
+  if (interrupted && (groupPart === undefined || groupPart === 'response' || bareOfReply)) {
     rendered.push(<span key="stopped" className="dsh-ws-stopped">{pickText('已停止', 'Stopped')}</span>)
   }
   return (

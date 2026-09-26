@@ -26,7 +26,7 @@ let holdRead: ((value: unknown) => void) | null = null
 /** What `wsGroupsWrite` answers. */
 let writeOk = true
 
-vi.mock('../src/client/endpointChannel.ts', () => ({
+vi.mock('../src/client/core/endpointChannel.ts', () => ({
   callEndpoint: vi.fn(async (_path: string, method: string, payload?: Record<string, unknown>) => {
     calls.push(payload === undefined ? { method } : { method, payload })
     if (method === 'wsGroupsRead') {
@@ -40,18 +40,18 @@ vi.mock('../src/client/endpointChannel.ts', () => ({
 }))
 
 // Pin the interface language so the dialog copy the assertions look for is stable.
-vi.mock('../src/client/lang.ts', () => ({ isZhInterface: () => true }))
+vi.mock('../src/client/core/lang.ts', () => ({ isZhInterface: () => true }))
 
 // The host's Modal arrives through the plugin's own primitives module; mocking that
 // local module works, whereas mocking the host package does not - the plugin's
 // `require` is a build-time shim that bypasses Vite's alias and mock tables.
 // `vi.hoisted` gives the factory a holder it may read at call time.
 const host = vi.hoisted(() => ({ modal: null as unknown }))
-vi.mock('../src/client/primitives.ts', () => ({
+vi.mock('../src/client/core/primitives.ts', () => ({
   primitives: () => ({ Modal: host.modal }),
 }))
 
-import { DEFAULT_FEATURE_SETTINGS, applySettings } from '../src/client/config.ts'
+import { DEFAULT_FEATURE_SETTINGS, applySettings } from '../src/client/core/config.ts'
 import { WS_TABS_MARK, installWorkspaceTabs } from '../src/client/workspaceTabs.tsx'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -220,6 +220,9 @@ beforeEach(() => {
   document.body.replaceChildren()
   // The plugin reads the host's Modal through the mocked primitives module.
   host.modal = FakeModal
+  // These cases exercise the tab bar itself, so the feature must be on — it is off by
+  // default now, and `mount` renders the official component untouched while it is off.
+  applySettings({ ...DEFAULT_FEATURE_SETTINGS, workspaceTabs: true })
 })
 
 afterEach(() => {

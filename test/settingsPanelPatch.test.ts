@@ -6,7 +6,7 @@
  * as "turn the switch off and the dialog is official again".
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearPanelRect, installDialogResizePatch } from '../src/client/settingsPanelPatch.ts'
+import { clearPanelRect, installDialogResizePatch } from '../src/client/patches/settingsPanel/dialogWindow.ts'
 
 const RECT_KEY = 'dsh.conversation.settingsPanelWindow'
 const LEGACY_WIDTH_KEY = 'dsh.conversation.settingsPanelWidth'

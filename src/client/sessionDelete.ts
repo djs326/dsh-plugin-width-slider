@@ -15,10 +15,13 @@
  * sessionDeleteService.ts）。文案随界面语言（zh/en，运行时取值）。
  */
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import { isZhInterface } from './lang.ts'
-import { callEndpoint } from './endpointChannel.ts'
-import { primitives } from './primitives.ts'
-import { shakeElement } from './motion/animate.ts'
+import { isZhInterface } from './core/lang.ts'
+import { callEndpoint } from './core/endpointChannel.ts'
+import { ENDPOINT_METHOD, WIDTH_SLIDER_ENDPOINT } from '../shared/endpointContract.ts'
+import { primitives } from './core/primitives.ts'
+import { observeBodyDebounced } from './core/domObserver.ts'
+import { findOpenMenu, injectMenuItem } from './official/menuInjection.ts'
+import { shakeElement } from './motion/index.ts'
 
 interface SessCtx {
   get?: <T = unknown>(name: string) => T | undefined
@@ -33,6 +36,16 @@ const OVERLAY_SLOT = 'shell.overlay'
 const DIALOG_ID = 'session-delete-dialog'
 const EVENT = 'dsh:session-delete'
 const MENU_DELETE_ATTR = 'data-session-delete-item'
+/**
+ * 槽项（官方槽渲染出来的那一个）自己的标记，只表明「官方槽已接管、兜底让位」。
+ * 绝不能与 MENU_DELETE_ATTR 复用：后者是兜底克隆项的删除键，
+ * ensureDeleteMenuItem 会按它 remove 元素——复用会让兜底清理把自己刚渲染
+ * 出来的槽项删掉（1.5.1 的线上回归：菜单里只剩官方四项）。
+ */
+const MENU_SLOT_ATTR = 'data-session-delete-slotitem'
+/** 0.1.7 起的官方会话行菜单槽：宿主直接把 sessionId / displayTitle 投影进来。 */
+const MENU_ITEM_SLOT = 'sidebar.workspaces.session.menu.item'
+const MENU_ITEM_ID = 'session-delete'
 
 // 文案（zh/en 运行时取值，界面语言跟随）。
 const T = {
@@ -57,7 +70,7 @@ function tt(key: string): string {
   return isZhInterface() ? pair[0] : pair[1]
 }
 
-// primitives（Modal / IconTrashOutline16）走统一读取入口 src/client/primitives.ts：
+// primitives（Modal / IconTrashOutline16）走统一读取入口 src/client/core/primitives.ts：
 // 缓存、失败降级与告警都在那一处，这里不再自建一份。
 
 // ── 会话服务句柄（sessions list 供 title/running 展示与刷新）────────
@@ -75,7 +88,7 @@ function sessionsById(): Record<string, { title?: string; running?: boolean } | 
 
 async function rpcDelete(ctx: SessCtx, sessionId: string): Promise<string | null> {
   try {
-    const result = await callEndpoint('/api/width-slider', 'sessionDelete', { id: sessionId })
+    const result = await callEndpoint(WIDTH_SLIDER_ENDPOINT, ENDPOINT_METHOD.sessionDelete, { id: sessionId })
     if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) return null
     const err = (result as { error?: { message?: string } } | null)?.error?.message
     return err ?? 'delete failed'
@@ -204,8 +217,31 @@ let deleteViaRpc: (sessionId: string) => Promise<string | null> = async () => 'r
 
 const TRASH_PATH = 'M14.4782 4.84067L14.2138 10.1152C14.1102 12.1872 14.067 13.0115 13.3866 13.9607C13.1044 14.3546 12.7498 14.6912 12.3424 14.9535C11.8239 15.2872 11.2415 15.4316 10.5585 15.4998C9.88727 15.5668 9.04946 15.5656 7.99998 15.5656C6.95051 15.5656 6.1127 15.5668 5.44142 15.4998C4.75851 15.4316 4.17602 15.2872 3.65753 14.9535C3.25012 14.6912 2.89559 14.3546 2.61332 13.9607C1.93296 13.0115 1.88979 12.1872 1.78619 10.1152L1.52179 4.84067L2.89006 4.77277L3.15343 10.0463C3.26221 12.2218 3.32452 12.6015 3.72646 13.1624C3.90825 13.4161 4.13686 13.6334 4.39927 13.8023C4.66204 13.9714 5.00263 14.0792 5.57825 14.1367C6.16562 14.1953 6.92298 14.1963 7.99998 14.1963C9.07699 14.1963 9.83434 14.1953 10.4217 14.1367C10.9973 14.0792 11.3379 13.9714 11.6007 13.8023C11.8631 13.6334 12.0917 13.4161 12.2735 13.1624C12.6755 12.6015 12.7378 12.2218 12.8465 10.0463L13.1099 4.77277L14.4782 4.84067ZM5.43011 6.22849H6.7994V11.3909H5.43011V6.22849ZM9.20056 6.22849H10.5699V11.3909H9.20056V6.22849ZM8.53597 0.434431C9.17976 0.434431 9.6522 0.426926 10.0966 0.571258C10.2357 0.616451 10.3717 0.672554 10.502 0.738948C10.9182 0.951107 11.2464 1.29099 11.7015 1.74612L12.4978 2.54136H15.3742V3.91169H0.625732V2.54136H3.50218L4.29845 1.74612C4.75358 1.29099 5.08174 0.951107 5.49801 0.738948C5.62831 0.672554 5.76425 0.616451 5.90334 0.571258C6.34776 0.426926 6.82021 0.434431 7.46399 0.434431H8.53597ZM7.46399 1.80476C6.73208 1.80476 6.51641 1.81187 6.32617 1.87369C6.25545 1.89667 6.18668 1.92533 6.12041 1.95907C5.96398 2.03878 5.82348 2.16253 5.44142 2.54136H10.5585C10.1765 2.16253 10.036 2.03878 9.87955 1.95907C9.81329 1.92533 9.74452 1.89667 9.6738 1.87369C9.48356 1.81187 9.26789 1.80476 8.53597 1.80476H7.46399Z'
 
+/**
+ * 会话行的 id / running：优先读宿主写在行根上的 data-row-key="session:<id>"
+ * （0.1.7 起的稳定契约——会话行根同时带 [class*=sessionRow] 与该属性），
+ * running 从会话账本取；宿主未提供该属性（0.1.5）时回退 React fiber 直读
+ * node.id。两条路径都读不到即失败（fail closed，绝不按标题反查）。
+ */
 function sessionInfoFromRow(row: HTMLElement): { sessionId: string; running: boolean } | null {
   if (!row) return null
+  const keyed = sessionIdFromRowKey(row)
+  if (keyed !== null) {
+    const live = sessionsById()[keyed]
+    return { sessionId: keyed, running: live?.running === true }
+  }
+  return sessionInfoFromFiber(row)
+}
+
+/** 行根 data-row-key="session:<id>" 的解析（宿主 0.1.7+；缺失返回 null）。 */
+function sessionIdFromRowKey(row: HTMLElement): string | null {
+  const holder = row.hasAttribute('data-row-key') ? row : row.closest('[data-row-key]')
+  const match = /^session:(.+)$/.exec(holder?.getAttribute('data-row-key') ?? '')
+  return match ? match[1] : null
+}
+
+/** 0.1.5 兜底路径：从会话行 React fiber 的 memoizedProps.node 读 id / running。 */
+function sessionInfoFromFiber(row: HTMLElement): { sessionId: string; running: boolean } | null {
   let fiber: unknown = null
   for (const key of Object.keys(row)) {
     if (key.indexOf('__reactFiber$') === 0) {
@@ -236,82 +272,98 @@ function rowTitleOf(row: HTMLElement): string {
   return el ? String((el as HTMLElement).innerText || '').trim() : ''
 }
 
+/** 派发删除确认请求（官方槽菜单项与 DOM 兜底路径共用同一事件）。 */
+function emitDeleteRequest(sessionId: string | null, title: string, running: boolean): void {
+  window.dispatchEvent(new CustomEvent(EVENT, {
+    detail: { sessionId, title, running },
+  }))
+}
+
 function openMenuDelete(row: HTMLElement): void {
   const title = rowTitleOf(row)
   let info: { sessionId: string; running: boolean } | null = null
   try {
     info = sessionInfoFromRow(row)
   } catch { /* fail closed */ }
-  window.dispatchEvent(new CustomEvent(EVENT, {
-    detail: {
-      sessionId: info ? info.sessionId : null,
-      title,
-      running: info ? info.running : false,
-    },
-  }))
+  emitDeleteRequest(info ? info.sessionId : null, title, info ? info.running : false)
+}
+
+/** 官方行菜单槽是否已接管（由 SessionDeleteMenuItem 渲染时置位）。 */
+let menuSlotLive = false
+
+/**
+ * 0.1.7+ 官方行菜单槽 `sidebar.workspaces.session.menu.item` 的「删除会话」项。
+ * 宿主把 sessionId / displayTitle 直接投影进来，不再需要 DOM 克隆与 React
+ * fiber 读 id（对上游行结构变化免疫）。order 500 排在官方项之后
+ * （pin 100 / rename 200 / fork 300 / archive 400）——危险操作放最后。
+ * 外层标记用独立的 MENU_SLOT_ATTR（而非兜底的 MENU_DELETE_ATTR）：它只用来
+ * 表明"官方槽已接管"，不参与兜底项的删除键匹配，因此不会被兜底清理误删。
+ */
+function SessionDeleteMenuItem(props: { sessionId?: unknown; displayTitle?: unknown }): any {
+  const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
+  const displayTitle = typeof props.displayTitle === 'string' ? props.displayTitle : ''
+  if (sessionId === '') return null
+  // 官方槽已在此宿主生效：兜底的 DOM 克隆从此让位。
+  menuSlotLive = true
+  const onSelect = (): void => {
+    const live = sessionsById()[sessionId]
+    emitDeleteRequest(sessionId, live?.title ?? displayTitle, live?.running === true)
+  }
+  const icon = createElement(
+    'svg',
+    { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' },
+    createElement('path', { d: TRASH_PATH, fill: 'currentColor' }),
+  )
+  // 官方菜单项组件（0.1.7 起可用）：样式与官方 pin/rename/fork/archive 完全
+  // 一致，只有 danger 上危险色。老宿主没有它时手写同形按钮兜底。
+  const MenuItemButton = primitives().MenuItemButton
+  const item = MenuItemButton
+    ? createElement(MenuItemButton, { icon, danger: true, onSelect }, tt('menu.delete'))
+    : createElement('button', {
+        type: 'button',
+        role: 'menuitem',
+        onClick: onSelect,
+        style: {
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          padding: '6px 12px', border: 'none', background: 'transparent',
+          color: 'var(--dsw-alias-state-error-primary,#e5484d)',
+          font: 'inherit', fontSize: 13, lineHeight: '20px',
+          textAlign: 'left', borderRadius: 6, cursor: 'pointer',
+        },
+      }, icon, tt('menu.delete'))
+  return createElement('div', { [MENU_SLOT_ATTR]: '1' }, item)
 }
 
 /**
  * 克隆官方菜单项做"删除会话"（继承官方全部样式：padding/圆角/字号/hover
  * 由官方 hash 类控制，保证与 重命名/分叉会话/归档会话 视觉一致），仅把
  * 图标换成垃圾桶、文本换成删除会话、文字标危险色。
+ * 只在官方行菜单槽未接管（0.1.7 之前的宿主）时使用。
  */
 function ensureDeleteMenuItem(): void {
-  const menu = document.querySelector('[role=menu]')
+  if (menuSlotLive) {
+    // 官方槽已渲染它自己的"删除会话"项：清掉可能先插入的兜底克隆项，
+    // 避免同一个菜单里出现两个同名条目。
+    document.querySelectorAll('[' + MENU_DELETE_ATTR + ']').forEach((el) => el.remove())
+    return
+  }
+  const menu = findOpenMenu()
   if (!menu) return
-  if (menu.querySelector('[' + MENU_DELETE_ATTR + ']')) return
   const row = findOpenSessionRow()
   if (!row) return
-  // 官方菜单项模板（任意一个官方 menuitem，如"重命名"）。
-  const template = Array.from(menu.querySelectorAll('[role=menuitem]')).find(
-    (el) => !el.hasAttribute(MENU_DELETE_ATTR),
-  ) as HTMLElement | null
-
-  let item: HTMLButtonElement
-  if (template) {
-    // 克隆官方菜单项：保留其全部结构/类/内边距/hover 规则。
-    item = template.cloneNode(true) as HTMLButtonElement
-    item.setAttribute(MENU_DELETE_ATTR, '1')
-    // 图标：直接替换官方 svg 的 path 为垃圾桶（保留官方 svg 的尺寸与
-    // wrapper，布局与其它项完全一致）。
-    const iconSvg = item.querySelector('svg')
-    if (iconSvg) {
-      iconSvg.setAttribute('fill', 'currentColor')
-      iconSvg.setAttribute('stroke', 'none')
-      iconSvg.innerHTML = '<path d="' + TRASH_PATH + '" fill="currentColor"/>'
-    }
-    // 文本：官方 label span 保留样式类，仅改文字。
-    const spans = Array.from(item.querySelectorAll('span'))
-    const labelSpan = spans.find((s) => s.textContent && s.textContent.trim() !== '') ?? null
-    if (labelSpan) labelSpan.textContent = tt('menu.delete')
-    else {
-      const span = document.createElement('span')
-      span.textContent = tt('menu.delete')
-      item.appendChild(span)
-    }
-    // 仅危险色覆盖；hover 灰底等全部由官方类接管（不设 inline background，
-    // 否则会压掉官方 hover 样式）。
-    item.style.color = 'var(--dsw-alias-state-error-primary,#e5484d)'
-  } else {
-    // 兜底（无官方模板时）：手写与官方一致的布局。
-    item = document.createElement('button') as HTMLButtonElement
-    item.type = 'button'
-    item.setAttribute('role', 'menuitem')
-    item.setAttribute(MENU_DELETE_ATTR, '1')
-    item.style.cssText = [
-      'display:flex', 'alignItems:center', 'gap:8px', 'width:100%',
-      'padding:6px 12px', 'border:none', 'background:transparent',
-      'color:var(--dsw-alias-state-error-primary,#e5484d)',
-      'font:inherit', 'fontSize:13px', 'lineHeight:20px',
-      'textAlign:left', 'borderRadius:6px', 'cursor:pointer',
-    ].join(';')
-    item.innerHTML = '<span style="display:inline-flex;flex:none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="' + TRASH_PATH + '" fill="currentColor"/></svg></span><span>' + tt('menu.delete') + '</span>'
-    item.addEventListener('mouseenter', () => { item.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))' })
-    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
-  }
-  item.addEventListener('click', () => openMenuDelete(row))
+  // 克隆/换图标/换文本/色值覆盖全在 official/menuInjection.ts，这里只给参数。
   // 不插分隔线：与官方菜单项平级直接追加，保持官方一致的列表外观。
-  menu.appendChild(item)
+  injectMenuItem({
+    menu,
+    attr: MENU_DELETE_ATTR,
+    iconHtml: '<path d="' + TRASH_PATH + '" fill="currentColor"/>',
+    label: tt('menu.delete'),
+    fallbackColor: 'var(--dsw-alias-state-error-primary,#e5484d)',
+    templateColor: 'var(--dsw-alias-state-error-primary,#e5484d)',
+    // 兜底按钮的对齐声明沿用历史拼写（为何不"顺手修好"见原语该参数注释）。
+    alignItemsProperty: 'alignItems',
+    onClick: () => openMenuDelete(row),
+  })
 }
 
 // ── install（生命周期入口）───────────────────────────────────────────
@@ -345,20 +397,24 @@ export function installSessionDelete(ctx: SessCtx): () => void {
     ))
     disposers.push(d)
   } catch { /* ignore */ }
+  // 0.1.7+：官方行菜单槽把 sessionId / displayTitle 直接投影进来，菜单项
+  // 不再依赖 DOM 克隆与 React fiber 读 id。旧宿主没有这个槽（inject 等不到
+  // 声明、不会生效），下面的 DOM 兜底照常工作。
+  try {
+    const d = ctx.slots.inject(MENU_ITEM_SLOT, () => ctx.slots.register(
+      { name: MENU_ITEM_SLOT, id: MENU_ITEM_ID, order: 500 },
+      SessionDeleteMenuItem,
+    ))
+    disposers.push(d)
+  } catch { /* 旧宿主无此槽：保持 DOM 兜底 */ }
   ensureDeleteMenuItem()
-  let rafId = 0
-  const schedule = () => {
-    if (rafId !== 0) return
-    rafId = requestAnimationFrame(() => {
-      rafId = 0
-      try { ensureDeleteMenuItem() } catch { /* ignore */ }
-    })
-  }
-  const observer = new MutationObserver(() => schedule())
-  observer.observe(document.body, { childList: true, subtree: true })
+  // 菜单项注入是幂等的：body 每有动静就在下一帧补一次漏（rAF 合并见
+  // core/domObserver.ts）。
+  const menuProbe = observeBodyDebounced(() => {
+    try { ensureDeleteMenuItem() } catch { /* ignore */ }
+  })
   disposers.push(() => {
-    observer.disconnect()
-    if (rafId !== 0) cancelAnimationFrame(rafId)
+    menuProbe.dispose()
     document.querySelectorAll('[' + MENU_DELETE_ATTR + ']').forEach((el) => el.remove())
   })
   return () => {

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { dshHomePath, resolveDshHome } from '../src/shared/dshHome.ts'
+import { dshHomePath, resolveDshHome } from '../src/host/dshHome.ts'
 
 const CUSTOM = resolve(homedir(), 'custom-dsh-home')
 const DEFAULT_HOME = join(homedir(), '.dsh')

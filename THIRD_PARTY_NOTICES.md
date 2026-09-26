@@ -9,15 +9,17 @@
 - 上游仓库：https://github.com/baosfeng/my-dsh-plugins
 - 参考版本：v0.4.7（插件目录 LICENSE 为 MIT）
 - 整合用途（v0.3.0）：思考/回复强制中文（host system prompt 注入）、
-  思考块增强渲染（assistant-step 渲染器替换）、界面硬编码英文中文化。
+  思考块增强渲染（assistant-step 渲染器替换）。
 - 本地转写文件（非逐字拷贝；类名/注册名/默认行为/降级逻辑有改动）：
   - src/client/think/thinkView.tsx —— 对应上游 lib/parts/assistant.part.js
     （渲染器/思考块；THINK_STYLES 样式常量迁移于此）
-  - src/client/index.ts —— 对应上游 lib/parts/apply.part.js（装配：样式注入/
-    assistant-step 渲染器注册）
-  - src/client/think/uiLocalize.ts —— 对应上游 lib/parts/zh-tables.part.js
-    与 zh-localize.part.js
-  - src/index.ts —— 对应上游 lib/index.js（PROMPT_TEXT 与注入方式）
+  - src/client/features/think/index.ts —— 对应上游 lib/parts/apply.part.js 的
+    assistant-step 渲染器注册；同一文件里的宽度手柄样式注入现由
+    src/client/features/width/index.ts 承载（批次⑦ 按职责拆出）。
+    src/client/index.ts 仍是 client 入口，只做装配协调，不再直接持有这两件事
+  - src/host/chinesePrompt.ts —— 对应上游 lib/index.js 的 PROMPT_TEXT 与注入方式
+    （批次⑧ 从 src/index.ts 拆出）。src/index.ts 仍是 host 入口，负责该控制器的
+    装卸调用与端点注册，**并非不再对应上游**
 - 上游许可全文（原文）:
 
 MIT License
@@ -55,14 +57,19 @@ SOFTWARE.
   与流畅、优雅、极简三套预设；设置项并入本插件功能总控页，设置值改存本
   插件自己的 settings.json（不再占用上游的 ui-custom 设置命名空间）。
 - 本地转写文件（引擎逐字迁移；仅改导入路径、CSS 模块改为注入样式表、
-  设置来源改为本插件 config store）：
-  - src/client/motion/motion.ts —— 对应上游 src/client/motion/motion.ts
+  设置来源改为本插件 config store；批次② 把原先单文件的 motion.ts 拆成
+  src/client/motion/ 下的 12 个模块，逐字逻辑保留）：
+  - src/client/motion/motion.ts —— **该文件已不存在**：批次② 拆成 src/client/motion/
+    下的 12 个模块（conversation / frames / index / schedule / settingsMotion /
+    shake / spring / stagger / state / styles / textReveal / waapi）。上游许可的
+    归属由这 12 个模块共同承载，本行保留以说明去向
   - src/client/motion/settingsMotion.ts —— 对应上游 settings-motion.ts
-  - src/client/motion/animate.ts —— 对应上游 animate.ts
+  - src/client/motion/waapi.ts —— 对应上游 animate.ts（批次② 拆分时改名：
+    WAAPI 封装与 EASE_* 缓动曲线常量现居此文件）
   - src/client/motion/styles.ts —— 对应上游 motion.module.css（:global() 展开）
   - src/shared/motionSettings.ts —— 对应上游 src/shared.ts 的样式常量/默认值/预设
-  - src/client/locales.ts 中 groupMotion/motion*/style* 词条 —— 对应上游
-    motion-locales.ts
+  - src/client/core/locales.ts 中 groupMotion/motion*/style* 词条 —— 对应上游
+    motion-locales.ts（批次③ 从 src/client/locales.ts 移到 core/）
 - 上游许可全文（原文）:
 
 MIT License

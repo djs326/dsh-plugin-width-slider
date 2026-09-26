@@ -1,41 +1,29 @@
 /**
- * settingsPanelPatch.ts — 官方设置面板 UI 补丁。
+ * dialogWindow.ts — 把官方设置弹窗变成"可拖拽窗口"。
  *
- * 目标 DOM（@deepseek-ai/dsh-client-ui-settings-general，类名 hash 不稳定，
- * 因此全部按语义锚点探测，探测失败安静跳过）：
+ * 右下角把手拖宽高、顶部 header 空白处拖动移动弹窗、双击把手复位到官方尺寸并
+ * 居中；尺寸与位置记忆（localStorage 键 dsh.conversation.settingsPanelWindow，
+ * 兼容迁移旧宽度键）。两种模式：没有"用户拖过尺寸"的记忆时是自动模式，尺寸按
+ * 官方公式 min(800, 视口-48) 计算，并在窗口尺寸变化时实时重算（页面变小则弹窗
+ * 跟着收，页面够大就是官方 800 封顶，只挪位置不打断自适应）；用户拖过尺寸后进
+ * 入手动模式，改用记忆值，窗口变化时只做视口内收敛。全程只改外框
+ * width/height，不缩放内容、不动字号。
+ * 实现：弹窗改 position:absolute 于全屏 overlay 内定位（官方原为 flex 居中，切
+ * absolute 后手动维护 left/top）。
  *
- *   div.panel[role="dialog"][aria-modal="true"]
- *     ├── nav（设置左侧导航列）
- *     │   ├── div.navTitle（标题，settings.header）
- *     │   └── div.navList（tab 列表 —— 首个含多个 button 的 div 子元素）
- *     └── div.content > div.header / div.options（右侧内容）
- *
- * 功能：
- * - navScroll：navList 超高时出现纵向滚动；
- * - dialogWindow：把官方设置弹窗变成"可拖拽窗口"——右下角把手拖宽高、
- *   顶部 header 空白处拖动移动弹窗、双击把手复位到官方尺寸并居中；尺寸与
- *   位置记忆（localStorage 键 dsh.conversation.settingsPanelWindow，兼容
- *   迁移旧宽度键）。两种模式：没有"用户拖过尺寸"的记忆时是自动模式，
- *   尺寸按官方公式 min(800, 视口-48) 计算，并在窗口尺寸变化时实时重算
- *   （页面变小则弹窗跟着收，页面够大就是官方 800 封顶，只挪位置不打断
- *   自适应）；用户拖过尺寸后进入手动模式，改用记忆值，窗口变化时只做
- *   视口内收敛。全程只改外框 width/height，不缩放内容、不动字号。
- *   实现：弹窗改 position:absolute 于全屏 overlay 内定位
- *   （官方原为 flex 居中，切 absolute 后手动维护 left/top）。
- *
- * 设置面板每次开关都会重新挂载弹窗 DOM（React unmount/mount），因此两个
- * 补丁都用 body 级 MutationObserver 探测 dialog 出现后即时 patch；已 patch
- * 过的元素用 WeakSet 记录防重复。回调经 requestAnimationFrame 合并。面板
- * 关闭后 DOM 销毁，内联样式随元素一并消失；开关关闭时 disposer 完整还原
- * （含清 WeakSet，同一弹窗再次开启开关可立即重新 patch）。
+ * 设置面板每次开关都会重新挂载弹窗 DOM（React unmount/mount），因此用 body 级
+ * MutationObserver 探测 dialog 出现后即时 patch；已 patch 过的元素用 WeakSet
+ * 记录防重复，回调经 requestAnimationFrame 合并。面板关闭后 DOM 销毁，内联样式
+ * 随元素一并消失；开关关闭时 disposer 完整还原（含清 WeakSet，同一弹窗再次开启
+ * 开关可立即重新 patch）。
  */
+import { pickText } from '../../core/lang.ts'
+import { getSettings, onSettingsChanged } from '../../core/config.ts'
+import { RESIZE_HANDLE_ATTR, contentOf, findDialogWithNavRail } from '../../official/settingsDom.ts'
+import { debouncedProbe, observeBodyDebounced } from '../../core/domObserver.ts'
 
 // ── 常量 ─────────────────────────────────────────────────────────────
 
-import { pickText } from './lang.ts'
-import { getSettings, onSettingsChanged } from './config.ts'
-
-const DIALOG_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
 const RECT_KEY = 'dsh.conversation.settingsPanelWindow'
 const LEGACY_WIDTH_KEY = 'dsh.conversation.settingsPanelWidth'
 
@@ -49,7 +37,6 @@ export function clearPanelRect(): void {
     window.localStorage.removeItem(LEGACY_WIDTH_KEY)
   } catch { /* 存储不可用时没有记忆可清 */ }
 }
-const RESIZE_HANDLE_ATTR = 'data-width-slider-resize-handle'
 /** 手动拖拽的尺寸下限。 */
 const MIN_W = 640
 const MIN_H = 560
@@ -70,108 +57,7 @@ const DIALOG_RADIUS = '16px'
 /** 把手距右下角的偏移：避开圆角弧线，保证完整可见。 */
 const HANDLE_INSET = '6px'
 
-// ── 探测 ─────────────────────────────────────────────────────────────
-
-/** 找官方设置面板弹窗（role=dialog 且直接子级含 <nav>，排除其它 dialog）。 */
-function findSettingsDialog(): HTMLElement | null {
-  const dialogs = Array.from(document.querySelectorAll<HTMLElement>(DIALOG_SELECTOR))
-  for (const dialog of dialogs) {
-    if (dialog.querySelector(':scope > nav') !== null) return dialog
-  }
-  return null
-}
-
-/**
- * 找左侧 tab 列表容器：nav 下首个含 button 的 div（= navList）。
- * 官方结构 navTitle（无 button）在前、navList（多个 navCell button）在后；
- * 用"含 button"判定比固定索引更抗标题区变化。
- */
-function findNavList(dialog: HTMLElement): HTMLElement | null {
-  const nav = dialog.querySelector(':scope > nav')
-  if (!nav) return null
-  for (const child of Array.from(nav.children)) {
-    if (child instanceof HTMLElement && child.tagName === 'DIV' && child.querySelectorAll('button').length > 0) {
-      return child
-    }
-  }
-  return null
-}
-
-/** rAF 合并的 observer 回调包装：一帧内多次变更只跑一次 probe。 */
-function debouncedProbe(probe: () => void): { schedule: () => void; dispose: () => void } {
-  let rafId = 0
-  const schedule = (): void => {
-    if (rafId !== 0) return
-    rafId = requestAnimationFrame(() => {
-      rafId = 0
-      probe()
-    })
-  }
-  const dispose = (): void => {
-    if (rafId !== 0) {
-      cancelAnimationFrame(rafId)
-      rafId = 0
-    }
-  }
-  return { schedule, dispose }
-}
-
-// ── 补丁 1：左侧 tab 列表超高滚动（navScroll）────────────────────────
-
-function applyNavScrollPatch(navList: HTMLElement): void {
-  navList.style.flex = '1 1 auto'
-  navList.style.minHeight = '0'
-  navList.style.overflowY = 'auto'
-  navList.style.paddingRight = '6px'
-  const nav = navList.parentElement
-  if (nav) {
-    nav.style.minHeight = '0'
-  }
-}
-
-const patchedNavLists = new WeakSet<HTMLElement>()
-/**
- * 当前已 patch 的 navList。设置面板同时只存在一份，保留单个引用即可 —— 原来用 Set 会
- * 强引用每一次打开过的 nav 子树（关闭后仍被钉住，每开一次设置就泄漏一棵）。
- */
-let patchedNavListEl: HTMLElement | null = null
-
-function probeAndPatchNavList(): void {
-  if (typeof document === 'undefined') return
-  const dialog = findSettingsDialog()
-  if (!dialog) return
-  const navList = findNavList(dialog)
-  if (!navList || patchedNavLists.has(navList)) return
-  patchedNavLists.add(navList)
-  patchedNavListEl = navList
-  applyNavScrollPatch(navList)
-}
-
-/** 安装左侧 tab 滚动补丁（body 观察器跟随面板开合）；返回 disposer。 */
-export function installNavScrollPatch(): () => void {
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
-  probeAndPatchNavList()
-  const probe = debouncedProbe(() => probeAndPatchNavList())
-  const observer = new MutationObserver(() => probe.schedule())
-  observer.observe(document.body, { childList: true, subtree: true })
-  return () => {
-    observer.disconnect()
-    probe.dispose()
-    const navList = patchedNavListEl
-    if (navList !== null) {
-      navList.style.flex = ''
-      navList.style.minHeight = ''
-      navList.style.overflowY = ''
-      navList.style.paddingRight = ''
-      const nav = navList.parentElement
-      if (nav) nav.style.minHeight = ''
-      patchedNavLists.delete(navList)
-      patchedNavListEl = null
-    }
-  }
-}
-
-// ── 补丁 2：设置弹窗窗口化（dialogWindow：宽高可拖 + 可移动）────────
+// ── 补丁：设置弹窗窗口化（dialogWindow：宽高可拖 + 可移动）──────────
 
 /** 窗口矩形记忆：w/h 尺寸，left/top 相对视口（absolute 于全屏 overlay）。 */
 interface DialogRect {
@@ -415,12 +301,11 @@ function buildResizeHandle(dialog: HTMLElement): HTMLElement {
 
 /** 绑定 header 空白区拖动移动弹窗；返回解绑函数。 */
 function attachMoveBar(dialog: HTMLElement): () => void {
-  const nav = dialog.querySelector(':scope > nav')
-  const content = nav?.nextElementSibling
-  const header = content instanceof HTMLElement && content.firstElementChild instanceof HTMLElement
-    ? content.firstElementChild
-    : null
-  if (!header) return () => {}
+  // 内容列的定位此前在这里另写了一份（`:scope > nav` + nextElementSibling），
+  // 现与动效引擎共用 official/settingsDom.ts 的 contentOf()：两处取的都是"nav 之后
+  // 那一列"，而 querySelector('nav') 在直接子级存在 nav 时按文档序返回的正是它。
+  const header = contentOf(dialog)?.firstElementChild
+  if (!(header instanceof HTMLElement)) return () => {}
   header.style.cursor = 'move'
   let drag: { startX: number; startY: number; baseLeft: number; baseTop: number } | null = null
   const onDown = (event: PointerEvent): void => {
@@ -569,7 +454,7 @@ function applyDialogWindowPatch(dialog: HTMLElement): void {
 
 function probeAndPatchDialog(): void {
   if (typeof document === 'undefined') return
-  const dialog = findSettingsDialog()
+  const dialog = findDialogWithNavRail()
   if (!dialog || patchedDialogs.has(dialog)) return
   patchedDialogs.add(dialog)
   applyDialogWindowPatch(dialog)
@@ -596,17 +481,16 @@ function syncDialogToViewport(): void {
 export function installDialogResizePatch(): () => void {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
   probeAndPatchDialog()
+  // reapply / resize 由配置与窗口驱动，只借 debouncedProbe 的 rAF 合并；
+  // probe 要跟随面板开合，连 body 观察器一起装配（见 core/domObserver.ts）。
   const reapply = debouncedProbe(() => reapplyDialogRect())
-  const probe = debouncedProbe(() => probeAndPatchDialog())
+  const probe = observeBodyDebounced(() => probeAndPatchDialog())
   const resize = debouncedProbe(() => syncDialogToViewport())
   const onResize = (): void => { resize.schedule() }
   window.addEventListener('resize', onResize)
   // 设置里的「弹窗按比例跟随」切换后即时套用新策略。
   const offSettings = onSettingsChanged(() => reapply.schedule())
-  const observer = new MutationObserver(() => probe.schedule())
-  observer.observe(document.body, { childList: true, subtree: true })
   return () => {
-    observer.disconnect()
     probe.dispose()
     resize.dispose()
     reapply.dispose()

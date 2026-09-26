@@ -3,12 +3,12 @@
 [![npm](https://img.shields.io/npm/v/dsh-plugin-width-slider.svg)](https://www.npmjs.com/package/dsh-plugin-width-slider)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4.svg)](#环境要求)
-[![DSH](https://img.shields.io/badge/DSH-%E2%89%A5%200.1.5--rc.1-4F9EFF.svg)](#环境要求)
+[![DSH](https://img.shields.io/badge/DSH-0.1.5--rc.1%20~%200.1.7--rc.2-4F9EFF.svg)](#环境要求)
 [![Node](https://img.shields.io/badge/node-%5E22.11%20%7C%7C%20%3E%3D24-339933.svg)](#环境要求)
 
-> DSH 的一体化界面增强插件：对话宽度、思考块、界面中文化、会话与工作区管理与入场动效。
+> DSH 的一体化界面增强插件：对话宽度、思考块、会话与工作区管理与入场动效。
 
-DSH（DeepSeek Harness）的多功能增强插件。把对话宽度调节、思考块交互、输出语言、界面中文化、设置面板补丁、会话删除、工作区分页与入场动效收进同一个插件，每项功能独立开关、改动即时生效。
+DSH（DeepSeek Harness）的多功能增强插件。把对话宽度调节、思考块交互、输出语言、设置面板补丁、会话删除、工作区分页与入场动效收进同一个插件，每项功能独立开关、改动即时生效。
 
 ## 简介
 
@@ -17,11 +17,10 @@ dsh-plugin-width-slider 面向 DSH 的日常使用场景，补齐官方客户端
 - **对话宽度**用滑块替代原生拖拽手柄，按下即预览，宽度在重启后保持；
 - **思考块**保留官方外观，只定制展开/收起行为（生成中展开、结束后自动收起）；
 - **输出语言**通过 host 端 system prompt 注入，强制思考与回复使用简体中文；
-- **界面中文化**替换官方残留的硬编码英文标签；
 - **面板补丁**让官方设置面板可拖拽调宽（没动过时保持官方尺寸与位置，并随窗口大小自动适配）、左侧导航超高时可滚动；
 - **会话删除**补全官方缺失的会话删除能力（二次确认后执行完整删除链）；
 - **工作区分页**把侧栏工作区标题行改造成页签栏，支持自建分组；
-- **入场动效**为对话内容、侧边栏、新建对话与设置面板提供四组可配置的动效，并按消息角色分流（用户消息侧向滑入、助手正文用所选样式、工具与系统行轻微淡入）。
+- **入场动效**由一个总闸（关闭 / 跟随系统 / 开启）与一档风格（流畅 / 优雅 / 极简）控制，五处场景各自可开关，并按消息角色分流（用户消息侧向滑入、助手正文用所选样式、工具与系统行轻微淡入）。
 
 本插件整合了两个上游插件（dsh-think-zh-expand、dsh-client-ui-custom）的成熟能力，安装本插件后无需再单独安装它们，详见[兼容性与已知限制](#兼容性与已知限制)。
 
@@ -62,7 +61,6 @@ dsh-plugin-width-slider 面向 DSH 的日常使用场景，补齐官方客户端
 
 ### 界面
 
-- **界面中文化**：把官方界面残留的硬编码英文标签（Tool Call、Thinking 等）替换为中文。
 - **设置面板窗口化**：没动过时与官方完全一致——官方尺寸（宽 800px、高 min(800px, 视口高 − 48px)）、官方居中位置，并随窗口大小自动适配；右下角把手可调整宽高、顶部标题区空白处可拖动移动，此后尺寸与位置被记住，窗口变小时自动收进视口（只改外框，不缩放内容、不改字号）；双击把手复位回官方尺寸与位置。为让把手完整可见，官方弹窗圆角由 32px 收到 16px，把手用「圆角底 + 双斜线」样式并内收 6px。
 - **弹窗按比例跟随**（默认关）：开启后弹窗尺寸改按窗口比例（宽 62%、高 82%，保留视口边距）自适应，窗口缩放时弹窗跟着缩放；此模式下尺寸不可拖拽，位置仍可拖。
 - **设置导航滚动**：左侧功能列表条目过多时显示纵向滚动条，不再被挤压截断。
@@ -77,11 +75,11 @@ dsh-plugin-width-slider 面向 DSH 的日常使用场景，补齐官方客户端
 
 整合自 [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom)，设置项收进本插件的功能总控页。
 
-- **四组独立动效**：对话内容入场、侧边栏入场、新建对话入场、设置面板动效，每组独立开关。
-- **样式可选**：对话内容 6 种（淡入上浮 / 轻柔淡入 / 上浮放大 / 右侧滑入 / 模糊显影 / 轻盈缩放），侧边栏 4 种（左侧滑入 / 轻柔淡入 / 纵向展开 / 自上而下），新建对话 4 种（轻柔显影 / 轻柔淡入 / 柔和绽放 / 柔和缩放）。
+- **一个总闸，三档**：关闭 / 跟随系统 / 开启。默认关闭——本插件不默认改写官方界面的表现。「跟随系统」读操作系统的「减少动态效果」设置并实时跟随：`no-preference` 只说明用户没设过、不代表他想要全量动效，只有 `reduce` 能被信任。
+- **四档风格，选中即演示**：轻柔 / 上浮 / 滑入 / 显影。点一张卡片就当场在设置页里把这一档演一遍——名字只用来回认，不用来传达效果。预览直接调用引擎的入场帧与缓动曲线，不存第二份拷贝，因此不会与实机漂移；只有时长按 3 倍放慢——实机 200–480ms 的位移按原速播放，在设置页里只能看到一个「闪一下」。
+- **场景不再单独暴露**：对话内容、侧边栏、新建对话、设置面板与按角色入场一律跟随总闸与风格档。把五个引擎的名字摆成五个开关，等于要求用户先学会代码结构才能设置自己。
 - **时长与手感**：入场时长按意图分档取值——位移/缩放类 `standard`(280–350ms)、纯透明度 `fast`(150–200ms)、新建对话大表面 `medium`(400–500ms)；列表逐项入场步长 70ms，尾部超过 420ms 一起入场；落位类入场（上浮、缩放、面板展开）用带 3% 过冲的 `linear()` 曲线收尾，关闭类动画单独用 `ease-in-expo`。
-- **一键预设**：流畅、优雅、极简三套预设，一次写入全部相关字段，应用后仍可逐项微调。
-- **按角色入场**：对话行不再共用一种入场——用户消息（含中途插话）从侧面滑入，助手正文用所选样式，工具调用、轮次框架、上下文注入与压缩提示只做 3px 轻微淡入。可在设置页单独关闭。
+- **按角色入场**：对话行不再共用一种入场——用户消息（含中途插话）从侧面滑入，助手正文用所选风格档的样式，工具调用、轮次框架、上下文注入与压缩提示只做 3px 轻微淡入。
 - **另外四处手感**：思考块展开时正文按自身行数逐行擦出（260–900ms）；宽度滑块甩动松手后按释放速度惯性滑行并回弹（投影 120ms、过冲约 5% 后落回）；会话删除失败时错误行抖一下；设置页打开时页面头与各组以 45ms 步长依次落位（纯 CSS，无 JS 观察器）。
 
 ## 环境要求
@@ -89,7 +87,7 @@ dsh-plugin-width-slider 面向 DSH 的日常使用场景，补齐官方客户端
 | 项目 | 要求 |
 |---|---|
 | 运行环境 | DSH（DeepSeek Harness），Windows 10/11 |
-| DSH 版本 | `>= 0.1.5-rc.1` |
+| DSH 版本 | `>= 0.1.5-rc.1`（当前基线：`0.1.7-rc.2`；已在 `0.1.5-rc.1` 与 `0.1.7-rc.2` 上逐项核对） |
 | Node.js | `^22.11` 或 `>= 24` |
 | 平台 | 仅 `win32` |
 
@@ -138,11 +136,11 @@ dsh-plugin-width-slider/
 
 1. 按上述任一方式安装并重启 DSH。
 2. 打开 **设置**，在左侧导航选择 **Width Slider**，进入功能总控页（本插件的全部开关与选项都在这一页）。
-3. 按需开关功能：除「跟随窗口宽度」外默认开启，改动即时生效并自动保存；页头右上角「恢复默认设置」可重置全部开关与宽度记忆。
+3. 按需开关功能：默认只开「对话宽度滑块 / 思考块增强 / 强制中文 / 弹窗可拖拽 / tab 栏滚动 / 会话删除」六项，动效、工作区分页、侧边栏工具并入等默认关闭，改动即时生效并自动保存；页头右上角「恢复默认设置」可重置全部开关与宽度记忆。
 
 ## 配置参考
 
-所有配置位于设置面板的 **Width Slider** 区块，改动即时生效、重启保留。除「跟随窗口宽度」外，各开关默认开启。
+所有配置位于设置面板的 **Width Slider** 区块，改动即时生效、重启保留。默认只开不改写官方界面已有元素的六项（对话宽度滑块、思考块增强、强制中文、弹窗可拖拽、tab 栏滚动、会话删除），其余默认关闭。
 
 ### 功能开关
 
@@ -152,28 +150,20 @@ dsh-plugin-width-slider/
 | 对话宽度 | 跟随窗口宽度 | 内容宽度实时等于对话列宽；开启后手动拖动不可用 | 关 |
 | 思考与输出 | 思考块增强渲染 | 思考块展开/收起交互总开关 | 开 |
 | 思考与输出 | 思考/回复强制中文 | host 端注入最高优先级语言规则 | 开 |
-| 动效 | 对话入场 | 对话内容入场动效 | 开 |
-| 动效 | 侧边栏 | 侧边栏树入场动效 | 开 |
-| 动效 | 新建对话 | 新建对话欢迎界面入场动效 | 开 |
-| 动效 | 设置界面 | 设置面板展开、页面切换与关闭动效 | 开 |
-| 动效 | 按角色入场 | 对话行按角色选择入场：用户消息侧向滑入、助手正文用所选样式、工具与系统行轻微淡入 | 开 |
-| 界面 | 界面中文化 | 替换官方残留英文标签 | 开 |
+| 动效 | 动效总闸 | 关闭 / 跟随系统 / 开启（「跟随系统」读操作系统的「减少动态效果」设置） | 关闭 |
 | 界面 | 弹窗可拖拽 | 设置面板窗口化（拖拽调宽高、移动、复位） | 开 |
 | 界面 | 弹窗按比例跟随 | 弹窗尺寸按窗口比例（62% × 82%）自适应 | 关 |
 | 界面 | tab 栏滚动 | 设置左侧导航超高时显示滚动条 | 开 |
 | 界面 | 会话删除 | 会话行「⋯」菜单新增删除项 | 开 |
-| 界面 | 工作区分页 | 侧栏工作区标题行改为页签栏 | 开 |
-| 界面 | 侧边栏工具并入 | 工作区标题行的搜索 / 视图 / 添加工作区三个按钮并入「新建会话」行，页签行独占整行 | 开 |
+| 界面 | 工作区分页 | 侧栏工作区标题行改为页签栏 | 关 |
+| 界面 | 侧边栏工具并入 | 工作区标题行的搜索 / 视图 / 添加工作区三个按钮并入「新建会话」行，页签行独占整行 | 关 |
 
 ### 样式与预设
 
 | 分组 | 选项 | 可选值 | 默认 |
 |---|---|---|---|
 | 思考与输出 | 显示方式 | 思考完自动收起 / 始终展开 | 自动收起 |
-| 动效 | 对话入场样式 | 淡入上浮 / 轻柔淡入 / 上浮放大 / 右侧滑入 / 模糊显影 / 轻盈缩放 | 淡入上浮 |
-| 动效 | 侧边栏样式 | 左侧滑入 / 轻柔淡入 / 纵向展开 / 自上而下 | 左侧滑入 |
-| 动效 | 新建对话样式 | 轻柔显影 / 轻柔淡入 / 柔和绽放 / 柔和缩放 | 轻柔显影 |
-| 动效 | 预设 | 流畅 / 优雅 / 极简（一次写入全部相关开关与样式） | — |
+| 动效 | 风格 | 轻柔 / 上浮 / 滑入 / 显影（一档同时决定对话内容、侧边栏与新建对话三处各用哪种入场样式；点击卡片即时预览） | 上浮 |
 | 通用 | 恢复默认设置 | 重置全部开关与宽度、设置面板尺寸记忆，并刷新页面 | — |
 
 ## 使用说明
@@ -206,11 +196,12 @@ dsh-plugin-width-slider/
 
 ### 入场动效
 
-- 四组动效各自独立开关；关闭某组后，它对应的样式下拉自动置灰。
-- 点击「流畅 / 优雅 / 极简」中的任一预设，会一次性写入该预设的全部开关与样式；当前取值与某套预设完全一致时，该预设按钮高亮。
-- 动效遵循系统「减少动态效果」设置：系统开启该选项时自动降级为仅淡入。
-- 「按角色入场」关闭时，对话行全部回到所选样式（与本插件早期版本的行为一致）。
-- 其余手感各有门控：思考块逐行揭示与欢迎标题擦出随对应的入场开关；设置页错峰落位是纯 CSS，只随系统「减少动态效果」开关；宽度滑块的甩动惯性与删除失败抖动始终启用，减少动态效果下自动跳过。
+- 动效组只有两块：**总闸**（关闭 / 跟随系统 / 开启）与**风格**（四张卡片）。
+- 打开设置页时会自动把当前档演一遍，点任意风格卡也会当场演示；预览区右上「再看一遍」可重播。预览按 3 倍慢放播放：帧与缓动曲线仍取引擎那一份，变慢的只是节奏。
+- 总闸为「关闭」时风格卡置灰不可点，组内会说明原因——不做出「选了却不生效」的卡片。
+- 「跟随系统」档实时跟随操作系统的「减少动态效果」：系统设置变化时不刷新页面即生效。
+- 场景（对话内容、侧边栏、新建对话、设置面板、按角色入场）不再单独开关，一律跟随总闸；样式一律由风格档决定。
+- 其余手感各有门控：思考块逐行揭示与欢迎标题擦出随总闸；设置页错峰落位是纯 CSS，只随系统「减少动态效果」开关；宽度滑块的甩动惯性与删除失败抖动始终启用，减少动态效果下自动跳过。
 
 ## 界面预览
 
@@ -246,13 +237,12 @@ dsh-plugin-width-slider/
 | 预览模式 | `createPortal` 挂载到 `document.body`，`position: fixed; inset: 0; z-index: 100000`，同时把 `[data-shell-overlay]` 等设置面板覆盖层设为 `opacity: 0` |
 | 思考块渲染 | 覆盖 `conversation.chat.node` 的 `assistant-step` 渲染器（priority −1），只提供展开/收起；头部沿用官方 `DisclosureRow` + `IconThinkOutline14`，正文纯文本 |
 | 强制中文 | host 端注册 `systemPrompt.section`（order −90），开关热注销/注册 |
-| 界面中文化 | MutationObserver 精确替换「完全等于」词表的叶子文本节点（排除代码与输入区） |
 | 面板补丁 | body 观察器以 `[role=dialog][aria-modal]` + `> nav` 语义锚点探测设置面板，不依赖 CSS Module 哈希类名，探测失败安静跳过 |
 | 会话删除 | 克隆官方菜单项注入「⋯」菜单，目标会话 id 从会话行 React fiber 直读（避免按标题反查误删）；host 端 `/width-slider` `sessionDelete` 执行删除链，失败即中止并留痕 |
 | 工作区分页 | 常驻 wrapper 包裹官方 `sidebar.workspaces`，按当前页签过滤会话与工作区（结果按源引用与作用域缓存，保证 `getSnapshot` 引用稳定）；分组数据经 `/width-slider` `wsGroupsRead/Write` 存 `$DSH_HOME/storages/dsh-plugin-width-slider/workspace-groups.json` |
-| 动效 | 命令式 Web Animations 实现（`replayEntrance`），而非 CSS `@starting-style`：宿主挂载行或面板时已强制过一次样式解析，声明式起始态不会生效；观察 `[data-chat-anchor-key]` 消息行与 `[role="tree"] [role="treeitem"]` 侧栏行，整批载入按文档序错峰入场；设置面板动效拦截三条关闭路径，先让真实面板缩小再放行 |
+| 动效 | 命令式 Web Animations 实现（`replayEntrance`），而非 CSS `@starting-style`：宿主挂载行或面板时已强制过一次样式解析，声明式起始态不会生效；观察 `[data-chat-anchor-key]` 消息行与 `[role="tree"] [role="treeitem"]` 侧栏行，整批载入按文档序错峰入场；设置面板动效拦截三条关闭路径，先让真实面板缩小再放行；设置页的实时预览复用同一份 `entranceSpec()` 帧表（时长按 3 倍放慢，帧与缓动不变），不存第二份拷贝 |
 | 动效 | 角色化入场读宿主发布的 `data-chat-flow-kind`（`user`/`steering` → 用户角色，`assistant-step` → 所选样式，其余 → 过程角色）；思考块正文按渲染高度估算行数做 `clip-path` 逐行擦除；宽度滑块取最近 120ms 的指针采样算释放速度，投影 120ms 后由欠阻尼弹簧（k=260、ζ≈0.67）驱动，落点定稿时才写入存储；设置页错峰由 `nth-child` 加一个 CSS 变量步长实现，不经过 JS |
-| 配置存储 | 功能开关（含动效开关与样式）经 `/api/width-slider` 端点读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；client 端 config store 负责热切换 |
+| 配置存储 | 功能开关（含动效总闸与风格档）经 `/api/width-slider` 端点读写 `$DSH_HOME/storages/dsh-plugin-width-slider/settings.json`（原子写）；client 端 config store 负责热切换 |
 | 滑块几何 | 轨道高度等于圆形手柄直径（设置页行内 16px、预览遮罩 28px），填充条右端为与手柄同心同半径的半圆头，无平直切面露出 |
 | 性能 | 列宽在 `pointerdown` 时快照，宽度更新经 rAF 节流，拖动不卡顿 |
 
@@ -264,8 +254,8 @@ dsh-plugin-width-slider/
 
 | 上游插件 | 上游参考版本 | 本插件整合版本 | 整合内容 |
 |---|---|---|---|
-| [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins) | v0.4.7 | v0.3.0 | 强制中文、思考块渲染、界面中文化 |
-| [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom) | v0.1.0-rc.12 | v0.8.0 | 四组入场动效与三套预设 |
+| [dsh-think-zh-expand](https://github.com/baosfeng/my-dsh-plugins) | v0.4.7 | v0.3.0 | 强制中文、思考块渲染 |
+| [dsh-client-ui-custom](https://github.com/yoli-mi/dsh-client-ui-custom) | v0.1.0-rc.12 | v0.8.0 | 入场动效引擎（本插件 2.0.0 起改为总闸 + 风格档） |
 
 同时启用时的后果：同一块界面被两个渲染器接管、出现两个按钮与两套设置，或两套动效引擎对同一批 DOM 各自动画一次导致效果叠加。
 
@@ -273,10 +263,10 @@ dsh-plugin-width-slider/
 
 | 项目 | 说明 |
 |---|---|
-| 目标内核 | DSH `0.1.5-rc.1`（当前官方内核）。插件只适配该内核，不为更早版本保留兼容分支 |
+| 目标内核 | DSH `0.1.7-rc.2`（当前官方内核），并对 `0.1.5-rc.1` 保留兼容兜底：思考块图标名回退、会话行 id 取法回退、会话菜单项注入回退。不为更早版本保留兼容分支 |
 | Host 入口依赖 | `inject` 声明 `systemPrompt`、`connection`、`subprocess`、`webServer`。端点注册**不用** `connection.rpc.handle`：该调用把路由注册为 `owner.effect(() => owner.webServer.register(route))`，owner 取 connection 自身 ctx，而 0.1.5 的 connection 已不在自身 ctx 注入 `webServer`，第三方插件调用必抛 `cannot get property "webServer" without inject` —— 所以承担路由注册的 fiber 自己必须声明 `webServer` 依赖。注册改走 `connection.fetch.register` 的 `/api` 精确 Fetch 路由 |
 | 端点与围栏 | 客户端 `POST /api/width-slider`，请求体为 `{ method, payload }`，响应体为处理器返回的 JSON；围栏由 connection 的 `/api` 处理器统一施加（可信 Host/Origin + 浏览器认证） |
-| 已核对稳定的契约 | slot（`conversation.chat.node`、`settings.section`、`shell.overlay`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`IconThinkOutline14`、`Modal`）、`__ModuleLoader__` 握手、`connection.rpc`、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域 |
+| 已核对稳定的契约 | slot（`conversation.chat.node`、`settings.section`、`shell.overlay`、`sidebar.workspaces`、`sidebar.workspaces.session.menu.item`）、ui-primitives 组件（`MarkdownText`、`DisclosureRow`、`Modal`、`MenuItemButton`、`IconThinkOutlineRegular`/`IconThinkOutlineMedium`，旧名 `IconThinkOutline14` 保留回退）、`__ModuleLoader__` 握手、`connection.fetch.register` 的 `/api` 精确 Fetch 路由、`locale.register`、`sessions.list` 快照、`storageDomain` 的 `session_projcache` 与 `workspace` 域、会话行根 `data-row-key="session:<id>"` |
 
 ### 验证状态
 
@@ -286,7 +276,12 @@ dsh-plugin-width-slider/
 | 会话删除、宽度启动恢复 | 已由作者验收 |
 | 工作区分页 | 已由作者验收 |
 | 设置页排版重写与动效整合 | 已在 DSH 0.1.5-rc.1 上实测（角色化入场、思考块逐行揭示、滑块惯性回弹、设置页错峰落位逐项核对） |
+| 动效设置重写（2.0.0） | 已在 DSH 0.1.7-rc.1 上实测（总闸三态、四档风格卡即时预览、总闸关闭时置灰） |
+| 预览慢放与弹窗动效归因（2.0.1） | 预览改为 3 倍慢放；桌面版设置弹窗的入场动效经代码逐项核对（原点锚到弹窗外触发按钮、0.62 起点缩放、`EASE_SPRING` 过冲、320ms） |
+| 弹窗锚点修复（2.0.2） | 已定位桌面版 0.1.7 的回归：该版本把 `aria-haspopup="dialog"` 加到了上下文仪表、统计药丸、用量面板等多处控件上，引擎原先取文档第一个匹配元素当锚点，会锚到视口另一侧的控件；改为三级优先取锚点（指针按下的按钮 → `aria-expanded="true"` 的候选 → 离弹窗最近者），排除弹窗内部按钮，并把锚点夹取到弹窗边界内 |
 | 0.1.5 内核适配（RPC 迁移到 `/api` 精确 Fetch 路由） | 已在 DSH 0.1.5-rc.1 上实测（`/api/width-slider` 返回 200，设置读写与各功能开关即时生效） |
+| 0.1.7-rc.2 内核适配 | 已逐项核对：host 侧 `systemPrompt.section` / `agents.cancel`+`whenIdle` / `sessions.detachEntered`、五个 client 服务（`slots`/`locale`/`connection`/`sessions`/`workspaces`）与 slot API、DOM 锚点、`__ModuleLoader__` 握手、require 白名单全部命中；修复思考块图标名、按 `groupPart` 过滤块（避免思考块与回复重复渲染）、会话行 id 与菜单项改走官方契约。其中 client 侧的 `connection` 已在 2.1.0 移除——它在本插件里始终零消费者，端点调用一直走原生 `fetch` 而非 `connection.rpc.call`（host 侧的 `connection` / `webServer` 依赖不变，见上表） |
+| 端点契约集中化与入口服务收敛（2.1.0） | 已由本仓测试覆盖（端点契约测试钉住路径、五个方法名与请求形状；client 入口装配用例覆盖 E1–E15 生命周期）；**未在真实 DSH 进程里加载过** |
 
 ### 已知限制
 
@@ -312,7 +307,7 @@ lib/
 └── types/           # 类型声明（tsc 产出）
 ```
 
-测试位于 `test/`（8 个用例文件、约 94 项：设置面板动效、思考块渲染、动效角色映射、弹簧手感、文字擦除、侧边栏工具并入、工作区页签对话框）；仓库内包含 DSH 源码副本（`dsh-src/`），已在 `vitest.config.ts` 中排除，不参与测试收集。
+测试位于 `test/`（31 个用例文件、305 项：设置面板动效、思考块渲染与分组过滤、动效角色映射、动效总闸与风格档判定、弹簧手感、文字擦除、侧边栏工具并入、会话删除、工作区页签对话框、端点协议契约、client 入口装配、`MOTION_CSS` 字符串快照，全部通过）；仓库内包含 DSH 源码副本（`dsh-src/`），已在 `vitest.config.ts` 中排除，不参与测试收集。
 
 ### 已知问题
 
@@ -325,32 +320,56 @@ lib/
 ```
 dsh-plugin-width-slider/
 ├── src/
-│   ├── index.ts                     # Host 端：systemPrompt 中文注入 + /api/width-slider 端点 + storages 配置
+│   ├── index.ts                     # Host 端入口：注入装配 + 端点注册
 │   ├── host/
+│   │   ├── api.ts                   # 五个端点的分发器（readSettings / writeSettings / wsGroupsRead / wsGroupsWrite / sessionDelete）
+│   │   ├── chinesePrompt.ts         # 中文强制注入（systemPrompt.section 的三态装卸）
+│   │   ├── dshHome.ts               # $DSH_HOME 解析
 │   │   ├── endpointChannel.ts       # /api 下 JSON 端点注册（connection.fetch.register）
-│   │   └── sessionDeleteService.ts  # 会话删除链（停任务、删目录、清投影缓存、工作区记账）
+│   │   ├── jsonFile.ts              # JSON 读写、损坏文件的改名保留与回落
+│   │   ├── sessionDeleteService.ts  # 会话删除链（停任务、删目录、清投影缓存、工作区记账）
+│   │   ├── settingsStore.ts         # settings.json 的 per-apply store
+│   │   └── workspaceGroupsStore.ts  # workspace-groups.json 的 per-apply store
 │   ├── shared/
 │   │   ├── settings.ts              # 功能开关契约（host/client 唯一真源）
-│   │   ├── motionSettings.ts        # 动效样式 id、默认值与三套预设
-│   │   └── dshHome.ts               # $DSH_HOME 解析
+│   │   ├── motionSettings.ts        # 动效总闸三态与四档风格
+│   │   ├── endpointContract.ts      # 端点路径、五个方法名与响应信封
+│   │   └── types.ts                 # Disposer 等最小共享类型
+│   ├── env.d.ts                     # 运行时模块类型桩
 │   └── client/
 │       ├── index.ts                 # Client 端入口：locale 注册 + 受控功能生命周期
-│       ├── config.ts                # FeatureSettings 契约 + client 配置 store
-│       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页
-│       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览、rAF 拖动、释放惯性与持久化）
-│       ├── settingsPanelPatch.ts    # 面板补丁：弹窗窗口化 + 左侧导航滚动
-│       ├── widthPrefs.ts            # 宽度偏好读写/发布与启动恢复
 │       ├── sessionDelete.ts         # 会话删除菜单项与确认框
-│       ├── workspaceTabs.tsx        # 工作区分页：页签栏、分组 store、树过滤 wrapper
-│       ├── endpointChannel.ts       # /api 端点调用（POST { method, payload }）
-│       ├── think/                   # 思考块渲染器与界面中文化词表
-│       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）+ 弹簧手感 + 文字擦除
-│       ├── lang.ts                  # 界面语言判定
-│       └── locales.ts               # zh / en 文案
+│       ├── sidebarToolsMerge.ts     # 侧边栏工具并入
+│       ├── widthPrefs.ts            # 宽度偏好读写/发布与启动恢复
+│       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览、rAF 拖动、释放惯性与持久化）
+│       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页
+│       ├── workspaceTabs.tsx        # 兼容转发壳（真正的实现在 patches/wsTabs/）
+│       ├── core/                    # 跨功能基础设施
+│       │   ├── config.ts            # FeatureSettings 契约 + client 配置 store
+│       │   ├── domObserver.ts       # DOM 变更观察的统一封装
+│       │   ├── endpointChannel.ts   # /api 端点调用（POST { method, payload }）
+│       │   ├── features.ts          # 受控功能注册表
+│       │   ├── lang.ts              # 界面语言判定
+│       │   ├── locales.ts           # zh / en 文案
+│       │   ├── overlayState.ts      # 浮层状态
+│       │   ├── primitives.ts        # ui-primitives 的取用封装
+│       │   └── rpc.ts               # 设置读写的端点薄封装
+│       ├── features/                # 受控功能的装配层
+│       │   ├── motion/index.ts      # 动效引擎的装卸与槽位绑定
+│       │   ├── think/index.ts       # 思考块渲染器注册与样式注入
+│       │   └── width/index.ts       # 宽度启动恢复与手柄隐藏样式
+│       ├── official/                # 官方 DOM 与契约的适配层
+│       │   ├── chatDom.ts           # 对话区 DOM 锚点
+│       │   ├── menuInjection.ts     # 会话行菜单项注入
+│       │   └── settingsDom.ts       # 设置面板 DOM 锚点
+│       ├── patches/                 # 官方界面的补丁
+│       │   ├── settingsPanel/       # 面板补丁：弹窗窗口化 + 左侧导航滚动
+│       │   └── wsTabs/              # 工作区分页：页签栏、分组 store、树过滤
+│       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）
+│       └── think/                   # 思考块渲染器
 ├── test/                            # 单元测试（含 jsdom 动效用例）
 ├── scripts/fix-dts-imports.mjs      # 构建后修正 d.ts 相对导入
-├── docs/                            # DSH 相关参考文档（非本插件运行时依赖）
-├── env.d.ts                         # 运行时模块类型桩
+├── docs/                            # 重构计划、各批实施规格与留档（非运行时依赖）
 ├── cordis.patch.yml                 # bundle patch：insert width-slider
 ├── tsdown.config.ts
 ├── tsconfig.json
@@ -372,12 +391,81 @@ dsh-plugin-width-slider/
 不能。删除操作会同时清理会话数据、磁盘日志与相关记账，执行前有二次确认。
 
 **Q：动效没有生效？**
-请检查对应的动效开关是否开启；若系统启用了「减少动态效果」，动效会自动降级为仅淡入。
+先看动效总闸是不是「关闭」（默认关闭）；若总闸选了「跟随系统」而系统启用了「减少动态效果」，动效会按设计不播放。场景不再单独开关——总闸开着就全部生效，风格卡决定怎么动。
 
 **Q：官方升级后某些功能失效？**
 部分能力依赖官方 DOM 结构，官方大幅重构界面时可能失效。此时相关补丁会安静跳过，不影响其它功能；请在 [Issues](https://github.com/djs326/dsh-plugin-width-slider/issues) 反馈并附上 DSH 版本号。
 
 ## 更新日志
+
+### 2.1.0
+
+- **端点协议集中化**：`/api/width-slider` 的路径与五个方法名（`readSettings` / `writeSettings` / `wsGroupsRead` / `wsGroupsWrite` / `sessionDelete`）原先以字符串字面量散落在 host 与 client 共八处，改一处漏一处既无编译期也无运行时提示。现在集中在新建的 `src/shared/endpointContract.ts`，并由新增的端点契约测试钉住路径、五个方法名、请求形状与响应信封。
+- **client 入口服务收敛**：`inject` 移除零消费者的 `connection`——client 侧的端点调用一直走原生 `fetch`，从不经过 `connection.rpc.call`（0.1.5 内核对第三方插件已不可用）。host 侧的 `connection` / `webServer` 依赖不变，那边有必需性论证（见 `src/index.ts` 与 `src/host/endpointChannel.ts` 的说明）。
+- **命名收敛**：`motion/settingsMotion.ts` 里那个模块私有的 `PANEL_FRAMES`（起点 `opacity 0` / `scale 0.62`）改名为 `SETTINGS_PANEL_FRAMES`，以区别于引擎里同名的面板入场帧表（`motion/frames.ts` 的 `PANEL_FRAMES`，起点 `opacity 0.5` / `translate 0 6px`）——两者同名不同物，此前只靠注释区分。**帧表数值一个都没变。**
+- **删除恒 false 的菜单排除项**：`patches/wsTabs/assignMenuItem.ts` 的 `excludeAttrs` 里有一个本插件旧版本自己的属性名，删掉后语义不变（排除表不需要包含自己的 `attr`，`official/menuInjection.ts` 的查找条件已覆盖）；会话删除项仍在排除表里。
+- **测试规模**：新增 `MOTION_CSS` 字符串快照、client 入口装配端到端覆盖、端点契约测试；用例文件从 22 个增至 **31** 个，用例数从 228 项增至 **305** 项。
+- **文档**：README 的项目结构按当前实际的文件组织重写（host 侧拆分、client 的 `core/` / `features/` / `official/` / `patches/` 分层）；第三方声明里六处已失效的文件路径更正（含两个已被拆分/改名的文件）。
+- **内部结构**：批次②–⑧ 已把 `src/index.ts` 与 `src/client/index.ts` 之外的模块按职责分层；本版把端点协议与版本号一并收敛。
+
+以上改动由 tsc、vitest 与构建产物核对验证；**本版本未在真实 DSH 进程里加载过端到端验证**。
+
+### 2.0.2
+
+- **修复设置弹窗「从上方出现」**：DSH 0.1.7 把 `aria-haspopup="dialog"` 加到了上下文仪表、统计药丸、用量面板等多处控件上，而引擎原先用 `document.querySelector` 取文档里第一个这样的按钮当缩放锚点——命中的可能是视口另一侧的控件，面板就从那个点往外放大，看起来像从上方飘进来。现在按三级优先取锚点：指针按下的那个按钮 → `aria-expanded="true"` 的候选（弹窗打开时只有触发的那个按钮是展开态）→ 离弹窗最近的候选；候选一律排除弹窗内部的按钮。
+- **锚点夹取到弹窗边界内**：触发按钮在弹窗上方或侧方时，锚点原先落在面板之外，面板的缩放看起来像凭空膨胀。现在锚点被夹到最近的那条边上——按钮在上方就落在顶边、在侧方就落在对应边，方向感保留，但不再越界。
+- **新增 3 个回归用例**：`test/settingsMotion.test.ts` 增加「多个候选时只认展开的那个」「触发按钮在弹窗外时锚点被夹取到边界」「弹窗内部的按钮不会被当作自己的触发按钮」三例（测试总数 225 → 228）。
+- **预览标题恢复为只写「预览」**：2.0.1 曾把倍率写进标题（「预览 · 慢放 3 倍」），现改回只写「预览」——慢放本身保留，只是不再在界面文案里标注倍率。
+
+### 2.0.1
+
+- **预览改为慢放**：预览时长从原速改为 3 倍放慢（300ms 档约 900ms）。帧与缓动曲线仍取引擎那一份——变慢的只是节奏，不是效果本身；原速下 4–12px 的位移在设置页里只能看到一个「闪一下」，看不出形状。慢放只是为了让眼睛跟得上，预览区标题保持只写「预览」，不额外标注倍率。
+- **桌面版设置弹窗动效的归因**：弹窗「从上方出现」由四个因素叠加——缩放原点被锚到弹窗外的触发按钮中心（按钮在弹窗上方时该原点 y 为负，面板从面板外的那个点往外放大）、`PANEL_FRAMES` 起点缩放 0.62、`EASE_SPRING` 曲线峰值 108.3% 的过冲、全程 320ms。代码位置：`src/client/motion/settingsMotion.ts` 的 `triggerOrigin()` / `PANEL_FRAMES` / `PANEL_REPLAY_MS` 与 `src/client/motion/animate.ts` 的 `EASE_SPRING`。本次按用户决定保持现状，只改预览。
+- **两个 profile 的设置弹窗按钮位置差异与本插件无关**：web profile 多装了 `dsh-settings-drawer`，它往 `settings.section` 注册了一个「设置抽屉」导航项、并过滤导航列表，因此左侧导航条目数与 desktop 不同。
+
+### 2.0.0
+
+- **动效设置推倒重写**：设置页的动效组从九个平铺控件（四个场景开关、三个样式下拉、一组预设，外加一个「高级」展开）压到两块——**总闸**（关闭 / 跟随系统 / 开启）与**风格**（四张卡片），整组只剩 5 个控件。
+- **新增实时预览**：点风格卡或打开设置页时，当场在设置页里把这一档演一遍（一条模拟侧栏项 + 一条模拟消息）。预览直接调用引擎的 `entranceSpec()` 帧表与时长，不存第二份拷贝——预览一旦与实机漂移，教的就是错的东西。
+- **删除全部场景开关**：`motionEnabled`、`sidebarMotionEnabled`、`newChatMotionEnabled`、`settingsMotionEnabled`、`motionRoleEntrance`、`motionStyle`、`sidebarMotionStyle`、`newChatMotionStyle` 八个字段整批移除，场景一律跟随总闸。把五个引擎的名字摆成五个开关，等于要求用户先学会代码结构才能设置自己。
+- **风格从三档改为四档**：轻柔（只变透明度）/ 上浮 / 滑入 / 显影。每档给三个场景各选一套入场样式，覆盖原有的 12 种样式；名字只用来回认，效果由预览当场说明。
+- **配置字段由 20 个减为 12 个**：新增 `motionLook`（默认 `rise`），保留 `motionMode`；旧字段读到时一律丢弃、不做迁移——它们表达的「哪些地方动」已经并入总闸，旧值没有对应物。
+- 升级提示：老配置里的动效键会被忽略，升级后总闸回到默认的「关闭」；风格档默认「上浮」。想用动效请在总控页把总闸切到「跟随系统」或「开启」。
+
+### 1.8.0
+
+- **动效组重做：一个总闸加一档风格**。原来这一组平铺四个开关、三个样式下拉再加一组预设，用户得先读完九个控件才敢动手，而它本来只是一次决策——动不动、以及怎么动。现在常驻两行：**总闸**（关闭 / 跟随系统 / 开启）与**风格**（流畅 / 优雅 / 极简），其余场景开关与样式下拉收进「高级」展开区。
+- **新增「跟随系统」档**：按操作系统的「减少动态效果」设置决定，并监听其变化实时生效（不刷新页面）。`prefers-reduced-motion: no-preference` 只说明用户没设过、不代表他想要全量动效；原先"系统开了就降级为仅淡入"的隐式行为，现在是一个显式档位。
+- **风格档不再动开关**：以前点一次「流畅 / 优雅 / 极简」会连带把用户单独关掉的场景重新打开；现在它只写三处场景的样式取值（`MotionPresetConfig` 随之改名为 `MotionStylePreset`）。
+- **新增配置字段 `motionMode`**，取值 `off`（默认）/ `system` / `on`；判定收在共享层的纯函数 `motionAllowed(mode, systemReducesMotion)`，host、client 与测试共用同一份。
+- **总闸关闭时场景控件整体置灰**并在组内说明原因——不做出「打开了却不生效」的开关。从「关闭」切到任一启用档时，若场景开关全关会被一并打开；已经开着的、以及用户单独关掉的，都不动。
+- 升级提示：`motionMode` 是新字段，老配置文件里没有，`mergeSettings` 会让它回落到默认的「关闭」。若你此前把动效开着，升级后需要把总闸切到「跟随系统」或「开启」。
+
+### 1.7.0
+
+- **调整默认开关**：默认只开「对话宽度滑块、思考块增强、强制中文、弹窗可拖拽、tab 栏滚动、会话删除」六项——这几项要么只调对话宽度，要么只注入提示词，要么只在官方界面上叠加新元素，都不改写官方已有元素。以下改为默认关闭：**工作区分页**与**侧边栏工具并入**（会整行替换或搬走官方已有元素）、**全部动效开关**（对话入场、侧边栏、新建对话、设置界面、按角色入场）。「设置弹窗尺寸自适应」原本就是默认关。
+- **默认值收成单一真源**：`mergeSettings` 原来对布尔用 `!== false` 判定（配置缺键即视为开），与 `DEFAULT_FEATURE_SETTINGS` 是两套逻辑，改默认值时容易静默漂移；现在每个字段一律以 `DEFAULT_FEATURE_SETTINGS` 回落，布尔只认真正的布尔值，脏值不再被当成 `true`。
+- 升级提示：默认值只影响新装用户与「恢复默认设置」。已有配置文件里每个键都显式存在，升级后不会自动变成新默认；想换成新默认请点一次「恢复默认设置」。
+
+### 1.6.0
+
+- **移除「界面中文化」功能**：该功能靠词表匹配官方界面的硬编码英文标签，DSH 0.1.7 大量改写界面文案后命中的条目越来越少，维护成本高于收益，故整项下线——删除 `src/client/think/uiLocalize.ts` 与 `test/uiLocalize.test.ts`、设置总控页上的开关、`uiLocalize` 配置字段（老配置文件里的该键会被忽略），并同步 README 与第三方声明。`src/client/lang.ts` 的 `isZhInterface()` 保留：思考块（「已停止」标签）、会话删除确认框与设置面板补丁仍用它判断界面语言。配置字段由 19 个减为 18 个，总控页开关由 15 项减为 14 项。
+
+### 1.5.2
+
+- **修复「删除会话」菜单项消失（1.5.1 回归）**：1.5.1 让官方槽项与 DOM 兜底克隆项共用同一个 `data-session-delete-item` 标记，而兜底清理逻辑（`ensureDeleteMenuItem`）正是以该标记为删除键——槽项渲染后紧接着的 rAF 调度把它自己删掉了，菜单里只剩官方的置顶／重命名／分叉／归档，且没有任何报错。现在槽项改用独立的 `data-session-delete-slotitem` 标记，只承担「官方槽已接管、兜底让位」这一语义，不再参与兜底项的删除键匹配。
+- **防重复逻辑保持不变**：官方槽生效时仍会清掉可能先插入的兜底克隆项，避免同一个菜单里出现两个同名条目；0.1.5 宿主走原 DOM 克隆路径，行为不变。
+
+### 1.5.1
+
+- **适配 DSH `0.1.7-rc.2`**：逐项核对 host 与 client 两侧契约 —— `systemPrompt.section`、`agents.cancel`/`whenIdle`、`sessions.detachEntered`/`flush`、`storageDomain` 的 `session_projcache` 与 `workspace` 域、五个 client 服务（`slots`/`locale`/`connection`/`sessions`/`workspaces`）、slot API 与覆盖语义、DOM 语义锚点、`__ModuleLoader__` 握手、require 白名单，全部命中，无需改动。
+- **修复思考块图标消失**：0.1.7 把 `IconThinkOutline14` 改名为 `IconThinkOutlineRegular` / `IconThinkOutlineMedium`，插件按新名优先解析、旧名回退（0.1.5 兜底），图标不再丢。
+- **修复思考块与回复重复渲染**：0.1.7 的对话列表会把同一个 assistant-step 同时作为过程组成员（`groupPart: "reasoning"`）与独立条目（`groupPart: "response"`）渲染两次，官方按 `groupPart` 跳块才不会重复。插件渲染器此前忽略该字段，导致思考块与回复各出现两遍；现在按同样语义过滤块，并从注册处透传 `props.groupPart`。
+- **会话行 id 改读官方稳定属性**：优先读行根 `data-row-key="session:<id>"`（0.1.7 起稳定），React fiber 直读保留为 0.1.5 兜底。
+- **会话「删除」菜单项改注入官方槽** `sidebar.workspaces.session.menu.item`：由宿主直接投影 `sessionId` / `displayTitle`，不再依赖克隆官方菜单项；槽生效时不再克隆（避免菜单里出现两个同名项），旧宿主仍走 DOM 兜底。
+- **清理失效依赖声明**：`dsh.client.inject` 与 `peerDependencies` 移除 0.1.7 已不存在的 `@deepseek-ai/dsh-client-runtime`（该字段仅作加载元数据）。
+- **精简界面中文化词表**：官方 zh 字典已覆盖的 17 条标签（`Thinking`、`Tool Call(s)`、`Turns`/`Calls` 及其展开收起、`Load earlier history`、`Cancel` 等）整条移除，保留仍无官方译文的硬编码英文作为兜底。
+- **文档**：测试段落由「8 个用例文件、约 94 项」修正为实测的 23 个用例文件、222 项。
 
 ### 1.5.0
 

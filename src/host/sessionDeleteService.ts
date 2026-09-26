@@ -15,7 +15,7 @@
  */
 import { readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { dshHomePath } from '../shared/dshHome.ts'
+import { dshHomePath } from './dshHome.ts'
 
 export interface SessionDeleteCtx {
   logger?: { info?: (m: string, e?: unknown) => void; warn?: (m: string, e?: unknown) => void; error?: (m: string, e?: unknown) => void }

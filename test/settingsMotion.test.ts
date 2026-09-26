@@ -39,6 +39,9 @@ function harness(enabled = true): { options: SettingsMotionOptions; setEnabled: 
           if (i !== -1) listeners.splice(i, 1)
         }
       },
+      // The width-slider preview is never open here; this is exactly what the
+      // engine used to read straight off the preview attribute.
+      isPreviewOpen: () => false,
     },
     setEnabled: (value) => {
       on = value
@@ -327,12 +330,12 @@ describe('installSettingsMotion', () => {
     const trigger = document.createElement('button')
     trigger.setAttribute('aria-haspopup', 'dialog')
     document.body.append(trigger)
-    trigger.getBoundingClientRect = () => rect(900, 700, 40, 40)
+    trigger.getBoundingClientRect = () => rect(700, 700, 40, 40)
     trigger.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     const { dialog } = mountDialog()
     dialog.getBoundingClientRect = () => rect(100, 100, 800, 800)
     await flushObserver()
-    expect(dialog.style.getPropertyValue('--dsu-settings-origin-x')).toBe('820px')
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-x')).toBe('620px')
     expect(dialog.style.getPropertyValue('--dsu-settings-origin-y')).toBe('620px')
     handle.dispose()
   })
@@ -349,6 +352,65 @@ describe('installSettingsMotion', () => {
     await flushObserver()
     expect(dialog.style.getPropertyValue('--dsu-settings-origin-x')).toBe('10px')
     expect(dialog.style.getPropertyValue('--dsu-settings-origin-y')).toBe('10px')
+    handle.dispose()
+  })
+
+  it('picks the expanded trigger over a nearer unrelated one', async () => {
+    const h = harness()
+    const handle = installSettingsMotion(h.options)
+    // 0.1.7 put `aria-haspopup="dialog"` on the context meter, the stats pills
+    // and the usage panels too, so the document's first match can sit anywhere.
+    // Only the shell marks the button it opened from as expanded.
+    const stray = document.createElement('button')
+    stray.setAttribute('aria-haspopup', 'dialog')
+    document.body.append(stray)
+    stray.getBoundingClientRect = () => rect(120, 120, 20, 20)
+    const trigger = document.createElement('button')
+    trigger.setAttribute('aria-haspopup', 'dialog')
+    trigger.setAttribute('aria-expanded', 'true')
+    document.body.append(trigger)
+    trigger.getBoundingClientRect = () => rect(700, 700, 40, 40)
+    const { dialog } = mountDialog()
+    dialog.getBoundingClientRect = () => rect(100, 100, 800, 800)
+    await flushObserver()
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-x')).toBe('620px')
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-y')).toBe('620px')
+    handle.dispose()
+  })
+
+  it('clamps the anchor into the panel when the trigger sits outside it', async () => {
+    const h = harness()
+    const handle = installSettingsMotion(h.options)
+    const trigger = document.createElement('button')
+    trigger.setAttribute('aria-haspopup', 'dialog')
+    trigger.setAttribute('aria-expanded', 'true')
+    document.body.append(trigger)
+    trigger.getBoundingClientRect = () => rect(0, 0, 20, 20)
+    const { dialog } = mountDialog()
+    dialog.getBoundingClientRect = () => rect(100, 100, 800, 800)
+    await flushObserver()
+    // A trigger above or left of the panel would put the origin outside it and
+    // read as the panel flying in from nowhere; the anchor lands on the edge.
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-x')).toBe('0px')
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-y')).toBe('0px')
+    handle.dispose()
+  })
+
+  it('ignores a trigger that lives inside the panel', async () => {
+    const h = harness()
+    const handle = installSettingsMotion(h.options)
+    const { dialog } = mountDialog()
+    dialog.getBoundingClientRect = () => rect(100, 100, 800, 800)
+    const inner = document.createElement('button')
+    inner.setAttribute('aria-haspopup', 'dialog')
+    inner.setAttribute('aria-expanded', 'true')
+    dialog.append(inner)
+    inner.getBoundingClientRect = () => rect(700, 700, 40, 40)
+    await flushObserver()
+    // No usable trigger outside the panel: the origin stays unset and the CSS
+    // falls back to the panel centre rather than anchoring to its own content.
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-x')).toBe('')
+    expect(dialog.style.getPropertyValue('--dsu-settings-origin-y')).toBe('')
     handle.dispose()
   })
 

@@ -5,8 +5,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { isZhInterface, pickText } from '../src/client/lang.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { isZhInterface, pickText } from '../src/client/core/lang.ts'
+import { en, zh } from '../src/client/core/locales.ts'
 
 /** 中日韩统一表意文字。 */
 const CJK = /[\u3400-\u9fff\uf900-\ufaff]/

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const holder = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 
-vi.mock('../src/client/primitives.ts', () => ({ primitives: () => holder.value }))
+vi.mock('../src/client/core/primitives.ts', () => ({ primitives: () => holder.value }))
 
 import { installSessionDelete } from '../src/client/sessionDelete.ts'
 

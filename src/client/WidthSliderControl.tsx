@@ -18,7 +18,8 @@
  * the group's single row.  Styles live in WidthSliderSettings.tsx (.dsws-*).
  */
 import { createPortal } from 'react-dom'
-import { setPreviewOpen } from './previewState.ts'
+import { setPreviewOpen } from './core/overlayState.ts'
+import { observeBodyDebounced } from './core/domObserver.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -33,17 +34,17 @@ import {
   readPreference,
   setFollowEnabled,
 } from './widthPrefs.ts'
-import { prefersReducedMotion } from './motion/animate.ts'
 import {
   FLICK_MIN_VELOCITY,
   VELOCITY_WINDOW_MS,
   dragVelocity,
   isSettled,
+  prefersReducedMotion,
   projectLanding,
   stepSpring,
   type PointerSample,
   type SpringState,
-} from './motion/spring.ts'
+} from './motion/index.ts'
 
 // ── Panel slider geometry ────────────────────────────────────────────────────
 // The knob diameter equals the track height so the knob fully hides the fill
@@ -447,25 +448,18 @@ export function WidthSliderControl({ t, disabled = false }: WidthSliderControlPr
     // Fallback when no conversation root exists yet (e.g. follow enabled from
     // an empty state): republish once a [data-phase] element appears.
     let knownRoots = document.querySelectorAll('[data-phase]').length
-    // 只需感知"根元素出现/消失"：rAF 节流计数，避免流式输出每 token 都做
-    // 全文档扫描（宽度跟随本身由 ResizeObserver 负责）。
-    let rafId = 0
-    const checkRoots = () => {
-      rafId = 0
+    // 只需感知"根元素出现/消失"：body 变化经 rAF 合并计数（宽度跟随本身由
+    // ResizeObserver 负责），见 core/domObserver.ts。
+    const rootsProbe = observeBodyDebounced(() => {
       const roots = document.querySelectorAll('[data-phase]').length
       if (roots !== knownRoots) {
         knownRoots = roots
         apply()
       }
-    }
-    const mo = new MutationObserver(() => {
-      if (rafId === 0) rafId = requestAnimationFrame(checkRoots)
     })
-    mo.observe(document.body, { childList: true, subtree: true })
     return () => {
       ro.disconnect()
-      mo.disconnect()
-      if (rafId !== 0) cancelAnimationFrame(rafId)
+      rootsProbe.dispose()
       window.removeEventListener('resize', apply)
     }
   }, [follow])

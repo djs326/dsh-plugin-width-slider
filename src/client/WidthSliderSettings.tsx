@@ -5,8 +5,8 @@
  * 长说明收进悬停提示（title）。
  *   1. 对话宽度   —— 启用开关 + 跟随窗口 + 宽度滑块（WidthSliderControl）
  *   2. 思考与输出 —— 思考块增强 + 强制中文 + 显示方式（分段控件）
- *   3. 动效       —— 对话/侧边栏/新建对话入场 + 设置面板动效 + 预设与微调
- *   4. 界面       —— 中文化 / 弹窗拖拽 / tab 滚动 / 会话删除 / 工作区分页
+ *   3. 动效       —— 总闸（关闭/跟随系统/开启）+ 实时预览 + 四张风格卡
+ *   4. 界面       —— 弹窗拖拽 / tab 滚动 / 会话删除 / 工作区分页
  *
  * 数据流（单一读源）：
  * - 读取只发生在 client 入口启动时（一次 readSettings → config store）；
@@ -16,60 +16,45 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
-import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
-import { clearPanelRect } from './settingsPanelPatch.ts'
+import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './core/config.ts'
+import { clearPanelRect } from './patches/settingsPanel/dialogWindow.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
-import type { WidthSliderKey } from './locales.ts'
+import type { WidthSliderKey } from './core/locales.ts'
 import {
-  MOTION_PRESETS,
-  MOTION_STYLES,
-  NEW_CHAT_MOTION_STYLES,
-  SIDEBAR_MOTION_STYLES,
-  type MotionPresetId,
-  type MotionStyle,
-  type NewChatMotionStyle,
-  type SidebarMotionStyle,
+  MOTION_LOOK_PRESETS,
+  isMotionLook,
+  isMotionMode,
+  motionAllowed,
+  motionLookOf,
+  type MotionLookId,
 } from '../shared/motionSettings.ts'
+import { entranceSpec, prefersReducedMotion, replayEntrance } from './motion/index.ts'
 
-/** 三组样式 id → 文案键（取值与动效插件一致）。 */
-const TRANSCRIPT_STYLE_LABELS: Record<MotionStyle, keyof WidthSliderKey> = {
-  'fade-up': 'styleFadeUp',
-  fade: 'styleFade',
-  'rise-scale': 'styleRiseScale',
-  'slide-in': 'styleSlideIn',
-  'blur-in': 'styleBlurIn',
-  'scale-in': 'styleScaleIn',
+/** 风格档 id → 卡片名称文案键。 */
+const LOOK_LABELS: Record<MotionLookId, keyof WidthSliderKey> = {
+  soft: 'motionLookSoft',
+  rise: 'motionLookRise',
+  glide: 'motionLookGlide',
+  veil: 'motionLookVeil',
 }
 
-/** 侧边栏样式 id → 文案键。 */
-const SIDEBAR_STYLE_LABELS: Record<SidebarMotionStyle, keyof WidthSliderKey> = {
-  'slide-left': 'styleSlideLeft',
-  fade: 'styleFade',
-  expand: 'styleExpand',
-  'slide-down': 'styleSlideDown',
+/** 风格档 id → 卡片说明文案键。 */
+const LOOK_INFO: Record<MotionLookId, keyof WidthSliderKey> = {
+  soft: 'motionLookSoftInfo',
+  rise: 'motionLookRiseInfo',
+  glide: 'motionLookGlideInfo',
+  veil: 'motionLookVeilInfo',
 }
 
-/** 新建对话样式 id → 文案键。 */
-const NEW_CHAT_STYLE_LABELS: Record<NewChatMotionStyle, keyof WidthSliderKey> = {
-  reveal: 'styleReveal',
-  fade: 'styleFade',
-  bloom: 'styleBloom',
-  zoom: 'styleZoom',
-}
-
-/** 预设 id → 按钮文案键。 */
-const PRESET_LABELS: Record<MotionPresetId, keyof WidthSliderKey> = {
-  fluid: 'motionPresetFluid',
-  elegant: 'motionPresetElegant',
-  minimal: 'motionPresetMinimal',
-}
-
-/** 预设 id → 悬停说明文案键。 */
-const PRESET_INFO: Record<MotionPresetId, keyof WidthSliderKey> = {
-  fluid: 'motionPresetFluidInfo',
-  elegant: 'motionPresetElegantInfo',
-  minimal: 'motionPresetMinimalInfo',
-}
+/**
+ * 预览的放慢倍数。
+ *
+ * 实机入场多在 200–480ms，位移又只有 4–12px，按原速在设置页里播放几乎看不出
+ * 形状，只能看到一个「闪一下」。放慢 3 倍是为了让「往哪个方向、多大幅度」变得
+ * 可读。帧与缓动曲线仍取引擎那一份——变慢的只是节奏，不是效果本身；预览区标签
+ * 保持只写「预览」，不额外标注倍率。
+ */
+const PREVIEW_SLOWDOWN = 3
 
 export interface WidthSliderSettingsInjected {
   writeSettings: (settings: unknown) => Promise<void>
@@ -146,7 +131,32 @@ input.dsws-sw:disabled { cursor: default; }
 .dsws-mini { font: inherit; font-size: 11px; padding: 3px 9px; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary, #999); cursor: pointer; }
 .dsws-mini:hover { color: var(--dsw-alias-label-primary, #e0e0e0); }
 
-@media (max-width: 560px) { .dsws-seg-inline, .dsws-fold-inline { margin-left: 0; } }
+/* 动效组：总闸一行、预览一块、四张风格卡一排 */
+.dsws-motion-row { display: flex; align-items: center; gap: 8px; padding: 2px 3px; }
+.dsws-motion-row .dsws-seg-inline { margin-left: 0; padding: 0; }
+.dsws-hint-row { padding: 5px 8px 6px; }
+
+/* 预览区：把当前档当场演一遍。演示的是"一条侧栏项 + 一条消息"，因为四档要
+   回答的本来就是"内容怎么出现"——抽象地动一个方块说明不了任何事。 */
+.dsws-preview { margin: 6px 3px 8px; padding: 9px 11px 11px; border-radius: 9px; background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.08)); overflow: hidden; transition: opacity 160ms ease-out; }
+.dsws-preview.is-off { opacity: .45; }
+.dsws-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.dsws-preview-label { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--dsw-alias-label-caption, #888); }
+.dsws-preview-stage { display: flex; flex-direction: column; gap: 6px; }
+.dsws-preview-side, .dsws-preview-msg { align-self: flex-start; border-radius: 7px; padding: 5px 10px; font-size: 11.5px; }
+.dsws-preview-side { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16)); color: var(--dsw-alias-label-secondary, #999); }
+.dsws-preview-msg { max-width: 80%; background: var(--dsw-alias-state-business-primary, #4f9eff); color: #fff; }
+
+/* 风格卡：四档一排，点哪张就演哪张 */
+.dsws-looks { display: flex; gap: 6px; padding: 0 3px; }
+.dsws-look { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 7px 9px; border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18)); border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color 160ms ease-out, background 160ms ease-out; }
+.dsws-look:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.08)); }
+.dsws-look.on { border-color: var(--dsw-alias-state-business-primary, #4f9eff); background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f9eff) 12%, transparent); }
+.dsws-look.is-off { opacity: .45; cursor: default; }
+.dsws-look-name { font-size: 12px; font-weight: 600; }
+.dsws-look-desc { font-size: 10.5px; line-height: 1.35; color: var(--dsw-alias-label-caption, #888); }
+
+@media (max-width: 560px) { .dsws-seg-inline, .dsws-fold-inline { margin-left: 0; } .dsws-looks { flex-wrap: wrap; } .dsws-look { flex: 1 1 44%; } }
 `
 
 // ── 小组件 ────────────────────────────────────────────────────────────
@@ -188,17 +198,24 @@ function SwitchItem(props: {
 
 /** 行内分段控件（右对齐）。 */
 function Segmented(props: {
-  label: string
+  id?: string
+  label?: string
+  ariaLabel?: string
   value: string
   options: { id: string; label: string; title?: string }[]
   onChange: (value: string) => void
   disabled?: boolean
 }): JSX.Element {
-  const { label, value, options, onChange, disabled = false } = props
+  const { id, label, ariaLabel, value, options, onChange, disabled = false } = props
   return (
     <div className="dsws-seg-inline">
-      <span className="dsws-seg-label">{label}</span>
-      <div className={'dsws-seg' + (disabled ? ' is-disabled' : '')}>
+      {label === undefined ? null : <span className="dsws-seg-label">{label}</span>}
+      <div
+        id={id}
+        className={'dsws-seg' + (disabled ? ' is-disabled' : '')}
+        role="group"
+        aria-label={ariaLabel}
+      >
         {options.map((option) => (
           <button
             key={option.id}
@@ -225,6 +242,9 @@ export function WidthSliderSettings({
   const [settings, setSettings] = useState<FeatureSettings>(() => getSettings())
   /** 仅本地（用户）改动触发写盘；store 外部更新（启动读回）不写。 */
   const dirtyRef = useRef(false)
+  /** 预览区里的两条演示元素：模拟一条侧栏项与一条消息。 */
+  const previewSideRef = useRef<HTMLDivElement | null>(null)
+  const previewMsgRef = useRef<HTMLDivElement | null>(null)
 
   // 订阅 config store：入口读回 / 其它来源的配置变化同步到本页。
   useEffect(() => onSettingsChanged((next) => setSettings(next)), [])
@@ -262,7 +282,7 @@ export function WidthSliderSettings({
       localStorage.removeItem('dsh.conversation.contentWidth')
       localStorage.removeItem('dsh.conversation.contentWidthFollow')
     } catch { /* ignore */ }
-    // 弹窗尺寸/位置的记忆键由 settingsPanelPatch 持有：走它导出的清理函数，避免键名漂移
+    // 弹窗尺寸/位置的记忆键由 patches/settingsPanel/dialogWindow 持有：走它导出的清理函数，避免键名漂移
     // （此前这里删的是已经废弃的 settingsPanelWidth，导致「恢复默认」重置不了弹窗大小）。
     clearPanelRect()
     applySettings({ ...DEFAULT_FEATURE_SETTINGS })
@@ -272,19 +292,56 @@ export function WidthSliderSettings({
       .finally(() => { window.location.reload() })
   }, [writeSettings])
 
-  /** 当前动效取值与某套预设完全一致时，该预设按钮高亮。 */
-  const matchesPreset = (presetId: MotionPresetId): boolean => {
-    const preset = MOTION_PRESETS.find((entry) => entry.id === presetId)
-    if (preset === undefined) return false
-    const config = preset.config
-    return settings.motionEnabled === config.motionEnabled
-      && settings.motionStyle === config.motionStyle
-      && settings.sidebarMotionEnabled === config.sidebarMotionEnabled
-      && settings.sidebarMotionStyle === config.sidebarMotionStyle
-      && settings.newChatMotionEnabled === config.newChatMotionEnabled
-      && settings.newChatMotionStyle === config.newChatMotionStyle
-      && settings.settingsMotionEnabled === config.settingsMotionEnabled
-  }
+  /** 总闸是否真的会播出动效（`off` 不放行；`system` 档还要看系统设置）。 */
+  const motionOn = motionAllowed(settings.motionMode, prefersReducedMotion())
+
+  /**
+   * 在预览区把某一档演一遍。
+   *
+   * 帧与缓动直接取自引擎（entranceSpec），这里不存第二份拷贝：预览一旦与实机
+   * 漂移，它教的就正是错的东西，比没有预览更糟。侧栏那条用该档的 sidebar 样式、
+   * 消息那条用 transcript 样式——两条一起播，这一档的方向一眼就能看出来。
+   * 时长按 PREVIEW_SLOWDOWN 放慢，理由见那个常量。
+   */
+  const playLook = useCallback((lookId: MotionLookId): void => {
+    const look = motionLookOf(lookId)
+    const side = previewSideRef.current
+    const msg = previewMsgRef.current
+    if (side !== null) {
+      const spec = entranceSpec(look.sidebarMotionStyle)
+      replayEntrance(side, spec.frames, { duration: spec.durationMs * PREVIEW_SLOWDOWN, easing: spec.easing })
+    }
+    if (msg !== null) {
+      const spec = entranceSpec(look.motionStyle)
+      replayEntrance(msg, spec.frames, { duration: spec.durationMs * PREVIEW_SLOWDOWN, easing: spec.easing })
+    }
+  }, [])
+
+  /** 选风格：先落盘，再当场演示一遍——"选了什么"要有一个即时的答案。 */
+  const pickLook = useCallback((lookId: string): void => {
+    if (!isMotionLook(lookId)) return
+    persist({ motionLook: lookId })
+    playLook(lookId)
+  }, [persist, playLook])
+
+  /** 切总闸。场景与样式都只剩一份，所以这里只写一个字段。 */
+  const setMotionMode = useCallback((mode: string): void => {
+    if (!isMotionMode(mode)) return
+    persist({ motionMode: mode })
+  }, [persist])
+
+  /**
+   * 打开设置页时先把当前档演一遍，这样"现在是什么样子"不需要先点一下才能看到。
+   * 延迟一点是为了错开页面自己的分组落位动画（dsws-stagger-in），否则两段动效
+   * 叠在一起，反而看不清哪一段是用户的动效设置。
+   */
+  const lookRef = useRef(settings.motionLook)
+  lookRef.current = settings.motionLook
+  useEffect(() => {
+    if (!motionOn) return
+    const timer = window.setTimeout(() => playLook(lookRef.current), 320)
+    return () => window.clearTimeout(timer)
+  }, [motionOn, playLook])
 
   const id = (key: string): string => 'dsh-plugin-width-slider-' + key
 
@@ -337,6 +394,7 @@ export function WidthSliderSettings({
             onChange={(checked) => persist({ chinesePrompt: checked })}
           />
           <Segmented
+            id={id('think-mode')}
             label={t('thinkModeLabel')}
             value={settings.thinkMode}
             disabled={!settings.thinkRender}
@@ -349,109 +407,72 @@ export function WidthSliderSettings({
         </div>
       </Group>
 
-      {/* 3. 动效（整合自 dsh-client-ui-custom；读写本插件自己的设置契约） */}
+      {/* 3. 动效：一行总闸 + 一块预览 + 四张风格卡。
+          以前这里有九个控件——四个场景开关、三个样式下拉、一组预设。它们都在描述
+          实现（"对话入场用 blur-in"），而用户的问题只有两个：动不动、怎么动。
+          现在五个控件回答这两个问题，并且"怎么动"配一块当场演示的预览。 */}
       <Group title={t('groupMotion')}>
-        <div className="dsws-rowline">
-          <SwitchItem
-            id={id('motion-transcript')}
-            label={t('motionTranscript')}
-            title={t('motionTranscriptInfo')}
-            checked={settings.motionEnabled}
-            onChange={(checked) => persist({ motionEnabled: checked })}
+        <div className="dsws-motion-row">
+          <Segmented
+            id={id('motion-mode')}
+            ariaLabel={t('motionMode')}
+            value={settings.motionMode}
+            options={[
+              { id: 'off', label: t('motionModeOff'), title: t('motionModeOffInfo') },
+              { id: 'system', label: t('motionModeSystem'), title: t('motionModeSystemInfo') },
+              { id: 'on', label: t('motionModeOn'), title: t('motionModeOnInfo') },
+            ]}
+            onChange={setMotionMode}
           />
-          <select
-            className="dsws-select"
-            title={t('motionStyleTranscriptInfo')}
-            aria-label={t('motionStyleTranscriptInfo')}
-            value={settings.motionStyle}
-            disabled={!settings.motionEnabled}
-            onChange={(event) => persist({ motionStyle: event.target.value as MotionStyle })}
-          >
-            {MOTION_STYLES.map((style) => (
-              <option key={style} value={style}>{t(TRANSCRIPT_STYLE_LABELS[style])}</option>
-            ))}
-          </select>
-          <SwitchItem
-            id={id('motion-sidebar')}
-            label={t('motionSidebar')}
-            title={t('motionSidebarInfo')}
-            checked={settings.sidebarMotionEnabled}
-            onChange={(checked) => persist({ sidebarMotionEnabled: checked })}
-          />
-          <select
-            className="dsws-select"
-            title={t('motionStyleSidebarInfo')}
-            aria-label={t('motionStyleSidebarInfo')}
-            value={settings.sidebarMotionStyle}
-            disabled={!settings.sidebarMotionEnabled}
-            onChange={(event) => persist({ sidebarMotionStyle: event.target.value as SidebarMotionStyle })}
-          >
-            {SIDEBAR_MOTION_STYLES.map((style) => (
-              <option key={style} value={style}>{t(SIDEBAR_STYLE_LABELS[style])}</option>
-            ))}
-          </select>
-          <SwitchItem
-            id={id('motion-new-chat')}
-            label={t('motionNewChat')}
-            title={t('motionNewChatInfo')}
-            checked={settings.newChatMotionEnabled}
-            onChange={(checked) => persist({ newChatMotionEnabled: checked })}
-          />
-          <select
-            className="dsws-select"
-            title={t('motionStyleNewChatInfo')}
-            aria-label={t('motionStyleNewChatInfo')}
-            value={settings.newChatMotionStyle}
-            disabled={!settings.newChatMotionEnabled}
-            onChange={(event) => persist({ newChatMotionStyle: event.target.value as NewChatMotionStyle })}
-          >
-            {NEW_CHAT_MOTION_STYLES.map((style) => (
-              <option key={style} value={style}>{t(NEW_CHAT_STYLE_LABELS[style])}</option>
-            ))}
-          </select>
-          <SwitchItem
-            id={id('motion-settings')}
-            label={t('motionSettings')}
-            title={t('motionSettingsInfo')}
-            checked={settings.settingsMotionEnabled}
-            onChange={(checked) => persist({ settingsMotionEnabled: checked })}
-          />
-          <SwitchItem
-            id={id('motion-role')}
-            label={t('motionRole')}
-            title={t('motionRoleInfo')}
-            checked={settings.motionRoleEntrance}
-            onChange={(checked) => persist({ motionRoleEntrance: checked })}
-          />
-          <div className="dsws-seg-inline">
-            <span className="dsws-seg-label">{t('motionPreset')}</span>
-            <div className="dsws-seg">
-              {MOTION_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={matchesPreset(preset.id) ? 'on' : undefined}
-                  title={t(PRESET_INFO[preset.id])}
-                  onClick={() => persist({ ...preset.config })}
-                >
-                  {t(PRESET_LABELS[preset.id])}
-                </button>
-              ))}
-            </div>
+        </div>
+
+        <div className={'dsws-preview' + (motionOn ? '' : ' is-off')}>
+          <div className="dsws-preview-head">
+            <span className="dsws-preview-label">{t('motionPreviewLabel')}</span>
+            <button
+              type="button"
+              className="dsws-mini"
+              title={t('motionPreviewReplay')}
+              disabled={!motionOn}
+              onClick={() => playLook(settings.motionLook)}
+            >
+              {t('motionPreviewReplay')}
+            </button>
+          </div>
+          <div className="dsws-preview-stage">
+            <div ref={previewSideRef} className="dsws-preview-side">{t('motionPreviewSidebar')}</div>
+            <div ref={previewMsgRef} className="dsws-preview-msg">{t('motionPreviewMessage')}</div>
           </div>
         </div>
+
+        <div className="dsws-looks">
+          {MOTION_LOOK_PRESETS.map((look) => (
+            <button
+              key={look.id}
+              type="button"
+              id={id('motion-look-' + look.id)}
+              className={'dsws-look' + (look.id === settings.motionLook ? ' on' : '') + (motionOn ? '' : ' is-off')}
+              title={t(LOOK_INFO[look.id])}
+              aria-pressed={look.id === settings.motionLook}
+              disabled={!motionOn}
+              onClick={() => pickLook(look.id)}
+            >
+              <span className="dsws-look-name">{t(LOOK_LABELS[look.id])}</span>
+              <span className="dsws-look-desc">{t(LOOK_INFO[look.id])}</span>
+            </button>
+          ))}
+        </div>
+
+        {motionOn ? null : (
+          <div className="dsws-hint-row">
+            <span className="dsws-hint">{t('motionInactiveHint')}</span>
+          </div>
+        )}
       </Group>
 
       {/* 4. 界面 */}
       <Group title={t('groupUi')}>
         <div className="dsws-rowline">
-          <SwitchItem
-            id={id('enable-localize')}
-            label={t('shortLocalize')}
-            title={t('enableLocalizeInfo')}
-            checked={settings.uiLocalize}
-            onChange={(checked) => persist({ uiLocalize: checked })}
-          />
           <SwitchItem
             id={id('enable-resize')}
             label={t('shortResize')}

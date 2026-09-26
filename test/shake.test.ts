@@ -5,7 +5,7 @@
  * exercised in the live browser, whose WAAPI jsdom does not provide.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { shakeElement } from '../src/client/motion/animate.ts'
+import { shakeElement } from '../src/client/motion/shake.ts'
 
 /** Let one animation frame pass. */
 const frame = (): Promise<void> => new Promise((resolve) => { requestAnimationFrame(() => resolve()) })

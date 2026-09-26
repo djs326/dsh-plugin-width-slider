@@ -31,274 +31,26 @@
  * very first conversation render.
  */
 import {
-  MOTION_STYLES, NEW_CHAT_MOTION_STYLES, SIDEBAR_MOTION_STYLES,
   type MotionStyle, type NewChatMotionStyle, type SidebarMotionStyle,
 } from '../../shared/motionSettings.ts'
-import { EASE_FADE, EASE_GLIDE, EASE_SETTLE, replayEntrance, revealTextBlock } from './animate.ts'
+// 宿主对话/侧栏 DOM 的选择器与谓词统一由 official/chatDom.ts 描述（见该文件）。
+import {
+  ANCHOR, ENTRANCE_CLASSES, HERO_HEADLINE, ITEM_SELECTOR, ROW_IN_CLASS, THINK_BODY, TREE_ITEM,
+  isChatRow, isTreeItem, roleOf, styleClass,
+} from '../official/chatDom.ts'
+import {
+  ENTRANCE, PANEL_DURATION_MS, PANEL_FRAMES, ROLE_ENTRANCE,
+} from './frames.ts'
+import {
+  FRESHNESS_WINDOW_MS, MAX_PENDING_BATCHES, MAX_SWITCH_RETRIES, REPLAY_GRACE_MS,
+  SWITCH_REPLAY_MS, SWITCH_RETRY_MS, type PendingBatch,
+} from './schedule.ts'
+import { staggerDelay } from './stagger.ts'
+import { EASE_SETTLE, replayEntrance } from './waapi.ts'
+import { revealTextBlock } from './textReveal.ts'
 
-/** Chat-row selector: the host renders one anchored row per message. */
-const ANCHOR = '[data-chat-anchor-key]'
-/** Sidebar tree items: session/workspace rows inside a `role="tree"`. */
-const TREE_ITEM = '[role="tree"] [role="treeitem"]'
-/**
- * Anything inside the conversation view. The trajectory JSON tree
- * (ui-primitives JsonTree) and the subagent lineage tree also render
- * role="tree"/"treeitem", but they belong to the transcript, not the sidebar
- * rail - without this guard they would take the sidebar entrance.
- */
-const CONVERSATION_VIEW = '[data-conversation-scroll], [data-chat-flow]'
-/** Every tracked item on a container (rows + tree items, one kind per container). */
-const ITEM_SELECTOR = `${ANCHOR}, ${TREE_ITEM}`
-/**
- * The thought (reasoning) body. It mounts when the block is expanded or starts
- * streaming open, and it is printed in line by line rather than faded as a whole
- * - the only surface in the transcript whose text arrives once and stays.
- */
-const THINK_BODY = '.dsh-ws-think-body'
-/**
- * The welcome headline. Matched by the CSS-module name segment the host keeps
- * across builds (`*_headline`); if the host renames it the query misses and the
- * seat entrance simply plays alone.
- */
-const HERO_HEADLINE = '[class*="headline"]'
-
-/**
- * Entrance classes applied to marked rows. Literal (global) classes on purpose:
- * the engine runs identically in the browser and in jsdom tests, independent of
- * CSS-module processing. ROW_IN_CLASS is the "already animated" marker used for
- * reuse detection and cleanup; the style class records which entrance ran.
- */
-export const ROW_IN_CLASS = 'dsu-motion-row-in'
-/** Every entrance style id the engine may apply (transcript + sidebar + new-chat). */
-export type EntranceStyle = MotionStyle | SidebarMotionStyle | NewChatMotionStyle
-
-/**
- * Every style class the engine may apply (for cleanup). The style sets share
- * the `fade` id, so the union is deduplicated.
- */
-export const STYLE_CLASSES: readonly string[] =
-  [...new Set([...MOTION_STYLES, ...SIDEBAR_MOTION_STYLES, ...NEW_CHAT_MOTION_STYLES])]
-    .map((style) => styleClass(style))
-
-/** Pure: the class that records which entrance style a row ran. */
-export function styleClass(style: EntranceStyle): string {
-  return `dsu-motion-${style}`
-}
-
-/**
- * Role-based arrivals: rather than one entrance for every transcript row, the
- * row's flow kind picks how it arrives — the user's own message comes in from
- * the side (it left the composer), the assistant's prose keeps whatever style
- * the user chose, and process rows (tool calls/results, commands, compaction,
- * errors) only settle in lightly so they never compete with the prose.
- */
-export type RowRole = 'user' | 'process'
-
-/** Class recording that a row arrived with the user-role entrance. */
-export const ROLE_USER_CLASS = 'dsu-motion-role-user'
-/** Class recording that a row arrived with the process-role entrance. */
-export const ROLE_PROCESS_CLASS = 'dsu-motion-role-process'
-
-/** Every role class (cleanup, alongside the style classes). */
-export const ROLE_CLASSES: readonly string[] = [ROLE_USER_CLASS, ROLE_PROCESS_CLASS]
-
-/**
- * Every class an entrance may leave on a row. The cleanup pass must remove the
- * role classes too: a replayed row can arrive as user first and as process
- * after a re-render, and a stale role class would linger otherwise.
- */
-export const ENTRANCE_CLASSES: readonly string[] = [...STYLE_CLASSES, ...ROLE_CLASSES]
-
-/**
- * Entrance keyframes, duration, and easing per style. Opacity always arrives on
- * the shorter side and travel or scale on the longer one, which reads as the row
- * settling rather than sliding to a stop.
- *
- * Durations follow the motion-tokens scale by intent: a transient row is
- * `standard` (280–350ms), a full welcome surface is `medium` (400–500ms), and an
- * opacity-only fade is `fast` (150–200ms). Travel and scale styles land on
- * EASE_SETTLE (3% overshoot), sideways travel and the large welcome surface stay
- * on EASE_GLIDE, and opacity-only work uses EASE_FADE.
- */
-const ENTRANCE: Record<EntranceStyle, { frames: Keyframe[]; durationMs: number; easing: string }> = {
-  'fade-up': {
-    frames: [{ opacity: 0, translate: '0 8px' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 300,
-    easing: EASE_SETTLE,
-  },
-  fade: {
-    frames: [{ opacity: 0 }, { opacity: 1 }],
-    durationMs: 200,
-    easing: EASE_FADE,
-  },
-  'rise-scale': {
-    frames: [
-      { opacity: 0, translate: '0 8px', scale: 0.98 },
-      { opacity: 1, translate: '0 0', scale: 1 },
-    ],
-    durationMs: 320,
-    easing: EASE_SETTLE,
-  },
-  'slide-in': {
-    frames: [{ opacity: 0, translate: '12px 0' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 280,
-    easing: EASE_GLIDE,
-  },
-  'blur-in': {
-    frames: [
-      { opacity: 0, filter: 'blur(6px)', translate: '0 4px' },
-      { opacity: 1, filter: 'blur(0px)', translate: '0 0' },
-    ],
-    durationMs: 300,
-    easing: EASE_GLIDE,
-  },
-  'scale-in': {
-    frames: [{ opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1 }],
-    durationMs: 320,
-    easing: EASE_SETTLE,
-  },
-  'slide-left': {
-    frames: [{ opacity: 0, translate: '-10px 0' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 280,
-    easing: EASE_GLIDE,
-  },
-  expand: {
-    frames: [
-      { opacity: 0, scale: '1 0.8', transformOrigin: 'top' },
-      { opacity: 1, scale: '1 1', transformOrigin: 'top' },
-    ],
-    durationMs: 320,
-    easing: EASE_SETTLE,
-  },
-  'slide-down': {
-    frames: [{ opacity: 0, translate: '0 -10px' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 280,
-    easing: EASE_GLIDE,
-  },
-  reveal: {
-    frames: [{ opacity: 0, translate: '0 4px' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 480,
-    easing: EASE_GLIDE,
-  },
-  bloom: {
-    frames: [{ opacity: 0, scale: 0.99 }, { opacity: 1, scale: 1 }],
-    durationMs: 480,
-    easing: EASE_SETTLE,
-  },
-  zoom: {
-    frames: [{ opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1 }],
-    durationMs: 460,
-    easing: EASE_SETTLE,
-  },
-}
-
-/**
- * Role entrances. The user's message travels sideways on the glide curve (280ms,
- * `standard` band): it reads as having been sent from the composer, and sideways
- * travel is too directional for the 3% overshoot of EASE_SETTLE. Process rows
- * get the lightest arrival in the set — 3px of travel on an opacity-only curve
- * (200ms, `fast` band) — because a busy turn mounts several of them and anything
- * stronger turns the transcript into a slideshow.
- */
-const ROLE_ENTRANCE: Record<RowRole, { frames: Keyframe[]; durationMs: number; easing: string; cls: string }> = {
-  user: {
-    frames: [{ opacity: 0, translate: '10px 0' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 280,
-    easing: EASE_GLIDE,
-    cls: ROLE_USER_CLASS,
-  },
-  process: {
-    frames: [{ opacity: 0, translate: '0 3px' }, { opacity: 1, translate: '0 0' }],
-    durationMs: 200,
-    easing: EASE_FADE,
-    cls: ROLE_PROCESS_CLASS,
-  },
-}
-
-/**
- * Pure: the entrance role of a transcript row, from the flow kind the host
- * publishes on the row (`data-chat-flow-kind`). The assistant's own prose
- * (`assistant-step`) returns undefined so it keeps the user's chosen style; a row
- * without a kind (the host changed its data attributes) also falls back to the
- * chosen style rather than guessing.
- *
- * Kind values seen from the host: user, steering, assistant-step, tool-call,
- * turn-process, turn-tail, context, compaction. The user's own words are `user`
- * and a mid-turn interjection is `steering`; everything else - tool rows, turn
- * framing, injected context, compaction notices - is process output. (Note the
- * anchor key uses the node kind `input-message` for the same rows, which is NOT
- * the flow kind, so it must not be matched here.)
- */
-export function roleOf(row: HTMLElement): RowRole | undefined {
-  const kind = row.dataset.chatFlowKind
-  if (kind === undefined || kind === 'assistant-step') return undefined
-  return kind === 'user' || kind === 'steering' ? 'user' : 'process'
-}
-
-/** Transcript-column entrance; the column stays mounted across switches. */
-const PANEL_FRAMES: readonly Keyframe[] = [
-  { opacity: 0.5, translate: '0 6px' },
-  { opacity: 1, translate: '0 0' },
-]
-const PANEL_DURATION_MS = 320
-
-/** Per-row stagger step on load batches (ms); the 70–80ms "standard list" step from the motion-tokens scale. */
-export const STAGGER_STEP_MS = 70
-/** Stagger cap: rows beyond this wait no longer (the tail joins together), so a long history still lands quickly. */
-export const STAGGER_CAP_MS = 420
-/** Longest buffered batch queue while the feature is disabled. */
-const MAX_PENDING_BATCHES = 8
-/**
- * Buffered batches older than this (ms) are dropped at flush: their rows have
- * been on screen long enough that replaying the entrance would read as a
- * pop-in, not an arrival. Covers slow settings resolution and re-enables.
- */
-const FRESHNESS_WINDOW_MS = 400
-/** Delay before the session-switch replay scans the transcript (host commit). */
-const SWITCH_REPLAY_MS = 60
-/** Retry interval while the transcript rows have not mounted yet. */
-const SWITCH_RETRY_MS = 80
-/** Max replay retries before giving up on an empty transcript. */
-const MAX_SWITCH_RETRIES = 12
-/**
- * A row animated within this window is not replayed again. The observer already
- * animates freshly mounted rows; the session-switch replay exists to cover rows
- * it could not correlate, so replaying a row that just started its entrance
- * would restart it mid-flight — the visible double flash.
- */
-const REPLAY_GRACE_MS = 400
-
-/** Pure: the entrance delay for the i-th row of a load batch (0-based). */
-export function staggerDelay(index: number): number {
-  const i = Number.isFinite(index) && index > 0 ? Math.floor(index) : 0
-  return Math.min(i * STAGGER_STEP_MS, STAGGER_CAP_MS)
-}
-
-/** Pure: whether an added node is a top-level chat row (not nested in one). */
-export function isChatRow(node: Node): node is HTMLElement {
-  return node instanceof HTMLElement
-    && node.matches(ANCHOR)
-    && node.parentElement?.closest(ANCHOR) === null
-}
-
-/**
- * Pure: whether a node is a sidebar rail row. Two host surfaces use
- * role="tree"/"treeitem" without being the rail, and both are excluded:
- * - trees rendered inside the conversation view (the trajectory JSON tree);
- * - trees portaled straight onto document.body (the subagent lineage
- *   dropdown), whose own parent element is the body.
- * Nested items are still allowed: session rows live INSIDE their workspace
- * group row (the host nests them), so a top-level-only check would silently
- * drop them.
- * @param node - a candidate element.
- */
-export function isTreeItem(node: Node): node is HTMLElement {
-  if (!(node instanceof HTMLElement)) return false
-  if (!node.matches(TREE_ITEM)) return false
-  if (node.closest(CONVERSATION_VIEW) !== null) return false
-  // A portal target is the body itself; the rail always has a real ancestor.
-  return node.closest('[role="tree"]')?.parentElement !== document.body
-}
+// 宿主选择器与谓词（ANCHOR / TREE_ITEM / ITEM_SELECTOR / THINK_BODY / HERO_HEADLINE、
+// isChatRow / isTreeItem）见 official/chatDom.ts，本文件只做批次调度与入场装配。
 
 /** Engine wiring: the current feature state (scope-driven). */
 export interface MotionEngineState {
@@ -340,14 +92,6 @@ export interface MotionEngineOptions {
   getState: () => MotionEngineState
   /** Subscribe to state changes (settings scope); returns the disposer. */
   subscribe: (listener: () => void) => () => void
-}
-
-/** One observed row batch: the rows + whether it is a load (stagger) batch. */
-interface PendingBatch {
-  rows: HTMLElement[]
-  load: boolean
-  /** Epoch ms when the rows were observed (freshness gate at flush). */
-  time: number
 }
 
 /** The installed engine handle: teardown + the session-switch replay signal. */

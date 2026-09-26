@@ -5,7 +5,7 @@
  *
  * 宿主包是 optional peer：bundle 把它当 external，运行时用 `require` 取（产物是 CJS 包装，
  * `require` 由 factory 注入，声明见 src/env.d.ts）。单独成模块还为了让测试能
- * `vi.mock('./primitives.ts')` 注入桩 —— 直接 mock 宿主包行不通：源码里的 `require` 是
+ * `vi.mock('../src/client/core/primitives.ts')` 注入桩 —— 直接 mock 宿主包行不通：源码里的 `require` 是
  * 构建器注入的模块作用域 shim，走 Node 的 CJS 解析，绕过 Vite 的 alias 与 mock 表
  * （`resolve.alias` / `test.alias` / `vi.mock('<宿主包>')` 三条路都实测无效）。
  *

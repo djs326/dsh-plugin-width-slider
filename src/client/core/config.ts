@@ -11,7 +11,7 @@ import {
   DEFAULT_FEATURE_SETTINGS,
   mergeSettings,
   type FeatureSettings,
-} from '../shared/settings.ts'
+} from '../../shared/settings.ts'
 
 export type { FeatureSettings }
 export { DEFAULT_FEATURE_SETTINGS, mergeSettings }

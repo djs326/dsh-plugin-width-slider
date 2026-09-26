@@ -369,12 +369,12 @@ src/
 | **3** | 抽 `official/settingsDom.ts`：`settingsMotion.ts` 与 `patches/settingsPanel/` 改为消费同一模块；`styles.ts` 类名与 TS 常量同源；消掉 4 份弹窗结构假设与 `320ms`/`200ms` 重复 | 4 → 8 | 无 | 中 |
 | **4** | 抽 `official/chatDom.ts` 与 `core/domObserver.ts`；`motion/conversation.ts`、四个补丁模块的 Observer 统一。**已做**（`patches/wsTabs/scope.ts` 当时尚不存在，留批次⑥） | 6 → 10 | 无 | 中 |
 | **5** | 抽 `official/menuInjection.ts`，`patches/sessionDelete` 与 `patches/wsTabs/assignMenuItem` 共用 | 3 → 6 | 无 | 中 |
-| **6** | `workspaceTabs.tsx`（1690）拆成 `patches/wsTabs/` 7 个文件 | 1 → 7 | 无 | **高（时序敏感，见 P7）** |
+| **6** | `workspaceTabs.tsx`（1661）拆成 `patches/wsTabs/` 8 个文件，分 3 次提交 | 1 → 9 | 无 | **高（时序敏感，见 P7）** |
 | **7** | `client/index.ts` 抽 `core/features.ts` 功能注册表，4 个内联大函数外移，`motionStateOf` 移入 `motion/`，清 dead param 与过期类型 | 3 → 8 | 无 | 中 |
 | **8** | host 拆分：`jsonFile.ts`/`settingsStore.ts`/`workspaceGroupsStore.ts`/`chinesePrompt.ts`/`api.ts` | 1 → 7 | 无 | 低 |
 | **9** | 统一命名与导出面；`shared/dshHome.ts` 迁入 `host/`；同步 README 结构树、更新日志、第三方声明 | 全仓 | 无 | 低 |
 
-**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）；批次④ 已提交 `281e60b`（`official/chatDom.ts` + `core/domObserver.ts`，`lib/index.mjs` 逐行零差异）。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
+**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）；批次④ 已提交 `281e60b`（`official/chatDom.ts` + `core/domObserver.ts`，`lib/index.mjs` 逐行零差异），其裁定与遗留项提交 `0e6a38f`；批次⑦ 规格裁定提交 `63e7d59`；批次⑤ 已提交 `5700aa6`（`official/menuInjection.ts`，两处菜单注入共用），其裁定提交 `c80d613`。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
 
 **批次③ 的三处裁定**（记录以备复查）：① `320ms`（`frames.ts` 的 `PANEL_DURATION_MS` 对 `settingsMotion.ts` 的 `PANEL_REPLAY_MS`）与 `200ms`（`PAGE_REPLAY_MS` 对 `MASK_ENTRANCE_MS`）经核实均为**数值巧合** —— 元素、动画属性、缓动曲线全不同，**未合并**，只在各处加注释说明为何不同源；② 两份同名不同口径的 `findSettingsDialog` 合并后，宽口径改名 `findDialogWithNavRail`（严口径保留原名，它是"这是不是设置弹窗"的判定）；③ `SETTINGS_DIALOG_SELECTOR` 取带 `div` 前缀者（宿主四个 modal 实测均为 `<div role="dialog" aria-modal="true">`）—— 这是本批唯一的潜在行为面收窄，宿主若改用非 `div` 容器会让严口径静默失效。
 
@@ -382,7 +382,7 @@ src/
 
 **批次④ 的两处裁定**（同样记录以备复查）：① 本计划 `:268` 的 `core/domSelectors.ts` **不建** —— 其内容全是宿主 DOM 契约，放进 `core/` 会与 `official/`「宿主 DOM 唯一声明处」的定位冲突（且 `core/` 又被禁止 import `official/`），应并入 `official/chatDom.ts`，待后续批次吸收；② 本计划第 4 批写的「四个补丁模块的 Observer 统一」名不副实 —— `patches/` 下当前只有 `navScroll.ts` 与 `dialogWindow.ts` 两个模块，实际统一的是 7 处调用点；`sessionDelete.ts`、`sidebarToolsMerge.ts`、`workspaceTabs.tsx` 仍在 `client/` 根，要等批次⑤⑥ 搬完才能一并收敛。另外 `widthPrefs.ts:144-159`（`publishSavedFixedWhenRootReady` 的一次性观察器）是本计划 `:97` 清单**遗漏的第 6 处**，批次④ 已补齐并统一。
 
-**批次④ 新增的遗留项**：① `workspaceTabs.tsx:1532-1553` 的 `assignRaf` / `scheduleAssign` / `assignObserver` 与 `core/domObserver.ts` 的 `debouncedProbe` **完全同构**（只多一层 `setAssignObserving` 启停），批次⑥ 应直接套用、启停部分留在外层包装；② **`isPreviewOpen` 注入线零测试覆盖** —— `test/settingsMotion.test.ts` 的 harness 传 `() => false`，端口是否真接到 `core/overlayState.ts` 的 `isPreviewOpen` 既无单测也非产物比对能证，批次⑤ 起应补「预览开启（`documentElement` 带 `data-dsw-preview`）时按 Escape 应放行」用例；③ `settingsMotion.ts:286` 是全仓唯一「body 级 childList 却不做 rAF 合并」的观察器（套原语等于引入一帧延迟），已成 `domObserver` 不能一刀切的反例，理由写在该模块头注释里。
+**批次④ 新增的遗留项**：① `workspaceTabs.tsx:1532-1553` 的 `assignRaf` / `scheduleAssign` / `assignObserver` 与 `core/domObserver.ts` 的 `debouncedProbe` **完全同构**（只多一层 `setAssignObserving` 启停）。**批次⑥ 复核后裁定不套用**（此处原写「应直接套用、启停部分留在外层包装」作废）：`core/domObserver.ts` 只有「立即 observe」一种形态，套用要么给共享层加 `start`/`stop`（会波及 `sessionDelete.ts:412` 等消费方），要么把启停改写成「建/毁 + 补一次 `probe.schedule()`」；收益约 8 行，代价是语义改写与触碰共享层。原样搬进 `assignMenuItem.ts`；② **`isPreviewOpen` 注入线零测试覆盖** —— `test/settingsMotion.test.ts` 的 harness 传 `() => false`，端口是否真接到 `core/overlayState.ts` 的 `isPreviewOpen` 既无单测也非产物比对能证，批次⑤ 起应补「预览开启（`documentElement` 带 `data-dsw-preview`）时按 Escape 应放行」用例；③ `settingsMotion.ts:286` 是全仓唯一「body 级 childList 却不做 rAF 合并」的观察器（套原语等于引入一帧延迟），已成 `domObserver` 不能一刀切的反例，理由写在该模块头注释里。
 
 **批次⑦ 的规格裁定**（只读调研已完成，因批次⑥ 尚未开工而暂缓实施；以下行号以 `0e6a38f` 工作树为实测口径，`src/client/index.ts` 实测 **393 行**，比本计划第 1 节的 385 行多 8 行）：
 
@@ -404,6 +404,21 @@ src/
 - **D2** `workspaceTabs` 的模板排除表里写死的 `'data-ws-assign-item'` 与它自己的 `WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'` 不同，该条 `hasAttribute` 恒为 `false`，是死条件（自身排除由第一条承担）。**逐字保留**，删它属批次⑨ 的导出面与死代码收敛。
 - **D3** 原语把 `setAttribute(attr, '1')` 统一放在分支内（对齐 `sessionDelete`），使 `workspaceTabs` 注入项的**属性序列化顺序**由 `type,role,style,…,attr` 变为 `type,role,attr,style,…`。该元素此刻尚未挂载，属性顺序对 CSS / ARIA / JS 均无语义，只有 `outerHTML` 可观察。**接受，不加 `attrTiming` 参数** —— 加参数会把实现细节升格成公共契约。
 - **E3 裁定**：`isPreviewOpen` 的 Escape 放行用例**不在批次⑤ 补**，并入批次⑦ 已裁定的补测试清单（`test/features.test.ts`、`test/motionState.test.ts`，再加一条 `isPreviewOpen` 注入线用例）。批次④ 遗留项② 里「批次⑤ 起应补」的表述据此作废。
+
+**批次⑥ 的规格裁定**（只读调研已完成，行号以 `5700aa6` 工作树为实测口径；`workspaceTabs.tsx` 实测 **1661 行**，旧调研的 1690 行与那 12 条契约的行号已整体失效，复核后实为 **17 条**）：
+
+- **拆 8 个文件、分 3 次提交**（Q5 + Q6）：目标目录 `src/client/patches/wsTabs/`。**提交 1（纯逻辑、零 UI）**：`groupsStore.ts`(~230)、`messages.ts`(~60)、`scope.ts`(~95)、`domContract.ts`(~90)；**提交 2（UI 组件）**：`TabStrip.tsx`(~220，含 `TABS_CSS`)、`dialogs.tsx`(~330)；**提交 3（壳与装配）**：`index.tsx`(~400)。`src/client/workspaceTabs.tsx` **必须保留为 re-export 壳**（约 4 行）—— 这是 `src/client/index.ts:29`、`:337` 与 `test/workspaceTabsDialogs.test.ts:55` 三处零改动的唯一办法。分 3 次而非本计划建议的 2 次，理由是提交 1 的危险类型是**状态语义**、提交 2/3 是**时序与引用相等**，分开能让 `vitest` 的失败定位到更小范围。
+- **Q1 不套用 `observeBodyDebounced`**：见上文对批次④ 遗留项① 的更正。
+- **Q2 `T` 与 `T_WS` 不合并**：合并要改 6 处调用点与两个函数，收益为 0，且会让「页签文案」与「工作区文案」两张表的边界消失。
+- **Q3 `WS_ASSIGN_MENU_ATTR` 与 `ASSIGN_TAB_EVENT` 由 `assignMenuItem.ts` 导出**，`index.tsx` 显式 import —— 注入在菜单块、卸载清理与事件监听在壳，契约天然分居两处。
+- **Q4 四个宿主 DOM 函数本批放 `patches/wsTabs/domContract.ts`**（`locateHeader`、`isLabelNode`、`findOpenProjectRow`、`workspaceInfoFromRow`），**不搬 `official/`**。第 5 节「`official/` 是宿主 DOM 唯一声明处」是终局目标，但本批已是全仓风险最高的一批（17 条静默失效契约 + 11 条时序敏感点），再动 `official/` 会模糊「本批只做 wsTabs 拆分」的边界；且这四个函数夹带中英文硬编码文案数组（`LABEL_WORDS:455`、`SEARCH_PLACEHOLDERS:456`），本就不符合 `official/` 的纯契约定位。**记入批次⑨**。
+- **Q7 补 3 条测试，与重构分开提交**：`test/wsTabsScope.test.ts`（`filterSessions`/`filterWorkspaces` 的引用稳定性 —— 同 state + 同 allowed 必须 `toBe` 同一对象，这是 React #185 的唯一网；再加收窄语义与空 `allowed` 两条）、`test/wsTabsDomContract.test.ts`（`locateHeader` 三条命中路径各返回预期 `row`/`label`、无匹配返回 null；`findOpenProjectRow` 无菜单返回 null）、`test/groupsStore.test.ts`（`commitGroups` 后 `getGroupSnapshot()` 在无变化时 `toBe` 同一对象；`loadGroups` 的 revision 竞态在 store 层直接测，比现有 UI 级用例 `:318` 更早失败、更易定位）。
+- **Q8 `groupRevision` 在 disposer 不重置是既有行为，逐字保留**。disposer（`:1638-1660`）重置了 `rpcCall`/`groupReady`/`groupLoadFailed`/`groups` 四项而独漏 `groupRevision`，看不出是刻意的；但它只影响「读回时用起始 revision 判是否被覆盖」这一条判据，改它是一次真实的行为变更。**记入批次⑨**。
+- **Q9 `AssignTabPicker` 落 `dialogs.tsx`**。实测它在 `:604-677`，紧贴菜单注入块，但它是 Modal 组件、与注入逻辑无关，放 `dialogs.tsx` 同时避开了「它用 `commitGroups`」造成的环。**依赖方向必须无环**：`index.tsx` → 其余 7 个；`dialogs` → {`groupsStore`, `messages`}；`assignMenuItem` → {`groupsStore`, `messages`, `domContract`, `official/menuInjection`}；`groupsStore` → `messages`；**`messages.ts` 不得 import 任何其它 wsTabs 文件**（否则 `groupsStore ↔ messages` 成环）。
+- **本批唯一非纯搬移之处**：`rpcCall`（`:177`）是模块级 `let`，disposer 在 `:1655` 直接置空；拆出 store 后 `index.tsx` 再也写不到它，**必须新增 `setRpcCall(fn | null)`**。`:1656-1659` 的 `groupReady=false` / `groupLoadFailed=false` / `groups=[]` / `emitGroups()` 必须合成 **`resetGroupsStore()`**。提交 1 需显式审查这 5 行。
+- **产物等价性判据更正**：`workspaceTabs.tsx` 全在 client bundle（`src/index.ts:20-26` 的 import 里不含任何 `client/` 路径），因此批次⑥ 只对 **`lib/index.mjs` 逐字节不变**成立；`lib/client.js` 必然变化（模块边界与打包顺序变了），**不得**作为等价性判据。这否定了本计划 7.2 对批次⑥ 的表述。
+- **两处旧调研错误更正**：① 旧调研单列的 R6「归属写入原语 `:617-630`」已不存在，现为 `assignWsToTab:589-601`，紧贴菜单注入块；② 旧调研把 `AssignTabPicker` 归到 R8（写 `:632-706`），实测它属 R5 的范围 —— 若按旧图把它留在 R5，会与 R8 形成循环依赖。
+- **不建议拆的部分**（与实施规格一致）：`WorkspaceTabsShell`（`:1140-1477`，338 行，内部 15 个 hook 彼此耦合，且 `activeIntentRef`/`header`/`dialog`/`assignTarget` 四个状态被 Portal 与 5 个对话框共享）、`installWorkspaceTabs`（`:1480-1661`，182 行，`kickRender`/`sync`/`unwrap`/`trySyncOnce` 共享 `originalComp`/`wrappedEntry`/`synced`/`timer` 四个闭包变量）。两者都留在 `index.tsx`。
 
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 

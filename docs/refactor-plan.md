@@ -94,7 +94,7 @@
 
 ### P2 · 同一算法多份实现（改一处必漏另一处）
 
-**rAF 节流 + MutationObserver 写了 5 遍**：`settingsPanelPatch.ts:101-117`、`sessionDelete.ts:446-455`、`sidebarToolsMerge.ts:186-192`、`widthPrefs.ts:95-107`、`WidthSliderControl.tsx:452-463`。
+**rAF 节流 + MutationObserver 写了 6 遍**：`settingsPanelPatch.ts:101-117`、`sessionDelete.ts:446-455`、`sidebarToolsMerge.ts:186-192`、`widthPrefs.ts:95-107`、**`widthPrefs.ts:144-159`（原清单遗漏，批次④ 实测补上）**、`WidthSliderControl.tsx:452-463`。**批次④ 已统一这 6 处并新建 `core/domObserver.ts`**；另外 5 处（`conversation.ts` 两处、`sidebarToolsMerge.ts` 两处、`settingsMotion.ts` 三处）经逐条核对语义不同——不做 rAF 合并、观察目标非 body、或需消费 `mutations` 列表——**保留原样**，理由写在 `domObserver.ts` 头注释里。
 
 **四个 DOM 补丁模块共 3164 行，零共享抽象**——共享同一套模式（探测官方 DOM → 注入/克隆 → Observer + rAF 节流），却各自手写一遍。
 
@@ -265,8 +265,10 @@ src/
     │   ├── locales.ts           # 文案表（并入 sessionDelete / workspaceTabs 的自建表）
     │   ├── overlayState.ts      # 浮层/预览状态（中性位置，供面板与宽度特性共用）
     │   ├── primitives.ts        # 宿主 ui-primitives 取用
-    │   ├── domSelectors.ts      # 新增：官方 DOM 契约常量（[data-phase]、CSS 变量、data-*）
-    │   └── domObserver.ts       # 新增：rAF 节流 + MutationObserver（消掉 5 份重复）
+    │   ├── domSelectors.ts      # 批次④ 裁定不建：其内容全是宿主 DOM 契约，放 core/ 会与
+    │   │                        #   official/「宿主 DOM 唯一声明处」的定位冲突（且 core 禁止
+    │   │                        #   import official）。应并入 official/chatDom.ts，待后续批次
+    │   └── domObserver.ts       # 已建（批次④）：rAF 节流 + MutationObserver（消掉 6 份重复）
     ├── official/                # 宿主 DOM 的唯一声明与适配
     │   ├── chatDom.ts           # 对话行/侧栏行选择器与谓词、角色读取（含 isTreeItem）
     │   ├── settingsDom.ts       # 设置弹窗外壳、掩码、导航、内容、关闭按钮、锚点几何
@@ -351,8 +353,8 @@ src/
 8. 新增依赖边前先问：能不能放进 `core/` 或 `official/`。
 
 **现有边需要切断的**：
-- `motion/settingsMotion.ts:23 → ../previewState.ts`：改为 `SettingsMotionOptions` 增加 `isInnerOverlayOpen`/`suppressEscape`，取代直接调 `isPreviewOpen()`（`settingsMotion.ts:378-390`）。
-- `motion/motion.ts:57` 的 `'.dsh-ws-think-body'`：字符串契约移入 `official/chatDom.ts`。
+- `motion/settingsMotion.ts:23 → ../previewState.ts`：**批次④ 已切断**。实现为 `SettingsMotionOptions` 新增**必填** `isPreviewOpen: () => boolean`（`settingsMotion.ts:101`），由 `client/index.ts` 装配点注入 `core/overlayState.ts` 的 `isPreviewOpen`。命名取 `isPreviewOpen` 而非本计划原先建议的 `isInnerOverlayOpen`——后者与同文件既有的 `innerLayerOpen(panel)`（面板内 Menu / 嵌套 modal）语义撞车，而该端口替换的正是一处 `isPreviewOpen()` 调用；也未采用 `suppressEscape`，因为既有端口风格（`enabled`/`getState`/`subscribe`）都是「读状态」而非「做决策」。
+- `motion/motion.ts:57` 的 `'.dsh-ws-think-body'`：**批次④ 已完成**，契约移入 `official/chatDom.ts:40` 的 `THINK_BODY_CLASS`，选择器与 `think/thinkView.tsx` 的 CSS 行、两处 `className` 三份字面量收敛为一份。
 
 ---
 
@@ -365,18 +367,22 @@ src/
 | **1** | 建 `client/core/` 与 `shared/types.ts`、`shared/endpointContract.ts`；搬 `config.ts`、`endpointChannel.ts`、`lang.ts`、`locales.ts`、`primitives.ts`；`dshHome.ts` 迁入 `host/`；修正 import 路径 | 8 → 8 | 无 | 低 |
 | **2** | `motion/` 内部拆分：抽 `frames.ts`、`stagger.ts`、`schedule.ts`；`animate.ts` 拆 `waapi.ts`/`textReveal.ts`/`shake.ts`；`motion.ts` 更名 `conversation.ts`；收窄导出面 | 7 → 12 | 无 | 中（3 个测试导入需同步） |
 | **3** | 抽 `official/settingsDom.ts`：`settingsMotion.ts` 与 `patches/settingsPanel/` 改为消费同一模块；`styles.ts` 类名与 TS 常量同源；消掉 4 份弹窗结构假设与 `320ms`/`200ms` 重复 | 4 → 8 | 无 | 中 |
-| **4** | 抽 `official/chatDom.ts` 与 `core/domObserver.ts`；`motion/conversation.ts`、`patches/wsTabs/scope.ts`、四个补丁模块的 Observer 统一 | 6 → 10 | 无 | 中 |
+| **4** | 抽 `official/chatDom.ts` 与 `core/domObserver.ts`；`motion/conversation.ts`、四个补丁模块的 Observer 统一。**已做**（`patches/wsTabs/scope.ts` 当时尚不存在，留批次⑥） | 6 → 10 | 无 | 中 |
 | **5** | 抽 `official/menuInjection.ts`，`patches/sessionDelete` 与 `patches/wsTabs/assignMenuItem` 共用 | 3 → 6 | 无 | 中 |
 | **6** | `workspaceTabs.tsx`（1690）拆成 `patches/wsTabs/` 7 个文件 | 1 → 7 | 无 | **高（时序敏感，见 P7）** |
 | **7** | `client/index.ts` 抽 `core/features.ts` 功能注册表，4 个内联大函数外移，`motionStateOf` 移入 `motion/`，清 dead param 与过期类型 | 3 → 8 | 无 | 中 |
 | **8** | host 拆分：`jsonFile.ts`/`settingsStore.ts`/`workspaceGroupsStore.ts`/`chinesePrompt.ts`/`api.ts` | 1 → 7 | 无 | 低 |
 | **9** | 统一命名与导出面；`shared/dshHome.ts` 迁入 `host/`；同步 README 结构树、更新日志、第三方声明 | 全仓 | 无 | 低 |
 
-**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
+**进度**：批次① 已提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）；批次② 已提交 `add30ca`（`motion/` 内部拆分，`lib/index.mjs` 逐行零差异）；批次③ 已提交 `e788062`（`official/settingsDom.ts` 抽取 + `settingsPanelPatch` 拆分，`lib/index.mjs` 逐行零差异）；批次④ 已提交 `281e60b`（`official/chatDom.ts` + `core/domObserver.ts`，`lib/index.mjs` 逐行零差异）。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
 
 **批次③ 的三处裁定**（记录以备复查）：① `320ms`（`frames.ts` 的 `PANEL_DURATION_MS` 对 `settingsMotion.ts` 的 `PANEL_REPLAY_MS`）与 `200ms`（`PAGE_REPLAY_MS` 对 `MASK_ENTRANCE_MS`）经核实均为**数值巧合** —— 元素、动画属性、缓动曲线全不同，**未合并**，只在各处加注释说明为何不同源；② 两份同名不同口径的 `findSettingsDialog` 合并后，宽口径改名 `findDialogWithNavRail`（严口径保留原名，它是"这是不是设置弹窗"的判定）；③ `SETTINGS_DIALOG_SELECTOR` 取带 `div` 前缀者（宿主四个 modal 实测均为 `<div role="dialog" aria-modal="true">`）—— 这是本批唯一的潜在行为面收窄，宿主若改用非 `div` 容器会让严口径静默失效。
 
 **批次③ 新增的遗留项**：`PANEL_FRAMES` 在 `motion/frames.ts`（opacity + `translate`）与 `motion/settingsMotion.ts`（opacity + `scale 0.62`）同名不同物，留给批次⑨ 命名统一时处理；`MOTION_CSS` 全仓零测试覆盖，本批把它改为常量插值后唯一的回归网是产物比对，建议批次⑨ 前补一条字符串快照断言。
+
+**批次④ 的两处裁定**（同样记录以备复查）：① 本计划 `:268` 的 `core/domSelectors.ts` **不建** —— 其内容全是宿主 DOM 契约，放进 `core/` 会与 `official/`「宿主 DOM 唯一声明处」的定位冲突（且 `core/` 又被禁止 import `official/`），应并入 `official/chatDom.ts`，待后续批次吸收；② 本计划第 4 批写的「四个补丁模块的 Observer 统一」名不副实 —— `patches/` 下当前只有 `navScroll.ts` 与 `dialogWindow.ts` 两个模块，实际统一的是 7 处调用点；`sessionDelete.ts`、`sidebarToolsMerge.ts`、`workspaceTabs.tsx` 仍在 `client/` 根，要等批次⑤⑥ 搬完才能一并收敛。另外 `widthPrefs.ts:144-159`（`publishSavedFixedWhenRootReady` 的一次性观察器）是本计划 `:97` 清单**遗漏的第 6 处**，批次④ 已补齐并统一。
+
+**批次④ 新增的遗留项**：① `workspaceTabs.tsx:1532-1553` 的 `assignRaf` / `scheduleAssign` / `assignObserver` 与 `core/domObserver.ts` 的 `debouncedProbe` **完全同构**（只多一层 `setAssignObserving` 启停），批次⑥ 应直接套用、启停部分留在外层包装；② **`isPreviewOpen` 注入线零测试覆盖** —— `test/settingsMotion.test.ts` 的 harness 传 `() => false`，端口是否真接到 `core/overlayState.ts` 的 `isPreviewOpen` 既无单测也非产物比对能证，批次⑤ 起应补「预览开启（`documentElement` 带 `data-dsw-preview`）时按 Escape 应放行」用例；③ `settingsMotion.ts:286` 是全仓唯一「body 级 childList 却不做 rAF 合并」的观察器（套原语等于引入一帧延迟），已成 `domObserver` 不能一刀切的反例，理由写在该模块头注释里。
 
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 

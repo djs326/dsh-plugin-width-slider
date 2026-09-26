@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   ENTRANCE_CLASSES, ROLE_PROCESS_CLASS, ROLE_USER_CLASS, ROW_IN_CLASS, styleClass,
-} from '../src/client/motion/frames.ts'
+} from '../src/client/official/chatDom.ts'
 import {
   anyMotionEnabled, installConversationEntrance, type MotionEngine, type MotionEngineState,
 } from '../src/client/motion/conversation.ts'

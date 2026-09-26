@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ENTRANCE_CLASSES, ROLE_CLASSES, ROLE_PROCESS_CLASS, ROLE_USER_CLASS, roleOf, STYLE_CLASSES, styleClass,
-} from '../src/client/motion/frames.ts'
+} from '../src/client/official/chatDom.ts'
 
 /** A transcript row carrying the host-published flow kind (absent = not published). */
 function row(kind?: string): HTMLElement {

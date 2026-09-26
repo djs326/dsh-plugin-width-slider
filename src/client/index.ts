@@ -17,6 +17,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
 import { callEndpoint } from './core/endpointChannel.ts'
+import { isPreviewOpen } from './core/overlayState.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { WidthSliderSettings } from './WidthSliderSettings.tsx'
 import { en, zh, type WidthSliderKey } from './core/locales.ts'
@@ -216,6 +217,9 @@ function installMotionFeature(ctx: RpcClientContext): Disposer {
     const settingsMotion = installSettingsMotion({
       enabled: () => motionAllowed(getSettings().motionMode, prefersReducedMotion()),
       subscribe: (listener) => onSettingsChanged(listener),
+      // 预览（拖宽度时设置面板被隐藏）开着时 Escape 归预览；经端口注入，
+      // motion/ 不再直连 core 的预览状态。
+      isPreviewOpen,
     })
     disposers.push(settingsMotion.dispose)
 

@@ -20,7 +20,7 @@
 import { pickText } from '../../core/lang.ts'
 import { getSettings, onSettingsChanged } from '../../core/config.ts'
 import { RESIZE_HANDLE_ATTR, contentOf, findDialogWithNavRail } from '../../official/settingsDom.ts'
-import { debouncedProbe } from './probe.ts'
+import { debouncedProbe, observeBodyDebounced } from '../../core/domObserver.ts'
 
 // ── 常量 ─────────────────────────────────────────────────────────────
 
@@ -481,17 +481,16 @@ function syncDialogToViewport(): void {
 export function installDialogResizePatch(): () => void {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
   probeAndPatchDialog()
+  // reapply / resize 由配置与窗口驱动，只借 debouncedProbe 的 rAF 合并；
+  // probe 要跟随面板开合，连 body 观察器一起装配（见 core/domObserver.ts）。
   const reapply = debouncedProbe(() => reapplyDialogRect())
-  const probe = debouncedProbe(() => probeAndPatchDialog())
+  const probe = observeBodyDebounced(() => probeAndPatchDialog())
   const resize = debouncedProbe(() => syncDialogToViewport())
   const onResize = (): void => { resize.schedule() }
   window.addEventListener('resize', onResize)
   // 设置里的「弹窗按比例跟随」切换后即时套用新策略。
   const offSettings = onSettingsChanged(() => reapply.schedule())
-  const observer = new MutationObserver(() => probe.schedule())
-  observer.observe(document.body, { childList: true, subtree: true })
   return () => {
-    observer.disconnect()
     probe.dispose()
     resize.dispose()
     reapply.dispose()

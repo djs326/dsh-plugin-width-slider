@@ -33,9 +33,13 @@
 import {
   type MotionStyle, type NewChatMotionStyle, type SidebarMotionStyle,
 } from '../../shared/motionSettings.ts'
+// 宿主对话/侧栏 DOM 的选择器与谓词统一由 official/chatDom.ts 描述（见该文件）。
 import {
-  ENTRANCE, ENTRANCE_CLASSES, PANEL_DURATION_MS, PANEL_FRAMES, ROLE_ENTRANCE, ROW_IN_CLASS,
-  roleOf, styleClass,
+  ANCHOR, ENTRANCE_CLASSES, HERO_HEADLINE, ITEM_SELECTOR, ROW_IN_CLASS, THINK_BODY, TREE_ITEM,
+  isChatRow, isTreeItem, roleOf, styleClass,
+} from '../official/chatDom.ts'
+import {
+  ENTRANCE, PANEL_DURATION_MS, PANEL_FRAMES, ROLE_ENTRANCE,
 } from './frames.ts'
 import {
   FRESHNESS_WINDOW_MS, MAX_PENDING_BATCHES, MAX_SWITCH_RETRIES, REPLAY_GRACE_MS,
@@ -45,57 +49,8 @@ import { staggerDelay } from './stagger.ts'
 import { EASE_SETTLE, replayEntrance } from './waapi.ts'
 import { revealTextBlock } from './textReveal.ts'
 
-/** Chat-row selector: the host renders one anchored row per message. */
-const ANCHOR = '[data-chat-anchor-key]'
-/** Sidebar tree items: session/workspace rows inside a `role="tree"`. */
-const TREE_ITEM = '[role="tree"] [role="treeitem"]'
-/**
- * Anything inside the conversation view. The trajectory JSON tree
- * (ui-primitives JsonTree) and the subagent lineage tree also render
- * role="tree"/"treeitem", but they belong to the transcript, not the sidebar
- * rail - without this guard they would take the sidebar entrance.
- */
-const CONVERSATION_VIEW = '[data-conversation-scroll], [data-chat-flow]'
-/** Every tracked item on a container (rows + tree items, one kind per container). */
-const ITEM_SELECTOR = `${ANCHOR}, ${TREE_ITEM}`
-/**
- * The thought (reasoning) body. It mounts when the block is expanded or starts
- * streaming open, and it is printed in line by line rather than faded as a whole
- * - the only surface in the transcript whose text arrives once and stays.
- */
-const THINK_BODY = '.dsh-ws-think-body'
-/**
- * The welcome headline. Matched by the CSS-module name segment the host keeps
- * across builds (`*_headline`); if the host renames it the query misses and the
- * seat entrance simply plays alone.
- */
-const HERO_HEADLINE = '[class*="headline"]'
-
-/** Pure: whether an added node is a top-level chat row (not nested in one). */
-export function isChatRow(node: Node): node is HTMLElement {
-  return node instanceof HTMLElement
-    && node.matches(ANCHOR)
-    && node.parentElement?.closest(ANCHOR) === null
-}
-
-/**
- * Pure: whether a node is a sidebar rail row. Two host surfaces use
- * role="tree"/"treeitem" without being the rail, and both are excluded:
- * - trees rendered inside the conversation view (the trajectory JSON tree);
- * - trees portaled straight onto document.body (the subagent lineage
- *   dropdown), whose own parent element is the body.
- * Nested items are still allowed: session rows live INSIDE their workspace
- * group row (the host nests them), so a top-level-only check would silently
- * drop them.
- * @param node - a candidate element.
- */
-export function isTreeItem(node: Node): node is HTMLElement {
-  if (!(node instanceof HTMLElement)) return false
-  if (!node.matches(TREE_ITEM)) return false
-  if (node.closest(CONVERSATION_VIEW) !== null) return false
-  // A portal target is the body itself; the rail always has a real ancestor.
-  return node.closest('[role="tree"]')?.parentElement !== document.body
-}
+// 宿主选择器与谓词（ANCHOR / TREE_ITEM / ITEM_SELECTOR / THINK_BODY / HERO_HEADLINE、
+// isChatRow / isTreeItem）见 official/chatDom.ts，本文件只做批次调度与入场装配。
 
 /** Engine wiring: the current feature state (scope-driven). */
 export interface MotionEngineState {

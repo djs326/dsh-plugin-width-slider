@@ -35,6 +35,7 @@
  * `animationend`, not `transitionend`, hence that listener too.
  */
 import { onSettingsChanged } from './core/config.ts'
+import { debouncedProbe } from './core/domObserver.ts'
 
 /** The new-chat button whose row hosts the tools. */
 const NEW_SESSION = '[class*="_newSession"]'
@@ -169,7 +170,6 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
   document.getElementById(TOOLS_STYLE_ID)?.remove()
   document.head.appendChild(style)
 
-  let frame = 0
   let disposed = false
   let current = ''
   let observing = false
@@ -183,12 +183,16 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     style.textContent = css
   }
 
+  /**
+   * One measure per frame - the rAF latch itself lives in core/domObserver.ts.
+   * Every observer and listener below funnels through here.
+   */
+  const probe = debouncedProbe(() => {
+    if (!disposed) apply()
+  })
   const schedule = (): void => {
-    if (disposed || frame !== 0) return
-    frame = requestAnimationFrame(() => {
-      frame = 0
-      if (!disposed) apply()
-    })
+    if (disposed) return
+    probe.schedule()
   }
 
   const observer = new MutationObserver(schedule)
@@ -354,8 +358,7 @@ export function installSidebarToolsMerge(options: SidebarToolsMergeOptions): Sid
     sync,
     dispose: () => {
       disposed = true
-      if (frame !== 0) cancelAnimationFrame(frame)
-      frame = 0
+      probe.dispose()
       observer.disconnect()
       bodyObserver.disconnect()
       sizeObserver?.disconnect()

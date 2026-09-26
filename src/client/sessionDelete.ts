@@ -18,6 +18,7 @@ import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { isZhInterface } from './core/lang.ts'
 import { callEndpoint } from './core/endpointChannel.ts'
 import { primitives } from './core/primitives.ts'
+import { observeBodyDebounced } from './core/domObserver.ts'
 import { shakeElement } from './motion/index.ts'
 
 interface SessCtx {
@@ -443,19 +444,13 @@ export function installSessionDelete(ctx: SessCtx): () => void {
     disposers.push(d)
   } catch { /* 旧宿主无此槽：保持 DOM 兜底 */ }
   ensureDeleteMenuItem()
-  let rafId = 0
-  const schedule = () => {
-    if (rafId !== 0) return
-    rafId = requestAnimationFrame(() => {
-      rafId = 0
-      try { ensureDeleteMenuItem() } catch { /* ignore */ }
-    })
-  }
-  const observer = new MutationObserver(() => schedule())
-  observer.observe(document.body, { childList: true, subtree: true })
+  // 菜单项注入是幂等的：body 每有动静就在下一帧补一次漏（rAF 合并见
+  // core/domObserver.ts）。
+  const menuProbe = observeBodyDebounced(() => {
+    try { ensureDeleteMenuItem() } catch { /* ignore */ }
+  })
   disposers.push(() => {
-    observer.disconnect()
-    if (rafId !== 0) cancelAnimationFrame(rafId)
+    menuProbe.dispose()
     document.querySelectorAll('[' + MENU_DELETE_ATTR + ']').forEach((el) => el.remove())
   })
   return () => {

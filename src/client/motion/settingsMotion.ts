@@ -20,7 +20,6 @@
  * to change.
  */
 import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './waapi.ts'
-import { isPreviewOpen } from '../core/overlayState.ts'
 // 弹窗结构契约（选择器、遮罩、关闭控件、内层浮层）统一由 official/ 层描述，这里只
 // 消费、不再自带一份 —— 原先 settingsPanelPatch.ts 与这里各写一份，两份已经漂移
 // （dialog 选择器一份带 div 前缀、一份不带）。
@@ -89,6 +88,17 @@ export interface SettingsMotionOptions {
   enabled: () => boolean
   /** Subscribe to toggle changes; returns the disposer. */
   subscribe: (listener: () => void) => () => void
+  /**
+   * Whether the width-slider preview is open (the panel hidden behind the
+   * floating slider). Escape belongs to the preview then - neither swallowing it
+   * nor letting it through, or one keypress would leave the preview *and* close
+   * the panel. Injected by the wiring (client/index.ts) so motion/ never reads
+   * core/ state on its own.
+   *
+   * Not to be confused with `innerLayerOpen()`: that one is a Menu or a nested
+   * modal *inside* the panel.
+   */
+  isPreviewOpen: () => boolean
 }
 
 /** Installed settings-motion handle. */
@@ -248,7 +258,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     if (event.key !== 'Escape' || disposed || bypass || closing || panel === null || !options.enabled()) return
     // 预览（拖宽度时面板被隐藏）开着时，这次 Escape 属于预览：既不拦、也不放行关闭，
     // 否则一次按键会同时退出预览并关掉整个设置面板。
-    if (isPreviewOpen()) return
+    if (options.isPreviewOpen()) return
     // Escape belongs to an open Menu or nested modal first.
     if (innerLayerOpen(panel)) return
     event.preventDefault()

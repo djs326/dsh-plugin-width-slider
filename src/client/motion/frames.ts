@@ -1,55 +1,8 @@
-import {
-  MOTION_STYLES, NEW_CHAT_MOTION_STYLES, SIDEBAR_MOTION_STYLES,
-  type MotionStyle, type NewChatMotionStyle, type SidebarMotionStyle,
-} from '../../shared/motionSettings.ts'
+import { ROLE_PROCESS_CLASS, ROLE_USER_CLASS, type EntranceStyle, type RowRole } from '../official/chatDom.ts'
 import { EASE_FADE, EASE_GLIDE, EASE_SETTLE } from './waapi.ts'
 
-/**
- * Entrance classes applied to marked rows. Literal (global) classes on purpose:
- * the engine runs identically in the browser and in jsdom tests, independent of
- * CSS-module processing. ROW_IN_CLASS is the "already animated" marker used for
- * reuse detection and cleanup; the style class records which entrance ran.
- */
-export const ROW_IN_CLASS = 'dsu-motion-row-in'
-/** Every entrance style id the engine may apply (transcript + sidebar + new-chat). */
-export type EntranceStyle = MotionStyle | SidebarMotionStyle | NewChatMotionStyle
-
-/**
- * Every style class the engine may apply (for cleanup). The style sets share
- * the `fade` id, so the union is deduplicated.
- */
-export const STYLE_CLASSES: readonly string[] =
-  [...new Set([...MOTION_STYLES, ...SIDEBAR_MOTION_STYLES, ...NEW_CHAT_MOTION_STYLES])]
-    .map((style) => styleClass(style))
-
-/** Pure: the class that records which entrance style a row ran. */
-export function styleClass(style: EntranceStyle): string {
-  return `dsu-motion-${style}`
-}
-
-/**
- * Role-based arrivals: rather than one entrance for every transcript row, the
- * row's flow kind picks how it arrives — the user's own message comes in from
- * the side (it left the composer), the assistant's prose keeps whatever style
- * the user chose, and process rows (tool calls/results, commands, compaction,
- * errors) only settle in lightly so they never compete with the prose.
- */
-export type RowRole = 'user' | 'process'
-
-/** Class recording that a row arrived with the user-role entrance. */
-export const ROLE_USER_CLASS = 'dsu-motion-role-user'
-/** Class recording that a row arrived with the process-role entrance. */
-export const ROLE_PROCESS_CLASS = 'dsu-motion-role-process'
-
-/** Every role class (cleanup, alongside the style classes). */
-export const ROLE_CLASSES: readonly string[] = [ROLE_USER_CLASS, ROLE_PROCESS_CLASS]
-
-/**
- * Every class an entrance may leave on a row. The cleanup pass must remove the
- * role classes too: a replayed row can arrive as user first and as process
- * after a re-render, and a stale role class would linger otherwise.
- */
-export const ENTRANCE_CLASSES: readonly string[] = [...STYLE_CLASSES, ...ROLE_CLASSES]
+// 写回宿主行的类名（ROW_IN_CLASS、dsu-motion-* 样式/角色类）与行角色判定都由
+// official/chatDom.ts 描述，本文件只消费：留下的只是 frames / 时长 / 缓动。
 
 /**
  * Entrance keyframes, duration, and easing per style. Opacity always arrives on
@@ -166,26 +119,6 @@ export const ROLE_ENTRANCE: Record<RowRole, { frames: Keyframe[]; durationMs: nu
     easing: EASE_FADE,
     cls: ROLE_PROCESS_CLASS,
   },
-}
-
-/**
- * Pure: the entrance role of a transcript row, from the flow kind the host
- * publishes on the row (`data-chat-flow-kind`). The assistant's own prose
- * (`assistant-step`) returns undefined so it keeps the user's chosen style; a row
- * without a kind (the host changed its data attributes) also falls back to the
- * chosen style rather than guessing.
- *
- * Kind values seen from the host: user, steering, assistant-step, tool-call,
- * turn-process, turn-tail, context, compaction. The user's own words are `user`
- * and a mid-turn interjection is `steering`; everything else - tool rows, turn
- * framing, injected context, compaction notices - is process output. (Note the
- * anchor key uses the node kind `input-message` for the same rows, which is NOT
- * the flow kind, so it must not be matched here.)
- */
-export function roleOf(row: HTMLElement): RowRole | undefined {
-  const kind = row.dataset.chatFlowKind
-  if (kind === undefined || kind === 'assistant-step') return undefined
-  return kind === 'user' || kind === 'steering' ? 'user' : 'process'
 }
 
 /** Transcript-column entrance; the column stays mounted across switches. */

@@ -11,7 +11,7 @@
  * 开关可立即重新 patch）。
  */
 import { findDialogWithNavRail, findNavList } from '../../official/settingsDom.ts'
-import { debouncedProbe } from './probe.ts'
+import { observeBodyDebounced } from '../../core/domObserver.ts'
 
 // ── 补丁 1：左侧 tab 列表超高滚动（navScroll）────────────────────────
 
@@ -48,11 +48,8 @@ function probeAndPatchNavList(): void {
 export function installNavScrollPatch(): () => void {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return () => {}
   probeAndPatchNavList()
-  const probe = debouncedProbe(() => probeAndPatchNavList())
-  const observer = new MutationObserver(() => probe.schedule())
-  observer.observe(document.body, { childList: true, subtree: true })
+  const probe = observeBodyDebounced(() => probeAndPatchNavList())
   return () => {
-    observer.disconnect()
     probe.dispose()
     const navList = patchedNavListEl
     if (navList !== null) {

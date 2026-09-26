@@ -39,6 +39,9 @@ function harness(enabled = true): { options: SettingsMotionOptions; setEnabled: 
           if (i !== -1) listeners.splice(i, 1)
         }
       },
+      // The width-slider preview is never open here; this is exactly what the
+      // engine used to read straight off the preview attribute.
+      isPreviewOpen: () => false,
     },
     setEnabled: (value) => {
       on = value

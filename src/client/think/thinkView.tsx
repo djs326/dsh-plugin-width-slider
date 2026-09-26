@@ -24,6 +24,8 @@
 import { Component, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { isZhInterface, pickText } from '../core/lang.ts'
 import { primitives } from '../core/primitives.ts'
+// 思考块正文类名的契约在 official/chatDom.ts（选择器与 CSS / className 同源）。
+import { THINK_BODY, THINK_BODY_CLASS } from '../official/chatDom.ts'
 
 // ── 样式（取值对齐官方 ReasoningRow / AssistantMarkdown 的 CSS 模块）──
 export const THINK_STYLES = `
@@ -44,7 +46,7 @@ export const THINK_STYLES = `
 .dsh-ws-think-summary-text{text-overflow:ellipsis;display:block;overflow:hidden}
 .dsh-ws-think-summary[data-follow-end]{justify-content:flex-end;display:flex}
 .dsh-ws-think-summary[data-follow-end] .dsh-ws-think-summary-text{text-align:start;text-overflow:clip;flex:none;width:max-content;min-width:100%;overflow:visible}
-.dsh-ws-think-body{padding:4px 0 4px calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;word-break:break-word}
+${THINK_BODY}{padding:4px 0 4px calc(22px + var(--dsh-content-font-delta,0px));color:var(--dsw-alias-label-tertiary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;word-break:break-word}
 .dsh-ws-plain{white-space:pre-wrap;word-break:break-word}
 .dsh-ws-unknown{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--dsw-font-markdown-code-block,monospace);font-size:var(--dsh-content-font-size-secondary,13px)}
 .dsh-ws-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -249,7 +251,7 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
     primitives?.IconThinkOutlineMedium ??
     primitives?.IconThinkOutline14
   // 官方组件缺失时降级：直接显示纯文本正文，不影响内容可读性。
-  if (DisclosureRow === undefined) return <div className="dsh-ws-think-body">{cleanText}</div>
+  if (DisclosureRow === undefined) return <div className={THINK_BODY_CLASS}>{cleanText}</div>
 
   return (
     <div
@@ -285,7 +287,7 @@ export function ThinkBlock({ text, running, collapseAfterRun = true }: ThinkBloc
         }
       >
         {/* 正文与官方 ReasoningRow 一致：纯文本（不渲染 Markdown）。 */}
-        <div className="dsh-ws-think-body">{cleanText}</div>
+        <div className={THINK_BODY_CLASS}>{cleanText}</div>
       </DisclosureRow>
     </div>
   )

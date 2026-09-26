@@ -520,3 +520,132 @@ E1（README 结构树）｜E2（README 测试计数 22/228 → 实测值）｜E3
 ### 10.6 B2 无测试保护（如实记录）
 
 `excludeAttrs` 在 `test/` 下**零命中**；全仓只出现在 `src/client/official/menuInjection.ts:63/90/95` 与 `src/client/patches/wsTabs/assignMenuItem.ts:42`。**B2 只有逻辑论证、没有测试保护**。论证（子代理逐点实测复核过）：`menuInjection.ts:95` 的 `.find((el) => !el.hasAttribute(attr) && excludeAttrs.every((name) => !el.hasAttribute(name))) ?? null` 表明 `attr` 已被第一个条件覆盖 ⇒ `excludeAttrs` 无需包含自己；`'data-ws-assign-item'` 在 `src/` 下**唯一命中就是该排除字面量本身**、零写入方，且与 `WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'` 拼写不同 ⇒ 恒 `false`，删除**在定义上不可观测**。第一项 `'data-session-delete-item'` 保留。
+
+---
+
+## 11. ⑨-3 实施规格（C4 + G1/F3）
+
+### 11.1 两个提交的切分
+
+| 提交 | 内容 | 产物影响 |
+|---|---|---|
+| 第 1 个 | **C4**：删 `inject` 的 `'connection'` + 同步改 E1 | `lib/index.mjs` **逐字节不变**（host 侧不动）；`lib/client.js` **变** |
+| 第 2 个 | **G1** 新建 `src/shared/endpointContract.ts` + 改 8 处消费者；**F3** 新建 `test/endpointContract.test.ts` | **两个产物都变**（host 侧首次 import 这个共享模块） |
+
+### 11.2 C4 的确切改动（第 1 个提交）
+
+1. `src/client/index.ts:44`：`export const inject = ['slots', 'locale', 'connection', 'sessions', 'workspaces']` → **删 `'connection'`**，变四项。
+2. `test/clientEntry.test.ts` 的 **E1**（`it` 名 `declares the five host services it reads, in order (E1)`）：`five` → `four`，期望数组五元 → 四元。
+   - **⚠ 这是设计意图，不是障碍。** ⑨-1 的 E1 存在的意义就是让「删掉一个服务名」变成必须显式进行的动作。**E1 变红是预期行为 —— 要同步改期望值，绝不允许把删除回退掉。**
+3. **不要动 `src/index.ts`（host）的 `inject`** —— 那里的 `connection` / `webServer` 有必需性论证（`src/index.ts:119-124`）。
+4. **不要动 `src/client/index.ts:26` 的 `import type {} from '@deepseek-ai/dsh-client-connection/client'`** —— 那是类型增强声明，与 `inject` 是两回事。
+
+### 11.3 新建 `src/shared/endpointContract.ts`（第 2 个提交）
+
+```ts
+/**
+ * 端点协议契约：`/api/width-slider` 的路径、5 个方法名与响应信封。
+ *
+ * host（`src/host/api.ts` 的分发器 + `src/index.ts` 的注册）与 client
+ * （`core/rpc.ts`、`patches/wsTabs/`、`sessionDelete.ts`）各自独立打包，
+ * 但这个协议是**两者共用的唯一真源** —— 此前它散落在 8 处以字符串字面量
+ * 的形式存在，改一处漏一处不会有任何编译期或运行时提示。
+ *
+ * 注意 host 与 client 是两个独立 bundle，本模块会被各自打进一份。
+ * 这是刻意的：契约的值必须两端一致，而类型约束只在编译期起作用。
+ */
+
+/** `/api/width-slider` 的挂载路径（host 注册、client 调用共用）。 */
+export const WIDTH_SLIDER_ENDPOINT = '/api/width-slider'
+
+/**
+ * 端点方法名。键名即方法名，值也即方法名 —— 用具名键是为了让 host 的分发器
+ * 与 client 的调用点都能被 grep 到，同时避免两端拼写漂移。
+ */
+export const ENDPOINT_METHOD = {
+  readSettings: 'readSettings',
+  writeSettings: 'writeSettings',
+  wsGroupsRead: 'wsGroupsRead',
+  wsGroupsWrite: 'wsGroupsWrite',
+  sessionDelete: 'sessionDelete',
+} as const
+
+export type EndpointMethod = (typeof ENDPOINT_METHOD)[keyof typeof ENDPOINT_METHOD]
+
+/** host 成功响应：`value` 的形状由各方法自行约定。 */
+export interface EndpointOk<T = unknown> {
+  ok: true
+  value: T
+}
+
+/** host 失败响应：`error` 是 `{code, message}` 对象（不是字符串）。 */
+export interface EndpointErr {
+  ok: false
+  error: { code: string; message: string }
+}
+
+export type EndpointResult<T = unknown> = EndpointOk<T> | EndpointErr
+```
+
+**⚠ 关键事实（实现前必读）**：`src/host/api.ts` 的所有失败分支返回的是 `{ ok: false, error: { code, message } }` —— **`error` 是对象，不是字符串**。例如 `:41` 的 `{ ok: false, error: { code: 'write-failed', message } }`、`:67` 的 `{ code: 'invalid-id', message: 'id is required' }`、`:74` 的 `{ code: 'unknown-endpoint', message: 'unknown endpoint: ' + endpoint }`。**契约类型必须如实反映这一点，不要写成 `error: string`。**
+
+**不要**把两个 `endpointChannel.ts`（host 92 行 / client 36 行）里的传输层错误码（`bad-json` / `bad-request` / `handler-failed`）并进本模块 —— 那属于 HTTP 层，与端点方法契约不是一回事。
+
+### 11.4 八处消费者的改造表
+
+| # | 文件:行 | 现状 | 改为 |
+|---|---|---|---|
+| 1 | `src/index.ts:64` | `registerEndpointChannel(ctx, '/api/width-slider', createHostApi({…}))` | `registerEndpointChannel(ctx, WIDTH_SLIDER_ENDPOINT, createHostApi({…}))` |
+| 2-6 | `src/host/api.ts:31` / `:34` / `:46` / `:49` / `:63` | `if (endpoint === 'readSettings')` 等 5 处 | `if (endpoint === ENDPOINT_METHOD.readSettings)` 等 5 处 |
+| 7 | `src/client/core/rpc.ts:9` | `callEndpoint('/api/width-slider', 'readSettings', {})` | `callEndpoint(WIDTH_SLIDER_ENDPOINT, ENDPOINT_METHOD.readSettings, {})` |
+| 8 | `src/client/core/rpc.ts:21` | `callEndpoint('/api/width-slider', 'writeSettings', { settings })` | `callEndpoint(WIDTH_SLIDER_ENDPOINT, ENDPOINT_METHOD.writeSettings, { settings })` |
+| 9 | `src/client/patches/wsTabs/index.tsx:471` | `callEndpoint('/api/width-slider', method, payload \|\| {})` | `callEndpoint(WIDTH_SLIDER_ENDPOINT, method, payload \|\| {})`（`method` 是运行时值，只在路径上收敛） |
+| 10 | `src/client/patches/wsTabs/groupsStore.ts:144` | `call('wsGroupsWrite', { groups: snapshot })` | `call(ENDPOINT_METHOD.wsGroupsWrite, { groups: snapshot })` |
+| 11 | `src/client/patches/wsTabs/groupsStore.ts:185` | `rpcCall('wsGroupsRead')` | `rpcCall(ENDPOINT_METHOD.wsGroupsRead)` |
+| 12 | `src/client/sessionDelete.ts:90` | `callEndpoint('/api/width-slider', 'sessionDelete', { id: sessionId })` | `callEndpoint(WIDTH_SLIDER_ENDPOINT, ENDPOINT_METHOD.sessionDelete, { id: sessionId })` |
+
+**⚠ `groupsStore.ts` 的 `call` / `rpcCall` 是注入进来的**（`:132` `const call = rpcCall`；`loadGroups` 直接用 `rpcCall`）。它们是 `EndpointCall` 风格但**路径已绑定**的函数（由 `wsTabs/index.tsx:471` 那一层提供）。**只换方法名，不要改这两个函数的签名或注入方式。**
+
+**纯注释残留不要顺手改**：`src/client/core/endpointChannel.ts:19`、`src/client/core/config.ts:6`、`src/client/sessionDelete.ts:14`、`src/client/patches/wsTabs/index.tsx:21`、`src/host/api.ts:2`、`src/index.ts:6-9` 等处都提到端点路径或方法名，**它们是文档而不是契约**，本批不动。
+
+### 11.5 F3：`test/endpointContract.test.ts`
+
+新建一个测试文件（**10-14 个用例**），只依赖 3 个 import：`../src/shared/endpointContract.ts`、`../src/host/api.ts`、`../src/client/core/endpointChannel.ts`。建议覆盖：
+
+1. **字面量钉住**：`WIDTH_SLIDER_ENDPOINT === '/api/width-slider'`；`ENDPOINT_METHOD` 的 5 个键值逐条 `toBe` 自己的字面量。**这是对外契约，必须钉死字面量**（不能用常量自己比自己）。
+2. **方法名两两不同**：`new Set(Object.values(ENDPOINT_METHOD)).size === 5` —— 防止将来复制粘贴出重名键。
+3. **host 分发器认每个方法**：用假的 `HostApiDeps`（参照 `test/hostEndpoints.test.ts:33-42` 的假 ctx 形状）调 `createHostApi(deps)`，对 `Object.values(ENDPOINT_METHOD)` 逐个调用，断言**没有任何一个**返回 `error.code === 'unknown-endpoint'`。
+4. **未知方法仍被拒**：`createHostApi(deps)('no-such-method', {})` → `ok: false` 且 `error.code === 'unknown-endpoint'`。
+5. **信封形状**：成功分支有 `ok: true` 与 `value` 键；失败分支的 `error.code` / `error.message` 都是字符串。
+6. **client 请求形状**：`// @vitest-environment jsdom`，stub `global.fetch`，调 `callEndpoint(WIDTH_SLIDER_ENDPOINT, ENDPOINT_METHOD.readSettings, {})`，断言 `fetch` 的第一个参数是 **`'/api/width-slider'`**、第二个参数是 `{ method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"method":"readSettings","payload":{}}' }`；再断言非 2xx 时抛 `endpoint /api/width-slider failed: HTTP 500`。
+
+**⚠ 不要用 `toMatchSnapshot()`**（⑨-1 已立的规矩）。断言写成显式字面量。
+
+### 11.6 验收判据（本步与前面各批的关键差别）
+
+- `npx tsc -p tsconfig.test.json --noEmit` → exit 0
+- `npx vitest run` → 全绿；**用例总数从 292 增加**（C4 不改数量，F3 新增）
+- `npm run build` → exit 0
+- **第 1 个提交后**：`lib/index.mjs` 的 sha256 必须**仍为** `122D91D3D75359ACF580DA8C6AB6E84BBEC2054BBCC054667D664B9D35F242D3`（26 652 B）；`lib/client.js` 会变（预期）
+- **第 2 个提交后：两个产物都会变，这是预期，不再是失败信号。** 判据改为：
+  - 两个产物的行数/字节数变化**可归因**（新增一份模块定义 + 8 处引用改成常量名）
+  - **产物里 `'/api/width-slider'` 仍然存在**（host 与 client 各一份），且 5 个方法名字符串都还在
+  - **F3 全绿** —— 这是「集中化没有改变协议」的实证
+- **备份基线**到 `$env:TEMP\batch9-3-base\`（`lib/index.mjs` + `lib/client.js` 的副本）
+- **至少 3 条变异探针**，每条实测后 `git checkout -- <file>` 还原：
+
+| 探针 | 改动 | 预期变红 |
+|---|---|---|
+| P1 | `endpointContract.ts` 的 `WIDTH_SLIDER_ENDPOINT` → `'/api/width-slidr'` | F3 的字面量断言 + fetch 形状断言 |
+| P2 | `ENDPOINT_METHOD.readSettings` 的值 → `'readSetting'` | F3 字面量断言 + 「host 认每个方法」断言 |
+| P3 | 删 `src/client/index.ts` 的 `'sessions'`（而非 `'connection'`） | E1（⑨-1 的网仍应有效） |
+
+### 11.7 不要做的事
+
+1. **不要动 host 侧 `inject`**（`connection` / `webServer` 必需）。
+2. **不要改两个 `endpointChannel.ts`** —— 它们的 `path` 参数本来就是泛型 `string`，不是契约的一部分。
+3. **不要给 `createHostApi` 加 `switch` / 查表** —— 5 个 `if` 的**顺序**是隐式契约（`docs/host-split-spec.md` §7 记录过），保持现有形状。
+4. **不要改错误码与消息文本**（`write-failed` / `invalid-id` / `unknown-endpoint` / `delete-failed`）。
+5. **不要把注释里提到的路径字面量一起改掉**（见 §11.4 末尾）。
+6. **不要新增 `EndpointResult` 以外的导出**，也不要给 `ENDPOINT_METHOD` 加 `satisfies` 之类的装饰。
+7. **不要顺手升级版本号或改 README** —— 那是 ⑨-4。

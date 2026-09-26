@@ -28,8 +28,7 @@ import {
   motionLookOf,
   type MotionLookId,
 } from '../shared/motionSettings.ts'
-import { entranceSpec } from './motion/motion.ts'
-import { prefersReducedMotion, replayEntrance } from './motion/animate.ts'
+import { entranceSpec, prefersReducedMotion, replayEntrance } from './motion/index.ts'
 
 /** 风格档 id → 卡片名称文案键。 */
 const LOOK_LABELS: Record<MotionLookId, keyof WidthSliderKey> = {

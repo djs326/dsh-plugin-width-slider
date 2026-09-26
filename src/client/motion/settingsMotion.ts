@@ -19,7 +19,7 @@
  * the host's class names are CSS-module hashes; nothing in the host markup has
  * to change.
  */
-import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
+import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './waapi.ts'
 import { isPreviewOpen } from '../core/overlayState.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */

@@ -27,10 +27,13 @@ import { installSessionDelete } from './sessionDelete.ts'
 import { installWorkspaceTabs } from './workspaceTabs.tsx'
 import { installSidebarToolsMerge } from './sidebarToolsMerge.ts'
 import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './core/config.ts'
-import { installConversationEntrance, type MotionEngineState } from './motion/motion.ts'
-import { installSettingsMotion } from './motion/settingsMotion.ts'
-import { MOTION_CSS } from './motion/styles.ts'
-import { prefersReducedMotion } from './motion/animate.ts'
+import {
+  MOTION_CSS,
+  installConversationEntrance,
+  installSettingsMotion,
+  prefersReducedMotion,
+  type MotionEngineState,
+} from './motion/index.ts'
 import { motionAllowed, motionLookOf } from '../shared/motionSettings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

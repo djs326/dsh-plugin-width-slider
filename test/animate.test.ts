@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * animate.ts 的入场原语。这些行为都直接决定用户看到什么：关掉动效后是否还位移、
+ * waapi.ts 的入场原语。这些行为都直接决定用户看到什么：关掉动效后是否还位移、
  * 快速重放是否叠加、面板退出时较长的过渡是否被截断。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,7 @@ import {
   reducedFrames,
   replayEntrance,
   whenTransitionSettles,
-} from '../src/client/motion/animate.ts'
+} from '../src/client/motion/waapi.ts'
 
 const FRAMES: Keyframe[] = [
   { opacity: 0, translate: '0 8px' },

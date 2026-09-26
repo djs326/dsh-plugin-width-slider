@@ -18,7 +18,7 @@ import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { isZhInterface } from './core/lang.ts'
 import { callEndpoint } from './core/endpointChannel.ts'
 import { primitives } from './core/primitives.ts'
-import { shakeElement } from './motion/animate.ts'
+import { shakeElement } from './motion/index.ts'
 
 interface SessCtx {
   get?: <T = unknown>(name: string) => T | undefined

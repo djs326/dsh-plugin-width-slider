@@ -4,7 +4,7 @@
  * ends, and never throws where the Web Animations API is missing.
  */
 import { describe, expect, it } from 'vitest'
-import { revealTextBlock } from '../src/client/motion/animate.ts'
+import { revealTextBlock } from '../src/client/motion/textReveal.ts'
 
 /** Stub the one measurement the timing reads (jsdom has no layout). */
 function withHeight(el: HTMLElement, height: number): HTMLElement {

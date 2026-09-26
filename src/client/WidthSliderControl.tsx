@@ -33,17 +33,17 @@ import {
   readPreference,
   setFollowEnabled,
 } from './widthPrefs.ts'
-import { prefersReducedMotion } from './motion/animate.ts'
 import {
   FLICK_MIN_VELOCITY,
   VELOCITY_WINDOW_MS,
   dragVelocity,
   isSettled,
+  prefersReducedMotion,
   projectLanding,
   stepSpring,
   type PointerSample,
   type SpringState,
-} from './motion/spring.ts'
+} from './motion/index.ts'
 
 // ── Panel slider geometry ────────────────────────────────────────────────────
 // The knob diameter equals the track height so the knob fully hides the fill

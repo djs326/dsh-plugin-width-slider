@@ -48,26 +48,41 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { isZhInterface } from './core/lang.ts'
 import { getSettings, onSettingsChanged } from './core/config.ts'
 import { callEndpoint } from './core/endpointChannel.ts'
 import { primitives } from './core/primitives.ts'
 import { findOpenMenu, injectMenuItem, MENU_ITEM_SELECTOR } from './official/menuInjection.ts'
+import { findOpenProjectRow, locateHeader, workspaceInfoFromRow } from './patches/wsTabs/domContract.ts'
+import {
+  DEFAULT_TAB,
+  FLAT_SESSION_ORDER_KEY,
+  commitGroups,
+  groupOf,
+  groups,
+  loadGroups,
+  resetGroupsStore,
+  setRpcCall,
+  useGroups,
+  type WsGroup,
+} from './patches/wsTabs/groupsStore.ts'
+import { tt, ttw } from './patches/wsTabs/messages.ts'
+import {
+  filterSessions,
+  filterWorkspaces,
+  unownedSessionIds,
+  useWsTabsEnabled,
+  type SessionListState,
+  type WorkspaceLike,
+  type WsListState,
+} from './patches/wsTabs/scope.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
-const DEFAULT_TAB = '__default__'
-/** 官方 view store 的 flat 视图账本键（retainAccountKeys 补全用）。 */
-const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
-/** 分组本地缓存（host 文件之外的兜底：开关/重启后标签不丢）。 */
-const GROUPS_CACHE_KEY = 'dsh-plugin-width-slider.wsg.cache'
-/** host 落盘失败的脏标志：下次启动据此以本地缓存为准并重试写回。 */
-const GROUPS_DIRTY_KEY = 'dsh-plugin-width-slider.wsg.dirty'
+
 const STYLE_ID = 'dsh-plugin-width-slider-ws-tabs'
 
 // 官方工作区标题行是 justify-content:flex-end，原先靠搜索按钮自身的
@@ -86,39 +101,12 @@ const TABS_CSS = `
 [data-dsh-ws-tabs-bar] [data-dsh-ws-add] svg{display:block}
 `
 
-interface WorkspaceLike {
-  workspaceId?: string
-  title?: string
-  path?: string
-  createdAt?: string
-  sessionIds?: string[]
-}
-
-interface SessionListState {
-  ids?: string[]
-  byId?: Record<string, unknown>
-  current?: string | null
-  [key: string]: unknown
-}
-
-interface WsListState {
-  items?: WorkspaceLike[]
-  archivedSessionIds?: string[]
-  [key: string]: unknown
-}
-
 /** 页签对话框的目标：`newTab` 是尚未创建的草稿（不落盘），其余指向已存在的页签。 */
 type TabsDialog =
   | { kind: 'rename'; id: string }
   | { kind: 'newTab'; id: string }
   | { kind: 'members'; id: string }
   | { kind: 'delete'; id: string }
-
-export interface WsGroup {
-  id: string
-  name: string
-  workspaceIds: string[]
-}
 
 export interface WsTabsCtx {
   get?: <T = unknown>(name: string) => T | undefined
@@ -128,368 +116,6 @@ export interface WsTabsCtx {
     inject?: (name: string, register: () => () => void) => () => void
     register?: (options: Record<string, unknown>, component: unknown) => () => void
   }
-}
-
-// ── 文案 ────────────────────────────────────────────────────────────────
-const T: Record<string, [string, string]> = {
-  'tab.default': ['默认', 'Default'],
-  'tab.groupTitle': ['{name}（{n} 个工作区）', '{name} ({n} workspaces)'],
-  'ctx.rename': ['重命名', 'Rename'],
-  'ctx.members': ['管理工作区', 'Manage workspaces'],
-  'ctx.delete': ['删除', 'Delete'],
-  'rename.title': ['重命名页签', 'Rename tab'],
-  'rename.placeholder': ['给文件夹起个名字', 'Name this folder'],
-  'rename.save': ['保存', 'Save'],
-  'rename.saving': ['保存中…', 'Saving…'],
-  'rename.dup': ['已存在同名页签。', 'A tab with this name already exists.'],
-  'rename.required': ['请输入页签名', 'Enter a tab name'],
-  'members.title': ['管理页签「{name}」', 'Manage tab "{name}"'],
-  'members.desc': ['勾选 = 放进此页签。工作区同一时间只属于一个位置（默认或某个页签），勾选会把它从原位置移过来。', 'Check to include. A workspace belongs to one place at a time (Default or one tab); checking moves it here.'],
-  'members.at': ['位于：{name}', 'In: {name}'],
-  'members.atDefault': ['位于：默认', 'In: Default'],
-  'members.empty': ['还没有工作区。', 'No workspaces yet.'],
-  'delete.title': ['删除页签', 'Delete tab'],
-  'delete.desc': ['删除「{name}」后，其中的 {n} 个工作区会自动移回默认页签。', 'Deleting "{name}" moves its {n} workspace(s) back to the Default tab.'],
-  'delete.ok': ['删除', 'Delete'],
-  'delete.busy': ['删除中…', 'Deleting…'],
-  'cancel': ['取消', 'Cancel'],
-  'new.name': ['未命名', 'Untitled'],
-  'warn.noRpc': ['工作区分组服务不可用', 'Workspace groups service unavailable'],
-  'defaultHint': ['默认页签 = 直属工作区与未分组会话', 'Default tab shows direct workspaces and ungrouped sessions'],
-  'add.tab': ['新建页签', 'New tab'],
-  'done': ['完成', 'Done'],
-}
-function tt(key: string, vars?: Record<string, string>): string {
-  const pair = T[key]
-  if (!pair) return key
-  let text = isZhInterface() ? pair[0] : pair[1]
-  if (vars) for (const k of Object.keys(vars)) text = text.replace('{' + k + '}', vars[k])
-  return text
-}
-
-// ── 分组 store（模块级 + useSyncExternalStore；host 落盘）───────────────
-let groupReady = false
-let groupLoadFailed = false
-let groups: WsGroup[] = []
-/** 本地写入序号：每次 commitGroups 递增，供启动读回判定远端结果是否已经过期。 */
-let groupRevision = 0
-const groupSubs = new Set<() => void>()
-let rpcCall: ((method: string, payload?: Record<string, unknown>) => Promise<unknown>) | null = null
-
-function sanitize(raw: unknown): WsGroup[] {
-  const list = raw && typeof raw === 'object' && Array.isArray((raw as { groups?: unknown }).groups)
-    ? ((raw as { groups?: unknown }).groups as unknown[])
-    : []
-  const out: WsGroup[] = []
-  const seen = new Set<string>()
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue
-    const it = item as Record<string, unknown>
-    if (typeof it.id !== 'string' || it.id === '' || seen.has(it.id)) continue
-    const name = typeof it.name === 'string' && it.name.trim() !== '' ? it.name.trim() : tt('new.name')
-    const workspaceIds = Array.isArray(it.workspaceIds)
-      ? it.workspaceIds.filter((v): v is string => typeof v === 'string' && v !== '')
-      : []
-    seen.add(it.id)
-    out.push({ id: it.id, name, workspaceIds })
-  }
-  return out
-}
-
-function emitGroups(): void {
-  for (const fn of groupSubs) {
-    try {
-      fn()
-    } catch { /* 忽略 */ }
-  }
-}
-
-// 快照引用必须稳定（useSyncExternalStore 要求 getSnapshot 在 store 未变化时
-// 返回同一对象；每次新建字面量会触发无限重渲染 → React #185）。
-let groupSnapshot: { ready: boolean; failed: boolean; groups: readonly WsGroup[] } | null = null
-function getGroupSnapshot(): { ready: boolean; failed: boolean; groups: readonly WsGroup[] } {
-  if (groupSnapshot && groupSnapshot.ready === groupReady && groupSnapshot.failed === groupLoadFailed && groupSnapshot.groups === groups) {
-    return groupSnapshot
-  }
-  groupSnapshot = { ready: groupReady, failed: groupLoadFailed, groups }
-  return groupSnapshot
-}
-
-function subscribeGroups(cb: () => void): () => void {
-  groupSubs.add(cb)
-  return () => {
-    groupSubs.delete(cb)
-  }
-}
-
-function cacheWrite(): void {
-  try {
-    window.localStorage.setItem(GROUPS_CACHE_KEY, JSON.stringify({ version: 1, groups, savedAt: Date.now() }))
-  } catch { /* 忽略 */ }
-}
-function cacheRead(): WsGroup[] {
-  try {
-    const raw = window.localStorage.getItem(GROUPS_CACHE_KEY)
-    if (!raw) return []
-    return sanitize(JSON.parse(raw))
-  } catch {
-    return []
-  }
-}
-/** 读缓存里的写入时间戳（无缓存/解析失败 = 0）。 */
-function cacheSavedAt(): number {
-  try {
-    const raw = window.localStorage.getItem(GROUPS_CACHE_KEY)
-    if (!raw) return 0
-    const parsed = JSON.parse(raw) as { savedAt?: unknown }
-    return typeof parsed.savedAt === 'number' && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0
-  } catch {
-    return 0
-  }
-}
-
-function markDirty(): void {
-  try {
-    window.localStorage.setItem(GROUPS_DIRTY_KEY, '1')
-  } catch { /* 忽略 */ }
-}
-function clearDirty(): void {
-  try {
-    window.localStorage.removeItem(GROUPS_DIRTY_KEY)
-  } catch { /* 忽略 */ }
-}
-
-/**
- * 写盘序号：每次 persistGroups 自增；链上真正执行时用它丢弃已被更新过的那一次。
- */
-let writeSeq = 0
-/**
- * 写盘串行链：并发 POST 的到达顺序不保证，旧 payload 后到就会成为持久态（内存/缓存是
- * 新的、重启后回退）。串行 + 只发最新一次，让落盘顺序与本地变更顺序一致。
- */
-let writeChain: Promise<void> = Promise.resolve()
-
-function persistGroups(): void {
-  const call = rpcCall
-  if (!call) {
-    markDirty()
-    return
-  }
-  const seq = ++writeSeq
-  // 快照内容：链上执行时 groups 可能已经变了。
-  const snapshot = groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] }))
-  writeChain = writeChain.then(async () => {
-    // 期间又改过：这次的快照已过期，跳过（更新的那一次会带着最新内容发出去）。
-    if (seq !== writeSeq) return
-    try {
-      const r = (await call('wsGroupsWrite', { groups: snapshot })) as { ok?: boolean } | null
-      if (!r || r.ok !== true) {
-        console.warn('[width-slider] wsGroupsWrite rejected by host，下次启动将以本地缓存为准重试')
-        markDirty()
-      } else {
-        clearDirty()
-      }
-    } catch (err) {
-      console.warn('[width-slider] wsGroupsWrite failed，下次启动将以本地缓存为准重试', err)
-      markDirty()
-    }
-  })
-}
-
-function commitGroups(mutate: (cur: WsGroup[]) => WsGroup[]): void {
-  groups = mutate(groups.map((g) => ({ ...g, workspaceIds: [...g.workspaceIds] })))
-  groupRevision += 1
-  groupReady = true
-  cacheWrite()
-  emitGroups()
-  persistGroups()
-}
-
-async function loadGroups(): Promise<void> {
-  /** 读回开始时的本地写入序号：期间用户若建/改过页签，远端结果即已过期。 */
-  const startedRevision = groupRevision
-  // 先用本地缓存同步给出与上次一致的分组视图，避免「先全量→读回后重排」的闪动。
-  const firstCache = cacheRead()
-  if (firstCache.length > 0) {
-    groups = firstCache
-    groupReady = true
-    emitGroups()
-  }
-  if (!rpcCall) {
-    const cached = cacheRead()
-    if (cached.length > 0) groups = cached
-    groupReady = true
-    emitGroups()
-    return
-  }
-  try {
-    const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
-    // 读回期间用户已经建/改过页签：本地是更新的真源，这次远端结果不再赋值（否则刚建的
-    // 页签会被旧列表在内存与缓存里一起覆盖掉，窗口＝RPC 往返）。收尾照常走完，并清掉
-    // 上次的失败标记 —— 本地写入一律经过 commitGroups，revision 变化即代表它已经完成
-    // 了 groupReady／缓存／host 写回。
-    if (groupRevision !== startedRevision) {
-      groupLoadFailed = false
-    } else if (result && result.ok === true) {
-      const remote = sanitize(result.value)
-      if (remote.length > 0) {
-        // 上次写 host 失败过（脏标志）且本地缓存更新 → 以本地为准并重试写回，
-        // 否则直接采用 host 数据（host 是权威）。
-        const dirty = (() => {
-          try {
-            return window.localStorage.getItem(GROUPS_DIRTY_KEY) === '1'
-          } catch {
-            return false
-          }
-        })()
-        const cached = cacheRead()
-        const cacheNewer = cacheSavedAt() > 0 && cached.length > 0
-        if (dirty && cacheNewer && JSON.stringify(cached) !== JSON.stringify(remote)) {
-          groups = cached
-          groupLoadFailed = false
-          persistGroups()
-        } else {
-          groups = remote
-          groupLoadFailed = false
-          // dirty 但 host 内容与本地一致 = 上次写已成功/已收敛，清掉脏标志。
-          clearDirty()
-        }
-      } else {
-        // host 返回空：旧 host 无写入端点或文件缺失 —— 本地缓存兜底并尝试写回。
-        const cached = cacheRead()
-        groups = cached
-        groupLoadFailed = false
-        if (cached.length > 0) persistGroups()
-      }
-    } else {
-      console.warn('[width-slider] wsGroupsRead 失败：分组功能可能不可用（RPC 拒绝），以本地缓存继续')
-      groups = cacheRead()
-      groupLoadFailed = true
-    }
-  } catch (err) {
-    console.warn('[width-slider] wsGroupsRead 异常，以本地缓存继续', err)
-    groups = cacheRead()
-    groupLoadFailed = true
-  }
-  cacheWrite()
-  groupReady = true
-  emitGroups()
-}
-
-function useGroups(): { ready: boolean; failed: boolean; groups: readonly WsGroup[] } {
-  return useSyncExternalStore(subscribeGroups, getGroupSnapshot, getGroupSnapshot)
-}
-
-function groupOf(id: string): WsGroup | undefined {
-  return groups.find((g) => g.id === id)
-}
-
-/** 开关状态（组件常驻：开关只切显示/过滤，不重新挂组件，保证即时）。 */
-function useWsTabsEnabled(): boolean {
-  return useSyncExternalStore(
-    (cb) => onSettingsChanged(cb),
-    () => getSettings().workspaceTabs,
-    () => getSettings().workspaceTabs,
-  )
-}
-
-// ── 数据过滤（带结果缓存）────────────────────────────────────────────────
-// 官方树把收到的 useSessions / useWorkspaces 结果当渲染依赖做引用比较，
-// 且内部会对会话顺序做账（写 store 再触发重渲染）。过滤结果每次都是新对象
-// 会引发 官方渲染 → 依赖变化 → store 同步 → 重渲染 的无限循环（React #185）。
-// 因此按「输入 state 引用 + 作用域 key」缓存过滤结果，引用稳定直到真实变化。
-const sessionsFilterCache = new WeakMap<object, Map<string, SessionListState>>()
-function filterSessions(state: SessionListState, allowed: string[]): SessionListState {
-  const src = state || {}
-  const key = allowed.join('\u0001')
-  let byKey = sessionsFilterCache.get(src)
-  if (!byKey) {
-    byKey = new Map()
-    sessionsFilterCache.set(src, byKey)
-  }
-  const hit = byKey.get(key)
-  if (hit) return hit
-  const byId: Record<string, unknown> = {}
-  const ids: string[] = []
-  for (const id of allowed) {
-    const s = (src.byId || {})[id]
-    if (s === undefined) continue
-    byId[id] = s
-    ids.push(id)
-  }
-  const out: SessionListState = { ...src, ids, byId }
-  byKey.set(key, out)
-  return out
-}
-
-const workspacesFilterCache = new WeakMap<object, Map<string, WsListState>>()
-function filterWorkspaces(state: WsListState, workspaceIds: string[]): WsListState {
-  const src = state || {}
-  const key = workspaceIds.slice().sort().join('\u0001')
-  let byKey = workspacesFilterCache.get(src)
-  if (!byKey) {
-    byKey = new Map()
-    workspacesFilterCache.set(src, byKey)
-  }
-  const hit = byKey.get(key)
-  if (hit) return hit
-  const keep = new Set(workspaceIds)
-  const items = (src.items || []).filter((w) => w.workspaceId !== undefined && keep.has(w.workspaceId as string))
-  const out: WsListState = { ...src, items }
-  byKey.set(key, out)
-  return out
-}
-
-/** 官方“未分组”会话（不属于任何官方工作区 sessionIds 的会话）。 */
-function unownedSessionIds(list: SessionListState, items: WorkspaceLike[]): string[] {
-  const accounted = new Set<string>()
-  for (const w of items) for (const id of w.sessionIds || []) accounted.add(id)
-  const out: string[] = []
-  for (const id of list.ids || []) {
-    if (!accounted.has(id) && list.byId && list.byId[id] !== undefined) out.push(id)
-  }
-  return out
-}
-
-// ── 官方标题行定位与隐藏 ────────────────────────────────────────────────
-const LABEL_WORDS = ['工作区', '会话', 'Workspaces', 'Sessions']
-const SEARCH_PLACEHOLDERS = ['搜索会话', 'Search sessions']
-
-function isLabelNode(el: Element): boolean {
-  const text = (el.textContent || '').trim()
-  return LABEL_WORDS.some((w) => text === w) && el.children.length === 0
-}
-
-function locateHeader(host: Element): { row: HTMLElement; label: HTMLElement } | null {
-  const inputs = Array.from(host.querySelectorAll('input[type="text"]'))
-  for (const input of inputs) {
-    const ph = (input as HTMLInputElement).placeholder || ''
-    if (!SEARCH_PLACEHOLDERS.some((p) => ph.indexOf(p) >= 0)) continue
-    let node: HTMLElement | null = input.parentElement
-    while (node && node !== host && node.parentElement !== host) {
-      const first = node.firstElementChild
-      if (first instanceof HTMLElement && isLabelNode(first)) {
-        return { row: node, label: first }
-      }
-      node = node.parentElement
-    }
-    node = input.parentElement
-    for (let depth = 0; node && depth < 4; depth += 1, node = node.parentElement) {
-      if (!node || node === host) break
-      for (const child of Array.from(node.children)) {
-        if (child instanceof HTMLElement && child !== input && isLabelNode(child)) {
-          return { row: node, label: child }
-        }
-      }
-    }
-  }
-  const spans = Array.from(host.querySelectorAll('span'))
-  for (const span of spans) {
-    if (!(span instanceof HTMLElement) || !isLabelNode(span)) continue
-    const row = span.parentElement
-    if (row) return { row, label: span }
-  }
-  return null
 }
 
 // ── 图标 ────────────────────────────────────────────────────────────────
@@ -503,53 +129,6 @@ const ASSIGN_TAB_EVENT = 'dsh:ws-tab-assign'
 const ASSIGN_ICON_PATH =
   '<path transform="translate(9.52 2.52)" d="M3.55246 0L3.55246 2.44252L6 2.44252L6 3.55748L3.55246 3.55748L3.55246 6L2.43834 6L2.43834 3.55748L0 3.55748L0 2.44252L2.43834 2.44252L2.43834 0L3.55246 0Z" fill="currentColor"/>' +
   '<path transform="translate(0.3496 2.35)" d="M4.76367 0C5.36861 1.80598e-05 5.93113 0.310294 6.25488 0.821289L6.78027 1.64941C6.79685 1.67558 6.81791 1.69775 6.83887 1.71973C6.72186 2.15521 6.65702 2.61192 6.65137 3.08301C6.25601 2.96045 5.90909 2.70478 5.68164 2.3457L5.15723 1.5166C5.07183 1.38189 4.92318 1.3008 4.76367 1.30078L2.32422 1.30078C1.7589 1.30078 1.30078 1.7589 1.30078 2.32422L1.30078 10.1338C1.30078 10.6991 1.7589 11.1572 2.32422 11.1572L11.9766 11.1572C12.5419 11.1572 13 10.6991 13 10.1338L13 8.58398C13.4545 8.5135 13.8903 8.38748 14.3008 8.21289L14.3008 10.1338C14.3008 11.4171 13.2598 12.458 11.9766 12.458L2.32422 12.458C1.04093 12.458 0 11.4171 0 10.1338L0 2.32422C0 1.04093 1.04093 0 2.32422 0L4.76367 0Z" fill="currentColor"/>'
-
-const T_WS = {
-  'menu.assign': ['分配标签', 'Assign tag'],
-  'dlg.title': ['分配标签', 'Assign tag'],
-  'dlg.desc': ['为「{name}」选择标签（默认或某个页签）', 'Choose a tag for "{name}" (Default or a tab)'],
-  'dlg.cur': ['当前所在', 'Current'],
-  'dlg.done': ['已分配', 'Assigned'],
-  'dlg.noWs': ['该工作区已不存在。', 'This workspace no longer exists.'],
-} as Record<string, [string, string]>
-function ttw(key: string, vars?: Record<string, string>): string {
-  const pair = T_WS[key]
-  if (!pair) return key
-  let text = isZhInterface() ? pair[0] : pair[1]
-  if (vars) for (const k of Object.keys(vars)) text = text.replace('{' + k + '}', vars[k])
-  return text
-}
-
-/** 正在打开 ⋯ 菜单的工作区行（官方组头行，含 menuOpen）。 */
-function findOpenProjectRow(): HTMLElement | null {
-  const rows = document.querySelectorAll<HTMLElement>('[class*=projectRow]')
-  for (const row of rows) {
-    if (row.className.indexOf('menuOpen') >= 0) return row
-  }
-  return null
-}
-
-/** 从行 React fiber 直读官方 group 节点里的 workspaceId（不按标题反查）。 */
-function workspaceInfoFromRow(row: HTMLElement): { workspaceId: string | null; title: string } {
-  let title = ''
-  try {
-    const titleEl = row.querySelector('[class*=title]')
-    if (titleEl) title = String((titleEl as HTMLElement).innerText || '').trim()
-  } catch { /* 忽略 */ }
-  try {
-    for (const key of Object.keys(row)) {
-      if (key.indexOf('__reactFiber$') !== 0) continue
-      let node: unknown = (row as unknown as Record<string, unknown>)[key]
-      for (let depth = 0; node && depth < 32; depth += 1, node = (node as { return?: unknown }).return) {
-        const props = (node as { memoizedProps?: { group?: { workspaceId?: unknown; label?: unknown } } }).memoizedProps
-        if (props && props.group && typeof props.group.workspaceId === 'string') {
-          return { workspaceId: props.group.workspaceId, title: title || String(props.group.label ?? '') }
-        }
-      }
-    }
-  } catch { /* fail closed */ }
-  return { workspaceId: null, title }
-}
 
 function openAssignToTab(row: HTMLElement): void {
   const info = workspaceInfoFromRow(row)
@@ -1491,11 +1070,12 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     console.warn('[width-slider] 读取 dsh-client-ui-primitives 失败，工作区分页功能已跳过安装')
     return () => {}
   }
-  rpcCall = (method: string, payload?: Record<string, unknown>) =>
+  setRpcCall((method: string, payload?: Record<string, unknown>) =>
     callEndpoint('/api/width-slider', method, payload || {}).catch(() => ({
       ok: false,
       error: { code: 'no-rpc', message: tt('warn.noRpc') },
-    }))
+    })),
+  )
   void loadGroups()
 
   // 工作区行菜单「分配标签」注入；选择框由侧栏壳组件本地渲染。
@@ -1652,10 +1232,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     if (assignRaf !== 0) cancelAnimationFrame(assignRaf)
     document.querySelectorAll('[' + WS_ASSIGN_MENU_ATTR + ']').forEach((el) => el.remove())
     style.remove()
-    rpcCall = null
-    groupReady = false
-    groupLoadFailed = false
-    groups = []
-    emitGroups()
+    setRpcCall(null)
+    resetGroupsStore()
   }
 }

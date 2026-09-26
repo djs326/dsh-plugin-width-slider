@@ -10,9 +10,9 @@
 
 **唯一目标**：把 `src/client/index.ts` 从「4 个内联实现 + 101 行 `apply`」变成**纯装配**，全仓其它文件的行为逐字不变。
 
-**量化目标**：`src/client/index.ts` 从 **393 行**降到 **150–200 行**（5 条 effect 的装配 + 会话账本适配器 + import / 常量）。
+**量化目标**：`src/client/index.ts` 从 **393 行**降到 **约 145 行**（实测落地 **144 行** —— 实施期把 §1 原写的「150–200 行」下调：§4.8 骨架是规范性内容，按它逐字落地即得 144 行，原区间是估算值，**不得靠填充凑数**）。
 
-**本批不碰**：`src/index.ts`（host）、`src/host/**`、`src/client/official/**`、`src/client/patches/**`、`src/client/sessionDelete.ts`、`src/client/sidebarToolsMerge.ts`、`src/client/widthPrefs.ts`、`src/client/WidthSlider{Control,Settings}.tsx`、`src/client/think/**`、`src/client/core/*`（除新增 `features.ts`、`rpc.ts`）、`src/client/motion/*`（除新增 `state.ts` 与 `index.ts` 一行）、`test/**`（除新增测试文件）。
+**本批不碰**：`src/index.ts`（host）、`src/host/**`、`src/client/official/**`、`src/client/patches/**`、`src/client/sessionDelete.ts`、`src/client/sidebarToolsMerge.ts`、`src/client/WidthSlider{Control,Settings}.tsx`、`src/client/think/**`、`src/client/core/*`（除新增 `features.ts`、`rpc.ts`）、`src/client/motion/*`（除新增 `state.ts` 与 `index.ts` 一行）、`test/**`（除新增测试文件）。`src/client/widthPrefs.ts` **只允许一处改动**：删掉 `:27` 的本地 `type Disposer` 改从 `shared/types.ts` import（见 §4.1 与实施期裁定 3 —— 该清单原先把它整文件列为「不碰」，与裁定 3 冲突，已对齐）。
 
 **行为变化：无。** 本批是「搬移 + 装配重排」，不得出现任何运行时行为差异（第 10 节给出判据）。
 
@@ -103,7 +103,7 @@
 export type Disposer = () => void
 ```
 
-**同时**把 `src/client/widthPrefs.ts:27` 的本地 `type Disposer` 改为从 `shared/types.ts` import（消掉重复声明）。**这是本批对 `widthPrefs.ts` 的唯一允许改动，且必须逐字等价。**
+**同时**把 `src/client/widthPrefs.ts:27` 的本地 `type Disposer` 改为从 `shared/types.ts` import（消掉重复声明）。**不要保留 `export type { Disposer }` 再导出行** —— 实施期核对：该符号在基线本非导出（`widthPrefs.ts` 的公开面是另外 11 个符号），且全仓零消费者，保留它等于新增公开面。**这是本批对 `widthPrefs.ts` 的唯一允许改动，且必须逐字等价。**
 
 ### 4.2 `src/client/core/features.ts`（新建）
 
@@ -249,7 +249,7 @@ export function motionStateOf(settings: FeatureSettings, blank: boolean): Motion
 
 **签名保持无参**（裁定 8）：它不注册槽位、不读设置、只用 `document` 与 `applySavedWidth()`。
 
-import：`applySavedWidth` 自 `../../widthPrefs.ts`、`Disposer` 自 `../../shared/types.ts`。
+import：`applySavedWidth` 自 `../../widthPrefs.ts`、`Disposer` 自 `../../../shared/types.ts`（**实施期订正**：本节与 §4.6 原写 `../../shared/types.ts`，从 `src/client/features/X/` 出发会解析到不存在的 `src/client/shared/`，tsc 报 `TS2307`）。
 
 ### 4.6 `src/client/features/think/index.ts`（新建）
 
@@ -258,7 +258,7 @@ import：`applySavedWidth` 自 `../../widthPrefs.ts`、`Disposer` 自 `../../sha
 1. `installThinkRenderer(ctx: ClientContext): Disposer` —— `:93-131` **逐字搬移**（含 3 处 `as never` 与 `collapseAfterRun: getSettings().thinkMode === 'auto-collapse'`）。`ctx` 类型保持 `ClientContext`（裁定 15）。
 2. `warnIfUpstreamPresent(): void` —— `:251-263` **逐字搬移**（含中文告警文案与 `'dsh-think-zh-expand-'` 字面量）。
 
-import：`createElement` 自 `react`、`AssistantStepView`/`THINK_STYLES` 自 `../../think/thinkView.tsx`、`getSettings` 自 `../../core/config.ts`、`ClientContext` 类型自 `@deepseek-ai/dsh-client-runtime/client`、`Disposer` 自 `../../shared/types.ts`。
+import：`createElement` 自 `react`、`AssistantStepView`/`THINK_STYLES` 自 `../../think/thinkView.tsx`、`getSettings` 自 `../../core/config.ts`、`ClientContext` 类型自 `@deepseek-ai/dsh-client-runtime/client`、`Disposer` 自 `../../../shared/types.ts`（见 §4.5 实施期订正）。
 
 ### 4.7 `src/client/features/motion/index.ts`（新建）
 
@@ -291,7 +291,7 @@ export function installMotionFeature(sessions: MotionSessionsPort): Disposer
 - `:187-194` 的 `cleanup` 清空 `disposers`（`disposers.length = 0`）保留；`:242-246` 的 `catch → cleanup() → throw` 保留。
 - `:233 lastSessionId` 与 `syncSession` 的 `if (current === lastSessionId) return` 逻辑逐字保留。
 
-import：`MOTION_CSS` 自 `../../motion/styles.ts`、`installConversationEntrance` 与 `MotionEngineState` 自 `../../motion/conversation.ts`、`installSettingsMotion` 自 `../../motion/settingsMotion.ts`、`prefersReducedMotion` 自 `../../motion/waapi.ts`、`motionStateOf` 自 `../../motion/state.ts`、`applySettings`/`getSettings`/`onSettingsChanged` 自 `../../core/config.ts`、`isPreviewOpen` 自 `../../core/overlayState.ts`、`motionAllowed` 自 `../../../shared/motionSettings.ts`、`Disposer` 自 `../../../shared/types.ts`。
+import：`MOTION_CSS` 自 `../../motion/styles.ts`、`installConversationEntrance` 自 `../../motion/conversation.ts`、`installSettingsMotion` 自 `../../motion/settingsMotion.ts`、`prefersReducedMotion` 自 `../../motion/waapi.ts`、`motionStateOf` 自 `../../motion/state.ts`、`applySettings`/`getSettings`/`onSettingsChanged` 自 `../../core/config.ts`、`isPreviewOpen` 自 `../../core/overlayState.ts`、`motionAllowed` 自 `../../../shared/motionSettings.ts`、`Disposer` 自 `../../../shared/types.ts`（**实施期订正**：删掉原清单里的 `type MotionEngineState` —— `getState` 的返回类型靠推断，该 import 在本文件零引用）。
 
 ### 4.8 `src/client/index.ts`（改造成装配）
 
@@ -319,7 +319,13 @@ export function apply(ctx: ClientContext): void {
       // 会话账本读取失败不应让动效整块失效：退化为"非空白会话"（不播放新建
       // 对话入场），其余三组动效照常。
       try {
-        const snapshot = ctx.sessions.list.getSnapshot()
+        // 形状断言逐字搬自基线 `:148-152`：`ClientContext` 是 `any` 桩，这个
+        // `as unknown as` 是本仓唯一记录宿主账本形状的地方（批次⑨ 收紧类型时以它为准）。
+        const snapshot = (ctx as unknown as {
+          sessions: {
+            list: { getSnapshot: () => { current?: string; byId: Record<string, { blank?: boolean } | undefined> } }
+          }
+        }).sessions.list.getSnapshot()
         return snapshot.current !== undefined && snapshot.byId[snapshot.current]?.blank === true
       } catch (err) {
         // getState 会被频繁调用；账本持续不可用时只提示一次。
@@ -540,3 +546,47 @@ Get-FileHash $env:TEMP\batch7-base\index.mjs   # 记下 sha256
   7. `lib/client.js` 的 hunk 数与逐条归因；
   8. 归一化多重集的 lost / added 计数与配对说明；
   9. **偏离本规格之处逐条列出并给出理由**，不确定处显式标注。
+
+---
+
+## 12. 实施结果（已交付，供复查）
+
+**提交链**：`a948e23`（搬移）→ `f609d62`（实施期裁定补正）→ `0e14f86`（补测试）。后者是本次实施为落实裁定 3/4/6 而额外拆出的一次提交，未混进搬移提交。
+
+| 提交 | 内容 | 变更 |
+|---|---|---|
+| `a948e23` | 搬移：7 新建 + 4 修改 | 11 files, +386 / −308 |
+| `f609d62` | 补正：恢复账本形状断言、删未用 type import、删 `widthPrefs.ts` 再导出 | 3 files, +8 / −4 |
+| `0e14f86` | 补测 3 个文件 | 3 files, +434 |
+
+**度量**：`src/client/index.ts` **393 → 144 行**（`f609d62` 恢复形状断言后为 **150 行**）。
+
+| 文件 | 行数 | 字节 |
+|---|---:|---:|
+| `src/shared/types.ts` | 10 | 522 |
+| `src/client/core/features.ts` | 64 | 2599 |
+| `src/client/core/rpc.ts` | 22 | 928 |
+| `src/client/motion/state.ts` | 28 | 1308 |
+| `src/client/features/width/index.ts` | 42 | 1797 |
+| `src/client/features/think/index.ts` | 59 | 2618 |
+| `src/client/features/motion/index.ts` | 92 | 3988 |
+| `src/client/index.ts` | 150 | 7718 |
+
+**验证**（主会话独立复现）：`tsc -p tsconfig.test.json --noEmit` exit 0；`vitest` **28 文件 / 268 用例**（25/247 → 28/268，+21 = 10 + 8 + 3，无关用例数不变）；`npm run build` exit 0。
+
+**产物等价性**：
+- `lib/index.mjs` = `22715745A86B9C89A9E469FB50C3288DEF6D0253CC781D4CF43D8179E0FD2410`（25039 B）**与基线逐字节相同**；三次提交后各测一次均不变。
+- `lib/client.js` = `33704C254D893C66B40A8C3E715BF85B34E4EE81444018F4E8D6233818449CC7`（269989 B，+772 B）；**15 个 hunk** 全部归入「搬移 / 常量内联 / region 改名 / 注释挪位」四类。
+- 归一化多重集（去空行 / 整行注释 / `//#region` / `$N` 后缀）：base 5029 / new 5045，**LOST 23 / ADDED 39**，净差 +16 配平，未配对 0 条。
+- `f609d62` 与 `0e14f86` 之后 `lib/client.js` 与 `a948e23` 的产物**逐字节相同** —— 三处补正被编译器擦除、测试不进 bundle，运行时零差异。
+
+**实施期对规格的订正**（已回修 §1 / §4.1 / §4.5 / §4.6 / §4.7 / §4.8）：`Disposer` 的 import 路径 `'../../shared/types.ts'` → `'../../../shared/types.ts'`（从 `src/client/features/X/` 出发前者的父目录不存在，tsc 实测 `error TS2307`）；行数目标「150–200」→「约 145」（骨架是规范性内容，按它落地即 144 行，估算值不得靠填充凑数）；§4.7 删掉零引用的 `type MotionEngineState`；§4.1 明确**不保留** `widthPrefs.ts` 的再导出行；§4.8 恢复基线的账本形状断言（裁定 6）。
+
+**已知副作用（接受，不作为缺陷）**：`lib/client.js` 不再包含入口模块的头注释。根因由四次对照实验定位 —— rolldown/oxc **只在模块首个 import 是外部 value import 时发射该模块头注释**；基线入口首 import 是 `import { createElement } from 'react'`，而新入口已无任何外部 value import（`createElement` 随渲染器搬进 `features/think/`）。纯注释、零运行时影响；两条修法（留死 import / 把头注释挪到 `const inject`）都更差，故源文件顶部保持不动。
+
+**测试的覆盖边界**（实施者如实上报，记以备查）：
+- `test/features.test.ts`（10 例）**测不到**五个真实 installer 的行为；不跑 cordis effect 链，故「异常逃出 effect setup 会丢整条 cleanup 链」只有注释、无端到端用例。
+- `test/motionState.test.ts`（8 例）**测不到** `motionAllowed` 自身的 bug —— 矩阵用例以它为判据来源（刻意避免重写真值表），它由 `test/motionSettings.test.ts` 覆盖。
+- `test/settingsMotionPreview.test.ts`（3 例）钉的是**读侧**契约：没有任何东西真的调用 `setPreviewOpen(true)`（滑块层写标记那一侧未覆盖，标记本身由 `test/overlayState.test.ts` 覆盖）；断言点是退出的**开始**而非退出后对宿主的延后送达（后者由 `test/settingsMotion.test.ts` 覆盖）；`matchMedia` 打桩成 `matches:false`，`prefersReducedMotion()` 的直通分支未触发。
+- **变异探针**（改坏实现 → 用例应变红，源文件均已复原、`git diff` 为空）：`test/features.test.ts` 3 次（`installed[slot]!()` 与置空对调 → 2 例红；`UNINSTALL_ORDER` 前两项对调 → 3 例红；`disposeAll` 套 try/catch → 1 例红）；`test/settingsMotionPreview.test.ts` 2 次（`isPreviewOpen` 接成恒 `false` → 例 1 红、恒 `true` → 例 2 红）。
+- 三份新测试均落在 `test/settingsMotionPreview.test.ts` 而非并入 `settingsMotion.test.ts`：该断言要真装 features 层并读配置 store，就近合并会把 features 反向引进引擎测试文件。

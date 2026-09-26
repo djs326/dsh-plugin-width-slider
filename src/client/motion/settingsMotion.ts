@@ -61,7 +61,7 @@ const PAGE_REPLAY_MS = 200
  *
  * 与 motion/frames.ts 的 PANEL_DURATION_MS 同为 320 但不同源：那是对话里面板的
  * 重播（PANEL_FRAMES 为 opacity+translate、EASE_SETTLE），这条是设置弹窗的重播
- * （下面的 PANEL_FRAMES 为 opacity+scale 0.62、EASE_SPRING）—— 元素、关键帧与
+ * （下面的 SETTINGS_PANEL_FRAMES 为 opacity+scale 0.62、EASE_SPRING）—— 元素、关键帧与
  * 曲线都不同，320 只是同一 `standard` 设计带的重合。合并两者会让两个独立决策
  * 被一次改动同时推动。
  */
@@ -73,7 +73,7 @@ const PAGE_FRAMES: readonly Keyframe[] = [
   { opacity: 1, translate: '0 0' },
 ]
 /** Panel entrance frames, replayed when the toggle is switched back on. */
-const PANEL_FRAMES: readonly Keyframe[] = [
+const SETTINGS_PANEL_FRAMES: readonly Keyframe[] = [
   { opacity: 0, scale: 0.62 },
   { opacity: 1, scale: 1 },
 ]
@@ -169,7 +169,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     // transition could see the class, so a declarative start state would never
     // apply - the panel would simply appear.
     dialog.classList.add(SETTINGS_PANEL_CLASS)
-    replayEntrance(dialog, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
+    replayEntrance(dialog, SETTINGS_PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
     if (mask !== null) {
       mask.classList.add(SETTINGS_MASK_CLASS)
       replayEntrance(mask, MASK_FRAMES, { duration: MASK_ENTRANCE_MS, easing: EASE_FADE })
@@ -302,7 +302,7 @@ export function installSettingsMotion(options: SettingsMotionOptions): SettingsM
     }
     panel.classList.add(SETTINGS_PANEL_CLASS)
     mask?.classList.add(SETTINGS_MASK_CLASS)
-    replayEntrance(panel, PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
+    replayEntrance(panel, SETTINGS_PANEL_FRAMES, { duration: PANEL_REPLAY_MS, easing: EASE_SPRING })
     const content = contentOf(panel)
     if (content !== null) replayPage(content)
   })

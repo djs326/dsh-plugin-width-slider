@@ -16,9 +16,15 @@ import {
 } from './settingsMotion.ts'
 
 /**
+ * 关闭那一拍用的加速曲线（P1.y = P2.y = 0）。与 waapi.ts 的入场 `EASE_*`
+ * 方向相反，当初没复用是设计意图 —— **不得与入场曲线合并**。
+ */
+const EASE_EXIT = 'cubic-bezier(0.7, 0, 0.84, 0)'
+
+/**
  * 注入到 <head> 的动效样式表。
  *
- * 关闭的几何与引擎的入场帧对称：settingsMotion.ts 的 PANEL_FRAMES 起始正是
+ * 关闭的几何与引擎的入场帧对称：settingsMotion.ts 的 SETTINGS_PANEL_FRAMES 起始正是
  * opacity 0 / scale 0.62，两处必须一起改（本批只记录这层同源关系）。这类说明
  * 一律留在模板串之外 —— 该常量的运行时取值必须与重构前逐字节一致。
  */
@@ -31,12 +37,12 @@ export const MOTION_CSS = `
   scale: 0.62;
   pointer-events: none;
   transition:
-    opacity 160ms cubic-bezier(0.7, 0, 0.84, 0),
-    scale 280ms cubic-bezier(0.7, 0, 0.84, 0);
+    opacity 160ms ${EASE_EXIT},
+    scale 280ms ${EASE_EXIT};
 }
 .${SETTINGS_MASK_CLOSING_CLASS} {
   opacity: 0;
-  transition: opacity 160ms cubic-bezier(0.7, 0, 0.84, 0);
+  transition: opacity 160ms ${EASE_EXIT};
 }
 @media (prefers-reduced-motion: reduce) {
   .${SETTINGS_CLOSING_CLASS},

@@ -152,7 +152,13 @@ export interface SidebarToolsMergeOptions {
 
 /** The installed handle: re-evaluate the toggle, or tear the stylesheet down. */
 export interface SidebarToolsMergeHandle {
-  /** Re-evaluate the toggle now. */
+  /**
+   * Re-evaluate the toggle now.
+   *
+   * The production path re-syncs through the `enabled` callback plus the observer;
+   * this method is the tests' explicit re-sync entry (see the handle.sync() calls
+   * in test/sidebarToolsMerge.test.ts). The signature and behaviour are unchanged.
+   */
   sync: () => void
   /** Remove the stylesheet and stop observing. */
   dispose: () => void

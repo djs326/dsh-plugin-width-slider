@@ -112,13 +112,13 @@ describe('MOTION_CSS', () => {
     expect(block).not.toContain(SETTINGS_PANEL_CLASS)
   })
 
-  it('takes its closing scale from PANEL_FRAMES in settingsMotion.ts', () => {
+  it('takes its closing scale from SETTINGS_PANEL_FRAMES in settingsMotion.ts', () => {
     // PANEL_FRAMES 未导出，所以从源码读。这条断言的价值就在它跨文件：只改
     // settingsMotion.ts 的入场首帧（面板从哪缩进来）、忘了同步这里的 scale，
     // 会在这里变红，而整串快照仍然绿。
     const source = readFileSync(resolve(HERE, '../src/client/motion/settingsMotion.ts'), 'utf8')
-    const frames = /const PANEL_FRAMES[^=]*=\s*\[([\s\S]*?)\]/.exec(source)
-    expect(frames, 'settingsMotion.ts 里必须有 PANEL_FRAMES 数组字面量').not.toBeNull()
+    const frames = /const SETTINGS_PANEL_FRAMES[^=]*=\s*\[([\s\S]*?)\]/.exec(source)
+    expect(frames, 'settingsMotion.ts 里必须有 SETTINGS_PANEL_FRAMES 数组字面量').not.toBeNull()
     const firstFrame = frames![1].split('},')[0]
     const scale = /scale:\s*([\d.]+)/.exec(firstFrame)
     expect(scale, 'PANEL_FRAMES 的首帧必须带 scale').not.toBeNull()

@@ -39,7 +39,7 @@ export function ensureWorkspaceAssignMenuItem(): void {
     iconHtml: ASSIGN_ICON_PATH,
     label: ttw('menu.assign'),
     fallbackColor: 'var(--dsw-alias-label-primary,#e6edf3)',
-    excludeAttrs: ['data-session-delete-item', 'data-ws-assign-item'],
+    excludeAttrs: ['data-session-delete-item'],
     onClick: () => openAssignToTab(row),
     // 插到「删除工作区」上方（zh/en 均可），找不到则追加到末尾。
     place: (item) => {

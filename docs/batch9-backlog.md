@@ -10,22 +10,26 @@
 
 ## A. 命名与同源（消除同名不同物 / 重复字面量）
 
-- [ ] **A1 `PANEL_FRAMES` 同名不同物** —— `src/client/motion/frames.ts` 的是「对话内嵌面板」（opacity + `translate` + `EASE_SETTLE`），`src/client/motion/settingsMotion.ts` 的是「设置弹窗重播」（opacity + `scale 0.62` + `EASE_SPRING`）。**这不是重复，是两个不同的东西共用一个名字**（批次③ 已核实元素、属性、曲线全不同）。要么改名区分，要么加注释说明。
+> **A1–A4 全部关闭（⑨-2 已完成，提交 `05093ef`）。** A1（改名）与 A2（抽 `EASE_EXIT`）已实施；A3、A4 经实读复核为**无需动作**（注释早已存在 / 假阳性）。**A1 的实测口径更正**：正确的改动是 **4 处**（`:64` 注释 / `:76` 声明 / `:172` / `:305`），**`:63` 的 `PANEL_FRAMES` 指的是 `motion/frames.ts` 的导出常量，必须保持原名**。详见 `docs/batch9-spec.md` §10。
+
+- [x] **A1 `PANEL_FRAMES` 同名不同物** —— `src/client/motion/frames.ts` 的是「对话内嵌面板」（opacity + `translate` + `EASE_SETTLE`），`src/client/motion/settingsMotion.ts` 的是「设置弹窗重播」（opacity + `scale 0.62` + `EASE_SPRING`）。**这不是重复，是两个不同的东西共用一个名字**（批次③ 已核实元素、属性、曲线全不同）。要么改名区分，要么加注释说明。
   - **裁定（用户已确认）：改名。** `settingsMotion.ts:76` 的模块私有 `PANEL_FRAMES` → **`SETTINGS_PANEL_FRAMES`**（`:172` / `:305` 两处引用同步改）。**两处解释同名不同源的注释其实早已存在**（`settingsMotion.ts:62-66`、`src/client/motion/styles.ts:21`），所以要做的是「改名 + 同步这两处注释的指向」，不是「补注释」。
   - **⚠ 测试耦合（主会话探针实测发现）**：`test/motionStyles.test.ts` 的第 6 条断言用 `/const PANEL_FRAMES[^=]*=\s*\[/` **从源码读**该常量，改名后**失配**（`expected null not to be null`）⇒ 改名必须同时改 `:115` 的 `it` 名、`:120` 的正则、`:121` 的提示文案。实测输出与全文见 `docs/batch9-spec.md` §7.1.1。
-- [ ] **A2 三处 `cubic-bezier(0.7, 0, 0.84, 0)` 字面量**（全在 `src/client/motion/styles.ts`）—— 服务的是 panel 关闭 opacity 160ms、panel 关闭 scale 280ms、mask 关闭 opacity 160ms。P1.y = P2.y = 0 ⇒ **accelerate（退出）曲线**，与 `waapi.ts` 里全是入场曲线的 `EASE_*` 常量方向相反，**当初没复用是设计意图**。可收敛为 `EASE_EXIT` 常量或 CSS 变量，**但不得与入场曲线合并**。
+- [x] **A2 三处 `cubic-bezier(0.7, 0, 0.84, 0)` 字面量**（全在 `src/client/motion/styles.ts`）—— 服务的是 panel 关闭 opacity 160ms、panel 关闭 scale 280ms、mask 关闭 opacity 160ms。P1.y = P2.y = 0 ⇒ **accelerate（退出）曲线**，与 `waapi.ts` 里全是入场曲线的 `EASE_*` 常量方向相反，**当初没复用是设计意图**。可收敛为 `EASE_EXIT` 常量或 CSS 变量，**但不得与入场曲线合并**。
   - **裁定：抽 `EASE_EXIT` 常量，留在 `styles.ts` 本地且不导出。** **不要**放进 `waapi.ts`（那里全是入场曲线，塞进去会制造新的「同名不同物」）。`MOTION_CSS` 的运行时取值必须**逐字节不变**（`styles.ts:23` 明写此要求）—— 模板串插值在编译期展开，常量值一样则字符串一样。**这条有 ⑨-1 的 `test/motionStyles.test.ts` 保护。**
-- [ ] **A3 `320ms` 与 `200ms` 的四处/两处出现** —— 批次③ 已核实为**数值巧合**（元素、属性、缓动全不同），**裁定不合并**。此处只做「加注释说明为何不同源」，不做常量统一。**若认为注释已足够，可勾掉。**
-- [ ] **A4 `src/client/motion/styles.ts` 顶部存在一条过时注释** —— 内容引用了批次③ 前的结构，需按现状改写。
+- [x] **A3 `320ms` 与 `200ms` 的四处/两处出现** —— 批次③ 已核实为**数值巧合**（元素、属性、缓动全不同），**裁定不合并**。此处只做「加注释说明为何不同源」，不做常量统一。**若认为注释已足够，可勾掉。**
+- [x] **A4 `src/client/motion/styles.ts` 顶部存在一条过时注释** —— 内容引用了批次③ 前的结构，需按现状改写。
   - **裁定：存疑，实施时重新定位。** 主会话读 `styles.ts:1-11` 后认为它描述的是**当前状态**（「入场是命令式 Web Animations，这里保留的声明式只有关闭那一拍」），**可能已经不过时**。⑨-2 实施时先重读，确认无问题就勾掉本行并写明「已复核，无需动作」—— **不要为了「有事可做」而改注释**。
 
 ## B. 死代码与导出面收敛
 
-- [ ] **B1 `merge.sync()`** —— 生产代码**零调用**，但 `test/sidebarToolsMerge.test.ts` 有 8 处（`:86`、`:176`、`:179`、`:189`、`:199`、`:202`、`:215`、`:227`）。批次⑦ 裁定「本批不动」（改它会动 `lib/client.js` 字节）。
+> **B1–B3 全部关闭（⑨-2 已完成，提交 `05093ef`）。** B1（加注释）与 B2（删死条件）已实施；**B3 经实读复核为无需动作**（`groupsStore.ts:257` 的注释确实已存在）。**B1 的产物侧特点**：`SidebarToolsMergeHandle` 是 TS interface，esbuild 整体擦除，故 B1 **不产生任何 `lib/client.js` hunk** —— 实测两版产物 grep 其注释文本均 0 命中。
+
+- [x] **B1 `merge.sync()`** —— 生产代码**零调用**，但 `test/sidebarToolsMerge.test.ts` 有 8 处（`:86`、`:176`、`:179`、`:189`、`:199`、`:202`、`:215`、`:227`）。批次⑦ 裁定「本批不动」（改它会动 `lib/client.js` 字节）。
   - **裁定（用户已确认）：保留 + 加注释，不删。** 它是**测试驱动该模块的唯一显式入口**（语义是「改开关后立即重同步」）；删掉它意味着那 8 处要从「显式同步」改成「等 observer 的 40ms」（`settle()`）—— **改动的是测试语义，不只是路径**，收益抵不上风险。本行原定性「死导出面」是**只看生产调用方**得出的结论。⇒ ⑨-2 只给 `SidebarToolsMergeHandle.sync` 加一行注释说明这一点。
-- [ ] **B2 `'data-ws-assign-item'` 死条件** —— `src/client/patches/wsTabs/assignMenuItem.ts:42` 的模板排除表第二项与自身 `WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'` 不同，`hasAttribute` **恒为 `false`**。批次⑤ D2 裁定「逐字保留」。
+- [x] **B2 `'data-ws-assign-item'` 死条件** —— `src/client/patches/wsTabs/assignMenuItem.ts:42` 的模板排除表第二项与自身 `WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'` 不同，`hasAttribute` **恒为 `false`**。批次⑤ D2 裁定「逐字保留」。
   - **裁定：删。** 依据 `src/client/official/menuInjection.ts:95` 的实测实现 —— `.find((el) => !el.hasAttribute(attr) && excludeAttrs.every((name) => !el.hasAttribute(name)))`：**`attr` 本身已被第一个条件覆盖 ⇒ `excludeAttrs` 的语义是「除我自己的 `attr` 之外还要排除哪些别人的项」，不需要包含自己。** 而 `'data-ws-assign-item'` 是**本插件旧版本的自有属性**（`assignSession.ts` 删除后全仓零写入方，见 `docs/refactor-plan.md:119`），不是上游属性 ⇒ 恒 `false` 的死条件，删除不可观测。**保留第一项 `'data-session-delete-item'`**（对应 `src/client/sessionDelete.ts:357` 的 `MENU_DELETE_ATTR`）。注意 `excludeAttrs` **全仓零测试覆盖**（`grep` 在 `test/` 下无命中）—— 这条只有逻辑论证、没有测试保护。
-- [ ] **B3 `groupRevision` 在 disposer 不重置** —— `src/client/patches/wsTabs/groupsStore.ts` 的 disposer 重置了 `rpcCall` / `groupReady` / `groupLoadFailed` / `groups` 四项而**独漏 `groupRevision`**。看不出是刻意的；它只影响「读回时用起始 revision 判是否被覆盖」这一条判据。批次⑥ Q8 裁定「逐字保留」。**若确认无害可勾掉并补一行注释说明。**
+- [x] **B3 `groupRevision` 在 disposer 不重置** —— `src/client/patches/wsTabs/groupsStore.ts` 的 disposer 重置了 `rpcCall` / `groupReady` / `groupLoadFailed` / `groups` 四项而**独漏 `groupRevision`**。看不出是刻意的；它只影响「读回时用起始 revision 判是否被覆盖」这一条判据。批次⑥ Q8 裁定「逐字保留」。**若确认无害可勾掉并补一行注释说明。**
 - [x] ~~**B4 `workspaceTabs.tsx:13` 与 `scripts/clean-lib.mjs:6` 的注释提到了已删除的 `assignSession`**~~ —— **已复核为假阳性，撤销本行。** `scripts/clean-lib.mjs:6`（「that is how stale `openWith/*.d.ts` and `assignSession.d.ts` reached the 1.0.2 tarball」）是**历史事实陈述**；`src/client/patches/wsTabs/index.tsx:13`（「会话级「分配工作区」已按用户确认废除（assignSession.ts 已删除）」）是**模型说明的一部分**，解释为什么当前语义里没有会话级分配。两处都是**正确的历史记录，不是陈旧引用**，无需动作。（另注：原行把路径写成 `workspaceTabs.tsx:13`，实际在 `patches/wsTabs/index.tsx:13`。）
 - [x] **B5 `MOTION_CSS` 全仓零测试覆盖** —— 批次③ 把它从字符串拼接改为常量插值，唯一的回归网是产物比对。**⑨-1 已落地**（`test/motionStyles.test.ts`），本行与 F1 合并关闭。
 

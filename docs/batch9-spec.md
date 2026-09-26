@@ -294,7 +294,9 @@ const frames = /const PANEL_FRAMES[^=]*=\s*\[([\s\S]*?)\]/.exec(source)
 
 改名后源码里只有 `const SETTINGS_PANEL_FRAMES`，`/const PANEL_FRAMES/` **不再匹配** ⇒ `frames` 为 `null`。
 
-**实测（主会话亲自跑，2025 批次⑨-1 复核）**：把 `settingsMotion.ts` 里 5 处 `PANEL_FRAMES` 全量替换为 `SETTINGS_PANEL_FRAMES`（`git diff --stat` = 1 file / 5 insertions / 5 deletions），只跑该文件：
+**实测（主会话亲自跑，批次⑨-1 复核）**：把 `settingsMotion.ts` 里 5 处 `PANEL_FRAMES` 全量替换为 `SETTINGS_PANEL_FRAMES`（`git diff --stat` = 1 file / 5 insertions / 5 deletions），只跑该文件：
+
+> **⚠ 更正（⑨-2 实施后补记）**：探针那次的「5 处全量替换」是**为了逼出红而做的粗暴模拟，不是 A1 的正确口径**。**正确的 A1 只改 4 处** —— `:64`（注释里指代本文件那个常量）、`:76`（声明）、`:172`、`:305`（两处引用）。**`:63` 的 `PANEL_FRAMES` 指的是 `motion/frames.ts` 的导出常量**（`opacity+translate`、`EASE_SETTLE`），改名后它**仍然叫 `PANEL_FRAMES`**，所以 `:63` **必须保持原名，改了反而错**。⑨-2 实施者据 A1b 的语义做出这个区分并如实报出，**判定正确**。
 
 ```
 ❯ test/motionStyles.test.ts (6 tests | 1 failed)
@@ -458,3 +460,63 @@ E1（README 结构树）｜E2（README 测试计数 22/228 → 实测值）｜E3
 - **jsdom 不做 CSS 计算**：所有样式断言只钉字符串，不断言样式真的生效（规格 §3.6 明文禁止）。
 - `cancelled` 的**反向顺序**（resolve 先到、cleanup 后到）无副作用可观测，未单列。
 - `inject` 里第 4 项之外的服务暂无保护，仅 E1 的五项定序保护。
+
+---
+
+## 10. ⑨-2 实施结果（留档，主会话已独立复核）
+
+### 10.1 提交与改动
+
+**提交 `05093ef`** `refactor(client): 批次⑨-2 命名收敛与死条件删除`（父提交 `ed88493`），5 files, +25 / −13：
+
+| 文件 | 改动 | 精确位置 |
+|---|---|---|
+| `src/client/motion/settingsMotion.ts` | 4 行改 | `:64`（注释里指代本文件那个）、`:76`（声明）、`:172` / `:305`（引用） |
+| `src/client/motion/styles.ts` | +6 / 改 5 | 新增 `:18-22`（`EASE_EXIT` JSDoc + 常量）；`:27`（注释 A1b）；`:40` / `:41` / `:45`（曲线 → `${EASE_EXIT}`） |
+| `src/client/sidebarToolsMerge.ts` | 1 行 → 7 行 | `:155-161`（`sync` 的 JSDoc）；`:162` 的 `sync: () => void` 本体未动 |
+| `src/client/patches/wsTabs/assignMenuItem.ts` | 1 行改 | `:42`（删 `excludeAttrs` 第二项） |
+| `test/motionStyles.test.ts` | 3 行改 | `:115`（`it` 名）、`:120`（正则）、`:121`（提示文案）—— **§7.1.1 预言的耦合，已同步改** |
+
+`EASE_EXIT` 实测**模块私有、无 `export`**，且**未放入 `waapi.ts`** ✔。
+
+### 10.2 主会话独立复核（与子代理报告全部一致）
+
+- `npx tsc -p tsconfig.test.json --noEmit` → **exit 0**
+- `npx vitest run` → **`Test Files 30 passed (30)` / `Tests 292 passed (292)`**（**用例总数与 ⑨-1 之后完全相同**）
+- `npm run build` → **exit 0**
+- **`lib/index.mjs` 逐字节不变**：`122D91D3D75359ACF580DA8C6AB6E84BBEC2054BBCC054667D664B9D35F242D3` / 26 652 B（本步只动 client 侧）
+- `lib/client.js` 按预期变化：`33704C25…49CC7` / 269 989 B → **`A6505482A868F8F7FFA8F73E032614E14382A73ABDF0245255829418748E88AE` / 270 205 B**
+- **`git diff --no-index -U0` 得 11 个 hunk**，与子代理归因表一致
+
+### 10.3 `lib/client.js` 的 11 个 hunk 归因（4 类，0 个落空）
+
+| # | 归因 | 内容 |
+|---|---|---|
+| 1, 2 | **A1 连带** | `const PANEL_FRAMES$1 = [{` → `const PANEL_FRAMES = [{`（`motion/frames.ts` 的导出侧） |
+| 3, 8 | **A1b** | 两处注释里的指向 |
+| 4, 5, 6 | **A1** | `const PANEL_FRAMES` → `const SETTINGS_PANEL_FRAMES` + 两处引用 |
+| 7 | **A2** | 插入 `const EASE_EXIT = "cubic-bezier(0.7, 0, 0.84, 0)";` + JSDoc |
+| 9, 10 | **A2** | 三处字面量 → `${EASE_EXIT}` |
+| 11 | **B2** | `excludeAttrs` 删第二项 |
+
+**hunk 1/2 的解释（值得记下）**：基线产物里 `motion/frames.ts` 的**导出** `PANEL_FRAMES` 被 esbuild 重命名为 **`PANEL_FRAMES$1`**（与 `settingsMotion.ts` 的模块私有同名，需消歧）。A1 改名后重名消失，导出侧恢复原名。**语义等价，是 A1 在产物层的可解释连带效应。** 这也从产物侧反证了「`:63` 指的是 frames.ts 那个常量」的判断。
+
+**B1 没有对应 hunk，不是漏改**：`SidebarToolsMergeHandle` 是 TS **interface（纯类型）**，esbuild 整体擦除，其成员 JSDoc 不进入产物。实测两版产物 grep B1 注释里的文本**均 0 命中** ⇒ B1 只动了注释，连产物文本都不影响。
+
+### 10.4 两个需裁决项的裁定（子代理报出，主会话全部采纳）
+
+**9.1 —— 采纳子代理判断：A1 正确的改动是 4 处，不是探测时的 5 处。**
+`:63` 的 `PANEL_FRAMES` 指的是 `motion/frames.ts` 的导出常量（`opacity+translate`、`EASE_SETTLE`），改名后它仍叫 `PANEL_FRAMES`，故**必须保持原名**。子代理据 A1b 的语义做出该区分，**判定正确**；主会话探针那次的「5 处全量替换」是为逼出红而做的粗暴模拟。§7.1.1 已补更正说明。
+
+**9.2 —— 采纳子代理指出，主会话补做：`test/motionStyles.test.ts:116` 与 `:124` 的旧名同步。**
+规格 §7.1 只点了 `:115` / `:120` / `:121` 三处，漏了 `:116`（纯注释）与 `:124`（断言失败时的提示文案）。子代理按硬约束「只动规格点到的那几处」**没有自作主张改**，而是报上来 —— **这个边界守得对**。主会话补改后实测：该文件 6 用例全绿、CRLF 无 BOM、`lib/client.js` 哈希 `A6505482…8E88AE` **不变**（测试文件不进产物）。
+
+### 10.5 A3 / A4 / B3 复核实测（确认为无需动作，未制造改动）
+
+- **A3**：`settingsMotion.ts:50-56`（`PAGE_REPLAY_MS` 对 `MASK_ENTRANCE_MS`）与 `:58-67`（`PANEL_REPLAY_MS` 对 `motion/frames.ts` 的 `PANEL_DURATION_MS`）的解释注释**确实已存在** ✔
+- **A4**：`motion/styles.ts:1-11` 顶部注释实读确认描述的**就是当前状态**（假阳性）✔
+- **B3**：`patches/wsTabs/groupsStore.ts:257` 的「`groupRevision` 刻意不重置」注释**确实已存在** ✔
+
+### 10.6 B2 无测试保护（如实记录）
+
+`excludeAttrs` 在 `test/` 下**零命中**；全仓只出现在 `src/client/official/menuInjection.ts:63/90/95` 与 `src/client/patches/wsTabs/assignMenuItem.ts:42`。**B2 只有逻辑论证、没有测试保护**。论证（子代理逐点实测复核过）：`menuInjection.ts:95` 的 `.find((el) => !el.hasAttribute(attr) && excludeAttrs.every((name) => !el.hasAttribute(name))) ?? null` 表明 `attr` 已被第一个条件覆盖 ⇒ `excludeAttrs` 无需包含自己；`'data-ws-assign-item'` 在 `src/` 下**唯一命中就是该排除字面量本身**、零写入方，且与 `WS_ASSIGN_MENU_ATTR = 'data-ws-assign-tab-item'` 拼写不同 ⇒ 恒 `false`，删除**在定义上不可观测**。第一项 `'data-session-delete-item'` 保留。

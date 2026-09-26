@@ -57,6 +57,7 @@ import { isZhInterface } from './core/lang.ts'
 import { getSettings, onSettingsChanged } from './core/config.ts'
 import { callEndpoint } from './core/endpointChannel.ts'
 import { primitives } from './core/primitives.ts'
+import { findOpenMenu, injectMenuItem, MENU_ITEM_SELECTOR } from './official/menuInjection.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'
@@ -560,58 +561,28 @@ function ensureWorkspaceAssignMenuItem(): void {
   if (!getSettings().workspaceTabs) return
   const row = findOpenProjectRow()
   if (!row) return
-  const menu = document.querySelector('[role=menu]')
+  const menu = findOpenMenu()
   if (!menu) return
-  if (menu.querySelector('[' + WS_ASSIGN_MENU_ATTR + ']')) return
   const info = workspaceInfoFromRow(row)
   if (!info.workspaceId) return
-  const template = Array.from(menu.querySelectorAll('[role=menuitem]')).find(
-    (el) =>
-      !el.hasAttribute(WS_ASSIGN_MENU_ATTR) &&
-      !el.hasAttribute('data-session-delete-item') &&
-      !el.hasAttribute('data-ws-assign-item'),
-  ) as HTMLElement | null
-  let item: HTMLButtonElement
-  if (template) {
-    item = template.cloneNode(true) as HTMLButtonElement
-    const iconSvg = item.querySelector('svg')
-    if (iconSvg) {
-      iconSvg.setAttribute('fill', 'currentColor')
-      iconSvg.setAttribute('stroke', 'none')
-      iconSvg.innerHTML = ASSIGN_ICON_PATH
-    }
-    const spans = Array.from(item.querySelectorAll('span'))
-    const labelSpan = spans.find((s) => s.textContent && s.textContent.trim() !== '') ?? null
-    if (labelSpan) labelSpan.textContent = ttw('menu.assign')
-    else {
-      const span = document.createElement('span')
-      span.textContent = ttw('menu.assign')
-      item.appendChild(span)
-    }
-  } else {
-    item = document.createElement('button')
-    item.type = 'button'
-    item.setAttribute('role', 'menuitem')
-    item.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:8px', 'width:100%',
-      'padding:6px 12px', 'border:none', 'background:transparent',
-      'color:var(--dsw-alias-label-primary,#e6edf3)',
-      'font:inherit', 'fontSize:13px', 'lineHeight:20px',
-      'textAlign:left', 'borderRadius:6px', 'cursor:pointer',
-    ].join(';')
-    item.innerHTML = '<span style="display:inline-flex;flex:none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none">' + ASSIGN_ICON_PATH + '</svg></span><span>' + ttw('menu.assign') + '</span>'
-    item.addEventListener('mouseenter', () => { item.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))' })
-    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
-  }
-  item.setAttribute(WS_ASSIGN_MENU_ATTR, '1')
-  item.addEventListener('click', () => openAssignToTab(row))
-  // 插到「删除工作区」上方（zh/en 均可），找不到则追加到末尾。
-  const deleteItem = Array.from(menu.querySelectorAll('[role=menuitem]')).find((el) => {
-    const text = (el.textContent || '').trim()
-    return text === '删除工作区' || text === 'Delete workspace' || text.indexOf('删除工作区') >= 0
+  injectMenuItem({
+    menu,
+    attr: WS_ASSIGN_MENU_ATTR,
+    iconHtml: ASSIGN_ICON_PATH,
+    label: ttw('menu.assign'),
+    fallbackColor: 'var(--dsw-alias-label-primary,#e6edf3)',
+    excludeAttrs: ['data-session-delete-item', 'data-ws-assign-item'],
+    onClick: () => openAssignToTab(row),
+    // 插到「删除工作区」上方（zh/en 均可），找不到则追加到末尾。
+    place: (item) => {
+      const deleteItem = Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR)).find((el) => {
+        const text = (el.textContent || '').trim()
+        return text === '删除工作区' || text === 'Delete workspace' || text.indexOf('删除工作区') >= 0
+      })
+      if (deleteItem && deleteItem.parentNode) deleteItem.parentNode.insertBefore(item, deleteItem)
+      else menu.appendChild(item)
+    },
   })
-  if (deleteItem && deleteItem.parentNode) deleteItem.parentNode.insertBefore(item, deleteItem)
-  else menu.appendChild(item)
 }
 
 /** 把工作区分配到目标页签（null=默认），唯一归属：从其它页签移出。 */

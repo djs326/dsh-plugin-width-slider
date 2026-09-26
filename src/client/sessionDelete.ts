@@ -19,6 +19,7 @@ import { isZhInterface } from './core/lang.ts'
 import { callEndpoint } from './core/endpointChannel.ts'
 import { primitives } from './core/primitives.ts'
 import { observeBodyDebounced } from './core/domObserver.ts'
+import { findOpenMenu, injectMenuItem } from './official/menuInjection.ts'
 import { shakeElement } from './motion/index.ts'
 
 interface SessCtx {
@@ -345,61 +346,23 @@ function ensureDeleteMenuItem(): void {
     document.querySelectorAll('[' + MENU_DELETE_ATTR + ']').forEach((el) => el.remove())
     return
   }
-  const menu = document.querySelector('[role=menu]')
+  const menu = findOpenMenu()
   if (!menu) return
-  if (menu.querySelector('[' + MENU_DELETE_ATTR + ']')) return
   const row = findOpenSessionRow()
   if (!row) return
-  // 官方菜单项模板（任意一个官方 menuitem，如"重命名"）。
-  const template = Array.from(menu.querySelectorAll('[role=menuitem]')).find(
-    (el) => !el.hasAttribute(MENU_DELETE_ATTR),
-  ) as HTMLElement | null
-
-  let item: HTMLButtonElement
-  if (template) {
-    // 克隆官方菜单项：保留其全部结构/类/内边距/hover 规则。
-    item = template.cloneNode(true) as HTMLButtonElement
-    item.setAttribute(MENU_DELETE_ATTR, '1')
-    // 图标：直接替换官方 svg 的 path 为垃圾桶（保留官方 svg 的尺寸与
-    // wrapper，布局与其它项完全一致）。
-    const iconSvg = item.querySelector('svg')
-    if (iconSvg) {
-      iconSvg.setAttribute('fill', 'currentColor')
-      iconSvg.setAttribute('stroke', 'none')
-      iconSvg.innerHTML = '<path d="' + TRASH_PATH + '" fill="currentColor"/>'
-    }
-    // 文本：官方 label span 保留样式类，仅改文字。
-    const spans = Array.from(item.querySelectorAll('span'))
-    const labelSpan = spans.find((s) => s.textContent && s.textContent.trim() !== '') ?? null
-    if (labelSpan) labelSpan.textContent = tt('menu.delete')
-    else {
-      const span = document.createElement('span')
-      span.textContent = tt('menu.delete')
-      item.appendChild(span)
-    }
-    // 仅危险色覆盖；hover 灰底等全部由官方类接管（不设 inline background，
-    // 否则会压掉官方 hover 样式）。
-    item.style.color = 'var(--dsw-alias-state-error-primary,#e5484d)'
-  } else {
-    // 兜底（无官方模板时）：手写与官方一致的布局。
-    item = document.createElement('button') as HTMLButtonElement
-    item.type = 'button'
-    item.setAttribute('role', 'menuitem')
-    item.setAttribute(MENU_DELETE_ATTR, '1')
-    item.style.cssText = [
-      'display:flex', 'alignItems:center', 'gap:8px', 'width:100%',
-      'padding:6px 12px', 'border:none', 'background:transparent',
-      'color:var(--dsw-alias-state-error-primary,#e5484d)',
-      'font:inherit', 'fontSize:13px', 'lineHeight:20px',
-      'textAlign:left', 'borderRadius:6px', 'cursor:pointer',
-    ].join(';')
-    item.innerHTML = '<span style="display:inline-flex;flex:none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="' + TRASH_PATH + '" fill="currentColor"/></svg></span><span>' + tt('menu.delete') + '</span>'
-    item.addEventListener('mouseenter', () => { item.style.background = 'var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.14))' })
-    item.addEventListener('mouseleave', () => { item.style.background = 'transparent' })
-  }
-  item.addEventListener('click', () => openMenuDelete(row))
+  // 克隆/换图标/换文本/色值覆盖全在 official/menuInjection.ts，这里只给参数。
   // 不插分隔线：与官方菜单项平级直接追加，保持官方一致的列表外观。
-  menu.appendChild(item)
+  injectMenuItem({
+    menu,
+    attr: MENU_DELETE_ATTR,
+    iconHtml: '<path d="' + TRASH_PATH + '" fill="currentColor"/>',
+    label: tt('menu.delete'),
+    fallbackColor: 'var(--dsw-alias-state-error-primary,#e5484d)',
+    templateColor: 'var(--dsw-alias-state-error-primary,#e5484d)',
+    // 兜底按钮的对齐声明沿用历史拼写（为何不"顺手修好"见原语该参数注释）。
+    alignItemsProperty: 'alignItems',
+    onClick: () => openMenuDelete(row),
+  })
 }
 
 // ── install（生命周期入口）───────────────────────────────────────────

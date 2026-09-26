@@ -18,13 +18,14 @@
  */
 
 import { observeBodyDebounced } from './core/domObserver.ts'
+import type { Disposer } from '../shared/types.ts'
+
+export type { Disposer }
 
 export const WIDTH_PREF_KEY = 'dsh.conversation.contentWidth'
 export const FOLLOW_PREF_KEY = 'dsh.conversation.contentWidthFollow'
 export const MIN_WIDTH = 640
 export const EDGE_BUDGET = 176
-
-export type Disposer = () => void
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

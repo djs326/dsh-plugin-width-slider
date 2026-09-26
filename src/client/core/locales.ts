@@ -1,3 +1,11 @@
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    widthSlider: WidthSliderKey
+  }
+}
+
+export const NS = 'widthSlider'
+
 export interface WidthSliderKey {
   label: string
   unit: string

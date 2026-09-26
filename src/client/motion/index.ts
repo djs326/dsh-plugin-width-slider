@@ -8,6 +8,7 @@
  * touching a consumer.
  */
 export { installConversationEntrance, type MotionEngineState } from './conversation.ts'
+export { motionStateOf } from './state.ts'
 export { entranceSpec } from './frames.ts'
 export { prefersReducedMotion, replayEntrance } from './waapi.ts'
 export { shakeElement } from './shake.ts'

@@ -280,7 +280,8 @@ dsh-plugin-width-slider/
 | 预览慢放与弹窗动效归因（2.0.1） | 预览改为 3 倍慢放；桌面版设置弹窗的入场动效经代码逐项核对（原点锚到弹窗外触发按钮、0.62 起点缩放、`EASE_SPRING` 过冲、320ms） |
 | 弹窗锚点修复（2.0.2） | 已定位桌面版 0.1.7 的回归：该版本把 `aria-haspopup="dialog"` 加到了上下文仪表、统计药丸、用量面板等多处控件上，引擎原先取文档第一个匹配元素当锚点，会锚到视口另一侧的控件；改为三级优先取锚点（指针按下的按钮 → `aria-expanded="true"` 的候选 → 离弹窗最近者），排除弹窗内部按钮，并把锚点夹取到弹窗边界内 |
 | 0.1.5 内核适配（RPC 迁移到 `/api` 精确 Fetch 路由） | 已在 DSH 0.1.5-rc.1 上实测（`/api/width-slider` 返回 200，设置读写与各功能开关即时生效） |
-| 0.1.7-rc.2 内核适配 | 已逐项核对：host 侧 `systemPrompt.section` / `agents.cancel`+`whenIdle` / `sessions.detachEntered`、五个 client 服务（`slots`/`locale`/`connection`/`sessions`/`workspaces`）与 slot API、DOM 锚点、`__ModuleLoader__` 握手、require 白名单全部命中；修复思考块图标名、按 `groupPart` 过滤块（避免思考块与回复重复渲染）、会话行 id 与菜单项改走官方契约 |
+| 0.1.7-rc.2 内核适配 | 已逐项核对：host 侧 `systemPrompt.section` / `agents.cancel`+`whenIdle` / `sessions.detachEntered`、五个 client 服务（`slots`/`locale`/`connection`/`sessions`/`workspaces`）与 slot API、DOM 锚点、`__ModuleLoader__` 握手、require 白名单全部命中；修复思考块图标名、按 `groupPart` 过滤块（避免思考块与回复重复渲染）、会话行 id 与菜单项改走官方契约。其中 client 侧的 `connection` 已在 2.1.0 移除——它在本插件里始终零消费者，端点调用一直走原生 `fetch` 而非 `connection.rpc.call`（host 侧的 `connection` / `webServer` 依赖不变，见上表） |
+| 端点契约集中化与入口服务收敛（2.1.0） | 已由本仓测试覆盖（端点契约测试钉住路径、五个方法名与请求形状；client 入口装配用例覆盖 E1–E15 生命周期）；**未在真实 DSH 进程里加载过** |
 
 ### 已知限制
 
@@ -306,7 +307,7 @@ lib/
 └── types/           # 类型声明（tsc 产出）
 ```
 
-测试位于 `test/`（22 个用例文件、228 项：设置面板动效、思考块渲染与分组过滤、动效角色映射、动效总闸与风格档判定、弹簧手感、文字擦除、侧边栏工具并入、会话删除、工作区页签对话框，全部通过）；仓库内包含 DSH 源码副本（`dsh-src/`），已在 `vitest.config.ts` 中排除，不参与测试收集。
+测试位于 `test/`（31 个用例文件、305 项：设置面板动效、思考块渲染与分组过滤、动效角色映射、动效总闸与风格档判定、弹簧手感、文字擦除、侧边栏工具并入、会话删除、工作区页签对话框、端点协议契约、client 入口装配、`MOTION_CSS` 字符串快照，全部通过）；仓库内包含 DSH 源码副本（`dsh-src/`），已在 `vitest.config.ts` 中排除，不参与测试收集。
 
 ### 已知问题
 
@@ -319,32 +320,56 @@ lib/
 ```
 dsh-plugin-width-slider/
 ├── src/
-│   ├── index.ts                     # Host 端：systemPrompt 中文注入 + /api/width-slider 端点 + storages 配置
+│   ├── index.ts                     # Host 端入口：注入装配 + 端点注册
 │   ├── host/
+│   │   ├── api.ts                   # 五个端点的分发器（readSettings / writeSettings / wsGroupsRead / wsGroupsWrite / sessionDelete）
+│   │   ├── chinesePrompt.ts         # 中文强制注入（systemPrompt.section 的三态装卸）
+│   │   ├── dshHome.ts               # $DSH_HOME 解析
 │   │   ├── endpointChannel.ts       # /api 下 JSON 端点注册（connection.fetch.register）
-│   │   └── sessionDeleteService.ts  # 会话删除链（停任务、删目录、清投影缓存、工作区记账）
+│   │   ├── jsonFile.ts              # JSON 读写、损坏文件的改名保留与回落
+│   │   ├── sessionDeleteService.ts  # 会话删除链（停任务、删目录、清投影缓存、工作区记账）
+│   │   ├── settingsStore.ts         # settings.json 的 per-apply store
+│   │   └── workspaceGroupsStore.ts  # workspace-groups.json 的 per-apply store
 │   ├── shared/
 │   │   ├── settings.ts              # 功能开关契约（host/client 唯一真源）
 │   │   ├── motionSettings.ts        # 动效总闸三态与四档风格
-│   │   └── dshHome.ts               # $DSH_HOME 解析
+│   │   ├── endpointContract.ts      # 端点路径、五个方法名与响应信封
+│   │   └── types.ts                 # Disposer 等最小共享类型
+│   ├── env.d.ts                     # 运行时模块类型桩
 │   └── client/
 │       ├── index.ts                 # Client 端入口：locale 注册 + 受控功能生命周期
-│       ├── config.ts                # FeatureSettings 契约 + client 配置 store
-│       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页
-│       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览、rAF 拖动、释放惯性与持久化）
-│       ├── settingsPanelPatch.ts    # 面板补丁：弹窗窗口化 + 左侧导航滚动
-│       ├── widthPrefs.ts            # 宽度偏好读写/发布与启动恢复
 │       ├── sessionDelete.ts         # 会话删除菜单项与确认框
-│       ├── workspaceTabs.tsx        # 工作区分页：页签栏、分组 store、树过滤 wrapper
-│       ├── endpointChannel.ts       # /api 端点调用（POST { method, payload }）
-│       ├── think/                   # 思考块渲染器
-│       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）+ 弹簧手感 + 文字擦除
-│       ├── lang.ts                  # 界面语言判定
-│       └── locales.ts               # zh / en 文案
+│       ├── sidebarToolsMerge.ts     # 侧边栏工具并入
+│       ├── widthPrefs.ts            # 宽度偏好读写/发布与启动恢复
+│       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览、rAF 拖动、释放惯性与持久化）
+│       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页
+│       ├── workspaceTabs.tsx        # 兼容转发壳（真正的实现在 patches/wsTabs/）
+│       ├── core/                    # 跨功能基础设施
+│       │   ├── config.ts            # FeatureSettings 契约 + client 配置 store
+│       │   ├── domObserver.ts       # DOM 变更观察的统一封装
+│       │   ├── endpointChannel.ts   # /api 端点调用（POST { method, payload }）
+│       │   ├── features.ts          # 受控功能注册表
+│       │   ├── lang.ts              # 界面语言判定
+│       │   ├── locales.ts           # zh / en 文案
+│       │   ├── overlayState.ts      # 浮层状态
+│       │   ├── primitives.ts        # ui-primitives 的取用封装
+│       │   └── rpc.ts               # 设置读写的端点薄封装
+│       ├── features/                # 受控功能的装配层
+│       │   ├── motion/index.ts      # 动效引擎的装卸与槽位绑定
+│       │   ├── think/index.ts       # 思考块渲染器注册与样式注入
+│       │   └── width/index.ts       # 宽度启动恢复与手柄隐藏样式
+│       ├── official/                # 官方 DOM 与契约的适配层
+│       │   ├── chatDom.ts           # 对话区 DOM 锚点
+│       │   ├── menuInjection.ts     # 会话行菜单项注入
+│       │   └── settingsDom.ts       # 设置面板 DOM 锚点
+│       ├── patches/                 # 官方界面的补丁
+│       │   ├── settingsPanel/       # 面板补丁：弹窗窗口化 + 左侧导航滚动
+│       │   └── wsTabs/              # 工作区分页：页签栏、分组 store、树过滤
+│       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）
+│       └── think/                   # 思考块渲染器
 ├── test/                            # 单元测试（含 jsdom 动效用例）
 ├── scripts/fix-dts-imports.mjs      # 构建后修正 d.ts 相对导入
-├── docs/                            # DSH 相关参考文档（非本插件运行时依赖）
-├── env.d.ts                         # 运行时模块类型桩
+├── docs/                            # 重构计划、各批实施规格与留档（非运行时依赖）
 ├── cordis.patch.yml                 # bundle patch：insert width-slider
 ├── tsdown.config.ts
 ├── tsconfig.json
@@ -372,6 +397,18 @@ dsh-plugin-width-slider/
 部分能力依赖官方 DOM 结构，官方大幅重构界面时可能失效。此时相关补丁会安静跳过，不影响其它功能；请在 [Issues](https://github.com/djs326/dsh-plugin-width-slider/issues) 反馈并附上 DSH 版本号。
 
 ## 更新日志
+
+### 2.1.0
+
+- **端点协议集中化**：`/api/width-slider` 的路径与五个方法名（`readSettings` / `writeSettings` / `wsGroupsRead` / `wsGroupsWrite` / `sessionDelete`）原先以字符串字面量散落在 host 与 client 共八处，改一处漏一处既无编译期也无运行时提示。现在集中在新建的 `src/shared/endpointContract.ts`，并由新增的端点契约测试钉住路径、五个方法名、请求形状与响应信封。
+- **client 入口服务收敛**：`inject` 移除零消费者的 `connection`——client 侧的端点调用一直走原生 `fetch`，从不经过 `connection.rpc.call`（0.1.5 内核对第三方插件已不可用）。host 侧的 `connection` / `webServer` 依赖不变，那边有必需性论证（见 `src/index.ts` 与 `src/host/endpointChannel.ts` 的说明）。
+- **命名收敛**：`motion/settingsMotion.ts` 里那个模块私有的 `PANEL_FRAMES`（起点 `opacity 0` / `scale 0.62`）改名为 `SETTINGS_PANEL_FRAMES`，以区别于引擎里同名的面板入场帧表（`motion/frames.ts` 的 `PANEL_FRAMES`，起点 `opacity 0.5` / `translate 0 6px`）——两者同名不同物，此前只靠注释区分。**帧表数值一个都没变。**
+- **删除恒 false 的菜单排除项**：`patches/wsTabs/assignMenuItem.ts` 的 `excludeAttrs` 里有一个本插件旧版本自己的属性名，删掉后语义不变（排除表不需要包含自己的 `attr`，`official/menuInjection.ts` 的查找条件已覆盖）；会话删除项仍在排除表里。
+- **测试规模**：新增 `MOTION_CSS` 字符串快照、client 入口装配端到端覆盖、端点契约测试；用例文件从 22 个增至 **31** 个，用例数从 228 项增至 **305** 项。
+- **文档**：README 的项目结构按当前实际的文件组织重写（host 侧拆分、client 的 `core/` / `features/` / `official/` / `patches/` 分层）；第三方声明里六处已失效的文件路径更正（含两个已被拆分/改名的文件）。
+- **内部结构**：批次②–⑧ 已把 `src/index.ts` 与 `src/client/index.ts` 之外的模块按职责分层；本版把端点协议与版本号一并收敛。
+
+以上改动由 tsc、vitest 与构建产物核对验证；**本版本未在真实 DSH 进程里加载过端到端验证**。
 
 ### 2.0.2
 

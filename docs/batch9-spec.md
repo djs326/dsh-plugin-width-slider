@@ -771,7 +771,7 @@ dsh-plugin-width-slider/
 |---|---|---|
 | `:16` | `src/client/index.ts —— 对应上游 lib/parts/apply.part.js（装配：样式注入/assistant-step 渲染器注册）` | 样式注入与渲染器注册已移到 `src/client/features/width/index.ts` 与 `src/client/features/think/index.ts`；`src/client/index.ts` 现在只做装配协调 |
 | `:18` | `src/index.ts —— 对应上游 lib/index.js（PROMPT_TEXT 与注入方式）` | `PROMPT_TEXT` 已移到 `src/host/chinesePrompt.ts` |
-| `:57` | `src/client/motion/motion.ts` | **该文件已不存在**（已拆成 `motion/` 下的 13 个模块） |
+| `:57` | `src/client/motion/motion.ts` | **该文件已不存在**（批次② 已拆成 `motion/` 下的 **12** 个模块 —— 实测值，别写成 13） |
 | `:59` | `src/client/motion/animate.ts` | **该文件已不存在**，对应物是 `src/client/motion/waapi.ts` |
 | `:62` | `src/client/locales.ts` | 实际是 `src/client/core/locales.ts` |
 | `:14`、`:58`、`:60`、`:61` | `src/client/think/thinkView.tsx`、`motion/settingsMotion.ts`、`motion/styles.ts`、`src/shared/motionSettings.ts` | **都还存在，不改** |

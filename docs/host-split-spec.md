@@ -94,7 +94,8 @@ export function readJsonOrRecover(
 - 时间戳格式：`new Date().toISOString().replace(/[:.]/g, '-')`。
 - 改名失败**必须吞掉**（`catch { /* 忽略 */ }` / `catch { /* 改名失败不阻塞 */ }`）—— 两处注释文案不同，**不要统一**；改为让 `onCorrupt` 之外的改名 catch 用中性注释即可，但**行为必须一致**（吞掉）。
 - 改名前的 `existsSync(file)` 判定必须保留。
-- `readJsonOrRecover` **不负责**类型校验与 fallback 值 —— 那是调用方的事（`normalizeGroups` / `mergeSettings`）。
+- `readJsonOrRecover` **不负责**类型校验与 fallback 值 —— 那是调用方的事（`normalizeGroups` / `mergeSettings`）。**后果（实施期核实后接受）**：基线里这两个函数在 `try` 内，本规格把它们移到 `readJsonOrRecover` 之外 —— 若它们抛错，基线会走「改名保现场 + 回退默认」，改后则上抛。实测**不可观测**：`mergeSettings`（`src/shared/settings.ts:86-102`）每个字段只做 `typeof` 判定与 `isMotionMode` / `isMotionLook` 守卫，`normalizeGroups` 有 `Array.isArray` + `typeof` 守卫，**二者对任意 `JSON.parse` 产物均不抛**。
+- `mkdirSync` 的目录推导用 `dirname(file)`（`node:path`），**不**把 `SETTINGS_DIR` 当参数传进来 —— 两者等价（调用方的 `file` 恒为 `join(SETTINGS_DIR, …)`），但 `dirname(file)` 让函数自洽。
 - **不要**把 `JSON.stringify(value, null, 2)` 的缩进参数做成选项：两处都是 `2`。
 
 ### 4.2 `src/host/settingsStore.ts`
@@ -206,7 +207,7 @@ import type { EndpointHandler } from './endpointChannel.ts'
 import type { SettingsStore } from './settingsStore.ts'
 import type { WorkspaceGroupsStore } from './workspaceGroupsStore.ts'
 import { normalizeGroups } from './workspaceGroupsStore.ts'
-import { mergeSettings } from '../shared/settings.ts'
+import { mergeSettings, type FeatureSettings } from '../shared/settings.ts'
 import { deleteSessionById, type SessionDeleteCtx } from './sessionDeleteService.ts'
 
 export interface HostApiDeps {
@@ -285,7 +286,9 @@ export function apply(baseCtx: Context): void {
 }
 ```
 
-**行数目标：约 55 行**（含 19 行头注释 + 6 行长注释）。不要为凑行数填充。
+**行数目标：约 75 行**（含 19 行头注释 + 6 行长注释）。不要为凑行数填充。
+
+> **更正（实施期）**：原写「约 55 行」是把骨架里的两处占位注释按 1 行计。按本骨架逐字展开（头注释 19 行 + 7 行 import + 3 行 export + 6 行 webServer 注释 + 34 行 `apply`）实测 **75 行**，与规格逐字一致。
 
 ---
 
@@ -431,3 +434,49 @@ type RpcContext = Context & {
 7. 开工前后的 `lib/index.mjs` **逐字节 diff 行数**（`Compare-Object`），并对差异按块归因；
 8. **偏离本规格之处逐条列出并给出理由**，不确定处显式标注；
 9. 明确回答：§5 的 3 个可变状态是否都做到了 per-`apply` 实例化？§6 的 6 个导出是否逐字保真？
+
+---
+
+## 12. 实施结果（留档）
+
+**提交** `936c1f7` `refactor(host): 批次⑧ 拆分 src/index.ts 为 host 职责模块`（6 files, +347 / −205），父提交 `c48d437`。
+
+### 文件度量（主会话独立复核一致）
+
+| 文件 | 行数 | 字节 |
+|---|---:|---:|
+| `src/index.ts`（262 → **75**） | 75 | 3 849 |
+| `src/host/jsonFile.ts` | 44 | 1 634 |
+| `src/host/settingsStore.ts` | 56 | 2 255 |
+| `src/host/workspaceGroupsStore.ts` | 79 | 3 370 |
+| `src/host/chinesePrompt.ts` | 74 | 3 054 |
+| `src/host/api.ts` | 76 | 3 852 |
+
+六个文件全部 CRLF、无 BOM。
+
+### 验证（主会话在提交后的工作树上独立复现）
+
+tsc exit 0；vitest **28 文件 / 268 用例**全绿（与批次⑦ 后同）；build exit 0。
+
+**产物等价性**：
+- **`lib/client.js` `33704C254D893C66B40A8C3E715BF85B34E4EE81444018F4E8D6233818449CC7` / 269 989 B / 6464 行 —— 与开工前基线逐字节相同**。本批最强判据通过：host 侧拆分对 client bundle 零影响。
+- `lib/index.mjs` `122D91D3D75359ACF580DA8C6AB6E84BBEC2054BBCC054667D664B9D35F242D3` / 26 652 B / 743 行（基线 `22715745…` / 25 039 B / 687 行）—— **本批判据与批次⑥⑦ 相反：host 入口必然变化**，故用归一化多重集 + hunk 归因。
+- 归一化多重集（去空行 + 整行 `//` / `/*` `*` 注释 + 剥 `$N`）：base 558 / new 588，**LOST 49（47 种）/ ADDED 79（68 种）**，逐条归因齐全（公共抽取的参数化 20 条、store 化 11 条、中文控制器签名收窄 7 条、handler 外提 7 条、打包器常量内联 2 条；ADDED 为新工厂外壳约 30 条、参数化实现 11 条、store/deps 解引用约 20 条、装配层约 10 条、import 1 条）。
+- **比行多重集更强的证据**：两侧双引号字符串字面量集合均 **165 种**，基线独有的仅 `, async (endpoint, payload) => {`、新版独有的仅 `, createHostApi({` —— 即「handler 从内联箭头改为工厂调用」的直接后果，**不含任何契约字符串**。29 个契约字符串全部存在（5 个方法名、6 个错误码与消息、2 个文件路径、2 个 `ctx.effect` name、5 条告警文案等）。
+- 产物侧 `export` 行逐字一致：`export { DEFAULT_FEATURE_SETTINGS, PROMPT_TEXT, apply, inject, mergeSettings };`。
+- 逐字节 diff：`git diff --no-index -U0` 得 **13 个 hunk**，全部归入「import 重排 / region 顺序变化 / 新 region 插入 / index region 瘦身 / apply 内 10 处小改 / 尾部重排」六类。
+
+### 实施期订正（7 项偏离的裁决，全部接受）
+
+1. **`api.ts` 补 `type FeatureSettings` import** —— 规格 §4.5 骨架的 import 块遗漏（`HostApiDeps.onSettingsApplied` 的签名用到它，不补则 tsc 报错）。**规格已回修**。
+2. **`jsonFile.ts` 用 `dirname(file)`** —— 规格未规定目录推导方式。**规格已回修**。
+3. **`src/index.ts` 实测 75 行 vs 规格「约 55 行」** —— 规格估计把两处占位注释按 1 行计，逐字展开即 75 行。**规格已回修**。
+4. **`readJsonOrRecover` 把 `mergeSettings` / `normalizeGroups` 移出 `try`** —— 见 §4.1 的后果说明。判定**不可观测**（两函数对任意 `JSON.parse` 产物均不抛），接受。
+5. **缺失文件路径多经一次 `normalizeGroups([])` / `mergeSettings({...DEFAULT})`** —— 值等价（`normalizeGroups([])` 返回 `[]`；`mergeSettings` 对完整默认输入输出同值对象），引用均非 `DEFAULT` 本身，接受。
+6. **`src/index.ts` 模块头注释在 `lib/index.mjs` 中消失** —— rollup/oxc 的 JSDoc 附着规则：基线头注释后紧跟 `const SETTINGS_DIR`，新入口后紧跟被提升的 `import`，注释悬空即被丢弃。**与批次⑦ 入口头注释丢失同类现象**，纯注释、零运行时影响，且该注释在 `lib/types/index.d.ts` 中完整保留。接受，源文件顶部不动。
+7. `docs/batch9-backlog.md` 在 `git status` 中出现 —— **主会话的并发产物**，非本批文件，未 add / 未改 / 未删。
+
+### 未验证的部分（如实记录）
+
+- **运行时加载未实测**：本批只做 tsc / vitest / build / 产物哈希四类验证，**没有在真实 DSH 进程里加载拆分后的 host 插件**。端点行为等价性的证据来自「5 分支代码逐字比对 + 29 个契约字符串存在性 + `test/hostEndpoints.test.ts`(7 例) / `hostEndpointChannel` / `hostSessionDelete` 全绿」，**不是端到端实测**。
+- 第 4 条的行为等价判断基于代码阅读，未构造针对性的畸形输入测试（§10.10 禁止本批新增测试）。

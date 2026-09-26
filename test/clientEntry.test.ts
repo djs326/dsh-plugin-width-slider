@@ -274,10 +274,10 @@ afterEach(() => {
 })
 
 describe('client 入口装配', () => {
-  it('declares the five host services it reads, in order (E1)', () => {
+  it('declares the four host services it reads, in order (E1)', () => {
     // 宿主按名字分发这些服务；删一个或换个名字，入口里对应的 ctx.xxx 会在运行期
     // 直接读到 undefined —— 这一步类型系统帮不上忙（ClientContext 是 any 桩）。
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'sessions', 'workspaces'])
+    expect(inject).toEqual(['slots', 'locale', 'sessions', 'workspaces'])
   })
 
   it('registers five effects, with the declared names in declaration order (E2)', () => {

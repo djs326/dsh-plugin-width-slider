@@ -41,7 +41,7 @@ import { applySettings, getSettings, mergeSettings, onSettingsChanged } from './
 import { prefersReducedMotion } from './motion/index.ts'
 import { motionAllowed } from '../shared/motionSettings.ts'
 
-export const inject = ['slots', 'locale', 'connection', 'sessions', 'workspaces']
+export const inject = ['slots', 'locale', 'sessions', 'workspaces']
 
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'width-slider: dictionaries')

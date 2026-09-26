@@ -21,6 +21,19 @@
  */
 import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './waapi.ts'
 import { isPreviewOpen } from '../core/overlayState.ts'
+// 弹窗结构契约（选择器、遮罩、关闭控件、内层浮层）统一由 official/ 层描述，这里只
+// 消费、不再自带一份 —— 原先 settingsPanelPatch.ts 与这里各写一份，两份已经漂移
+// （dialog 选择器一份带 div 前缀、一份不带）。
+import {
+  contentOf,
+  findSettingsDialog,
+  innerLayerOpen,
+  isCloseButton,
+  isHeaderCloseButton,
+  isSettingsDialog,
+  maskOf,
+  triggerOrigin,
+} from '../official/settingsDom.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */
 export const SETTINGS_PANEL_CLASS = 'dsu-settings-panel'
@@ -33,21 +46,26 @@ export const SETTINGS_CLOSING_CLASS = 'dsu-settings-closing'
 /** Applied to the live mask while the panel shrinks out. */
 export const SETTINGS_MASK_CLOSING_CLASS = 'dsu-settings-mask-closing'
 
-/** The settings dialog: a modal dialog that owns a nav rail. */
-const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]'
-/**
- * The layer the shell mounts the settings mask and panel in. It is the one
- * structural fact that tells the settings modal apart from any other modal that
- * happens to render a nav rail.
- */
-const OVERLAY_ROLE = 'presentation'
-/** The settings trigger: the shell button that opens the dialog. */
-const TRIGGER_SELECTOR = 'button[aria-haspopup="dialog"]'
 /** Upper bound for the exit transition (opacity 160ms + scale 280ms, plus margin). */
 export const EXIT_TIMEOUT_MS = 380
-/** Page cross-fade duration (ms); a lightweight swap, so it sits in the `fast` band. */
+/**
+ * Page cross-fade duration (ms); a lightweight swap, so it sits in the `fast` band.
+ *
+ * 与 MASK_ENTRANCE_MS 同为 200 但不同源：这条是内容列的交叉淡入（位移 4px、
+ * EASE_GLIDE，随 nav 切换反复重播），那条是遮罩的纯不透明度淡入（EASE_FADE，
+ * 每次开面板只跑一次）。数值重合只是因为两者都落在 `fast` 设计带（150–200ms）。
+ */
 const PAGE_REPLAY_MS = 200
-/** Panel re-entrance duration when the toggle is switched back on; `standard` for a surface this large. */
+/**
+ * Panel re-entrance duration when the toggle is switched back on; `standard` for a
+ * surface this large.
+ *
+ * 与 motion/frames.ts 的 PANEL_DURATION_MS 同为 320 但不同源：那是对话里面板的
+ * 重播（PANEL_FRAMES 为 opacity+translate、EASE_SETTLE），这条是设置弹窗的重播
+ * （下面的 PANEL_FRAMES 为 opacity+scale 0.62、EASE_SPRING）—— 元素、关键帧与
+ * 曲线都不同，320 只是同一 `standard` 设计带的重合。合并两者会让两个独立决策
+ * 被一次改动同时推动。
+ */
 const PANEL_REPLAY_MS = 320
 
 /** Page cross-fade frames for the reused content column. */
@@ -62,15 +80,8 @@ const PANEL_FRAMES: readonly Keyframe[] = [
 ]
 /** Mask entrance frames. */
 const MASK_FRAMES: readonly Keyframe[] = [{ opacity: 0 }, { opacity: 1 }]
+/** 遮罩淡入时长；与 PAGE_REPLAY_MS 同为 200 的关系见该常量的说明（不同源）。 */
 const MASK_ENTRANCE_MS = 200
-
-/**
- * Words that name a close control. The host close button carries its
- * accessible name as visually-hidden slot text, so the button's own text IS
- * the localized word for "close". The length cap keeps a long paragraph that
- * happens to start with one of these words from matching.
- */
-const CLOSE_LABEL = /^(close|dismiss|关闭|關閉|閉じる|닫기|schließen|fermer|cerrar|chiudi|sluiten|zamknij|fechar|закрыть|kapat|đóng)/i
 
 /** Engine wiring: the settings-motion toggle. */
 export interface SettingsMotionOptions {
@@ -84,148 +95,6 @@ export interface SettingsMotionOptions {
 export interface SettingsMotionHandle {
   /** Stop observing and drop every applied class. */
   dispose: () => void
-}
-
-/**
- * True for the host settings dialog: a modal dialog with a nav rail, mounted in
- * the shell's `role="presentation"` layer next to its own mask. Requiring that
- * layer and the mask sibling matters - "modal + nav" alone also accepts other
- * plugins' navigable modals, and taking one of those for the panel made this
- * engine intercept clicks that are none of its business.
- * @param node - a candidate dialog element.
- */
-function isSettingsDialog(node: Element): boolean {
-  if (!node.matches(DIALOG_SELECTOR) || node.querySelector('nav') === null) return false
-  const parent = node.parentElement
-  if (parent === null || parent.getAttribute('role') !== OVERLAY_ROLE) return false
-  return maskOf(node) !== null
-}
-
-/**
- * The panel's own mask: the `aria-hidden` sibling immediately before it. A
- * sibling that CONTAINS the panel is a container, not a mask - returning it would
- * make `mask.contains(target)` true for every click in the page and swallow them
- * all.
- * @param dialog - the settings dialog.
- */
-function maskOf(dialog: Element): HTMLElement | null {
-  const sibling = dialog.previousElementSibling
-  if (!(sibling instanceof HTMLElement) || sibling.getAttribute('aria-hidden') !== 'true') return null
-  return sibling.contains(dialog) ? null : sibling
-}
-
-/** The mounted settings dialog, or null. */
-function findSettingsDialog(): HTMLElement | null {
-  for (const dialog of document.querySelectorAll<HTMLElement>(DIALOG_SELECTOR)) {
-    if (isSettingsDialog(dialog)) return dialog
-  }
-  return null
-}
-
-/**
- * Pick the button the panel opened from. The pointer's own button wins. A
- * shortcut-opened panel has none, and the shell trigger is no longer unique:
- * since 0.1.7 the context meter, the stats pills and the usage panels all
- * declare `aria-haspopup="dialog"`, so taking the document's first match can
- * anchor the panel to a control on the far side of the viewport.
- * @param dialog - the live settings dialog.
- * @param pressed - the most recent button pressed by the pointer, if any.
- */
-function settingsTrigger(dialog: HTMLElement, pressed: HTMLElement | null): HTMLElement | null {
-  // A button inside the panel is never its own trigger; a stale reference from
-  // a previous dialog must not win either.
-  if (pressed !== null && pressed.isConnected && !dialog.contains(pressed)) return pressed
-  const outside = Array.from(document.querySelectorAll<HTMLElement>(TRIGGER_SELECTOR))
-    .filter((element) => !dialog.contains(element))
-  // The open trigger is the one the shell marks expanded. When no candidate
-  // carries the marker, the nearest one to the panel is the best available
-  // reading of "the button you pressed".
-  const expanded = outside.filter((element) => element.getAttribute('aria-expanded') === 'true')
-  const pool = expanded.length > 0 ? expanded : outside
-  const panelRect = dialog.getBoundingClientRect()
-  const panelX = panelRect.left + panelRect.width / 2
-  const panelY = panelRect.top + panelRect.height / 2
-  let best: HTMLElement | null = null
-  let bestDistance = Number.POSITIVE_INFINITY
-  for (const element of pool) {
-    const rect = element.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) continue
-    const dx = rect.left + rect.width / 2 - panelX
-    const dy = rect.top + rect.height / 2 - panelY
-    const distance = dx * dx + dy * dy
-    if (distance < bestDistance) {
-      bestDistance = distance
-      best = element
-    }
-  }
-  return best
-}
-
-/**
- * The scale anchor for the panel: the centre of the settings trigger in the
- * panel's own coordinate space, so the panel grows out of the button instead
- * of the viewport centre. Returns null when no trigger is measurable (jsdom,
- * detached markup).
- * @param dialog - the live settings dialog.
- * @param pressed - the most recent button pressed by the pointer, if any.
- */
-function triggerOrigin(dialog: HTMLElement, pressed: HTMLElement | null): { x: number; y: number } | null {
-  const trigger = settingsTrigger(dialog, pressed)
-  if (trigger === null) return null
-  const panelRect = dialog.getBoundingClientRect()
-  const triggerRect = trigger.getBoundingClientRect()
-  if (panelRect.width === 0 || panelRect.height === 0 || triggerRect.width === 0 || triggerRect.height === 0) {
-    return null
-  }
-  // Clamp the anchor into the panel's own box. A trigger above or beside the
-  // dialog would otherwise put the origin outside it, and the panel reads as
-  // flying in from empty space instead of growing out of the button. On the
-  // boundary the direction still shows - top edge for a button above, left edge
-  // for one on the side - which is the "from the button" motion itself.
-  return {
-    x: Math.min(Math.max(triggerRect.left + triggerRect.width / 2 - panelRect.left, 0), panelRect.width),
-    y: Math.min(Math.max(triggerRect.top + triggerRect.height / 2 - panelRect.top, 0), panelRect.height),
-  }
-}
-
-/** The panel's scrolling content column (the nav rail's sibling). */
-function contentOf(dialog: HTMLElement): HTMLElement | null {
-  const content = dialog.querySelector('nav')?.nextElementSibling
-  return content instanceof HTMLElement ? content : null
-}
-
-/** Whether a button names itself as a close control. */
-function isCloseButton(button: HTMLElement): boolean {
-  const label = (button.getAttribute('aria-label') ?? button.getAttribute('title') ?? button.textContent ?? '').trim()
-  return label.length > 0 && label.length <= 24 && CLOSE_LABEL.test(label)
-}
-
-/**
- * Whether the button is the dialog header's own close control. The header is
- * the content column's first child and the close button is its direct child
- * (the action seat sits in a nested element); this structural check keeps the
- * exit working when the localized label changes.
- * @param dialog - the live settings dialog.
- * @param button - the pressed button.
- */
-function isHeaderCloseButton(dialog: HTMLElement, button: HTMLElement): boolean {
-  const header = contentOf(dialog)?.firstElementChild
-  return header instanceof HTMLElement && button.parentElement === header
-}
-
-/**
- * Whether an inner floating layer owns the interaction: an open Menu (the
- * settings page renders several, portaled to the body) or a nested modal.
- * Those consume Escape and outside-clicks themselves, so the close paths must
- * let the event through instead of shrinking the whole panel.
- * @param dialog - the live settings dialog.
- */
-function innerLayerOpen(dialog: HTMLElement): boolean {
-  if (document.querySelector('[role="menu"]') !== null) return true
-  for (const other of document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) {
-    if (other !== dialog) return true
-  }
-  return false
 }
 
 /**

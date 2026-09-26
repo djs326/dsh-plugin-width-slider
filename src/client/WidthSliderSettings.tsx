@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
 import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './core/config.ts'
-import { clearPanelRect } from './settingsPanelPatch.ts'
+import { clearPanelRect } from './patches/settingsPanel/dialogWindow.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
 import type { WidthSliderKey } from './core/locales.ts'
 import {
@@ -282,7 +282,7 @@ export function WidthSliderSettings({
       localStorage.removeItem('dsh.conversation.contentWidth')
       localStorage.removeItem('dsh.conversation.contentWidthFollow')
     } catch { /* ignore */ }
-    // 弹窗尺寸/位置的记忆键由 settingsPanelPatch 持有：走它导出的清理函数，避免键名漂移
+    // 弹窗尺寸/位置的记忆键由 patches/settingsPanel/dialogWindow 持有：走它导出的清理函数，避免键名漂移
     // （此前这里删的是已经废弃的 settingsPanelWidth，导致「恢复默认」重置不了弹窗大小）。
     clearPanelRect()
     applySettings({ ...DEFAULT_FEATURE_SETTINGS })

@@ -64,7 +64,13 @@ export function apply(ctx: ClientContext): void {
       // 会话账本读取失败不应让动效整块失效：退化为"非空白会话"（不播放新建
       // 对话入场），其余三组动效照常。
       try {
-        const snapshot = ctx.sessions.list.getSnapshot()
+        // 形状断言逐字搬自基线 `:148-152`：`ClientContext` 是 `any` 桩，这个
+        // `as unknown as` 是本仓唯一记录宿主账本形状的地方（批次⑨ 收紧类型时以它为准）。
+        const snapshot = (ctx as unknown as {
+          sessions: {
+            list: { getSnapshot: () => { current?: string; byId: Record<string, { blank?: boolean } | undefined> } }
+          }
+        }).sessions.list.getSnapshot()
         return snapshot.current !== undefined && snapshot.byId[snapshot.current]?.blank === true
       } catch (err) {
         // getState 会被频繁调用；账本持续不可用时只提示一次。

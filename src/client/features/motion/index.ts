@@ -1,4 +1,4 @@
-import { installConversationEntrance, type MotionEngineState } from '../../motion/conversation.ts'
+import { installConversationEntrance } from '../../motion/conversation.ts'
 import { installSettingsMotion } from '../../motion/settingsMotion.ts'
 import { motionStateOf } from '../../motion/state.ts'
 import { MOTION_CSS } from '../../motion/styles.ts'

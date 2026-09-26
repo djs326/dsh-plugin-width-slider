@@ -637,7 +637,7 @@ export type EndpointResult<T = unknown> = EndpointOk<T> | EndpointErr
 | 探针 | 改动 | 预期变红 |
 |---|---|---|
 | P1 | `endpointContract.ts` 的 `WIDTH_SLIDER_ENDPOINT` → `'/api/width-slidr'` | F3 的字面量断言 + fetch 形状断言 |
-| P2 | `ENDPOINT_METHOD.readSettings` 的值 → `'readSetting'` | F3 字面量断言 + 「host 认每个方法」断言 |
+| P2 | `ENDPOINT_METHOD.readSettings` 的值 → `'readSetting'` | F3 的字面量断言 + 键集/值集一致断言 + fetch 形状断言（**实测 4 红 9 绿**） |
 | P3 | 删 `src/client/index.ts` 的 `'sessions'`（而非 `'connection'`） | E1（⑨-1 的网仍应有效） |
 
 ### 11.7 不要做的事
@@ -649,3 +649,173 @@ export type EndpointResult<T = unknown> = EndpointOk<T> | EndpointErr
 5. **不要把注释里提到的路径字面量一起改掉**（见 §11.4 末尾）。
 6. **不要新增 `EndpointResult` 以外的导出**，也不要给 `ENDPOINT_METHOD` 加 `satisfies` 之类的装饰。
 7. **不要顺手升级版本号或改 README** —— 那是 ⑨-4。
+
+### 11.8 实施留档（实测）
+
+**过程**：⑨-3 委派给子代理后，它完成了 §11.4 的全部 12 处改造与 `src/shared/endpointContract.ts` 的新建，**但在写 F3 测试之前失败**（未提交，改动留在工作树里）。主会话接手：核对了这 6 个文件的 diff（逐处与 §11.4 表格一致，相对路径 import 全部正确），然后按 §11.5 补写 `test/endpointContract.test.ts`（129 行 / 13 用例）并跑完全部验证。
+
+**纠正一处规格笔误**：§11.6 探针表原先写 P2 的预期是「F3 字面量断言 + **host 认每个方法**断言」。**实测该断言不会变红** —— host 与 client 读的是同一个 `ENDPOINT_METHOD`，值一起漂移，两端仍然一致。P2 实际红的是：字面量断言、键集/值集一致断言、fetch 形状断言（4 红 9 绿）。
+**这不是缺陷，恰恰是集中化的效果**：也正因如此，**对外契约只能由「与实现无关地独立写下的字面量」来守**——如果测试也用 `ENDPOINT_METHOD.readSettings` 去比自己，P2 会让 13 条全绿。这是 F3 必须写死 `'/api/width-slider'` 与 `'readSettings'` 等原始字面量的理由。
+
+**三条探针实测结果**（每条跑完即还原，`git status` 确认无残留）：
+| 探针 | 实测 |
+|---|---|
+| P1 路径改成 `'/api/width-slidr'` | **3 红 10 绿** —— 字面量断言 ×2 + fetch 形状断言（错误消息里也带路径） |
+| P2 `readSettings` 值改成 `'readSetting'` | **4 红 9 绿** —— 字面量断言 + 键集/值集一致 + fetch body 断言；**「host 认每个方法」保持绿**（见上） |
+| P3 删 `src/client/index.ts` 的 `'sessions'` | **1 红 17 绿** —— ⑨-1 的 E1 在 C4 之后仍然有效 |
+
+**验证结果**：`tsc -p tsconfig.test.json --noEmit` exit 0；`vitest run` **31 文件 / 305 用例全绿**（292 + 13）；`npm run build` exit 0。
+
+**产物**（基线 = C4 提交 `b7e72e2` 后的 `lib/`，已备份到 `%TEMP%\batch9-3-base\`）：
+| 产物 | 基线 | 现在 | 差 |
+|---|---|---|---|
+| `lib/index.mjs` | `122D91D3…F242D3` / 26 652 B / 743 L | `9CF6941D…ED7289` / 27 935 B / 769 L | +1283 B / +26 L |
+| `lib/client.js` | `36687727…C1094E` / 270 188 B / 6468 L | `673D9E22…45CABBF` / 271 529 B / 6494 L | +1341 B / +26 L |
+
+**两个产物都恰好 +26 行**：各多出一份 `endpointContract` 模块定义（14 行实体 + 注释），8 处引用由字面量改为常量名但行数不变。**契约字符串仍在**：两份产物各有 `const WIDTH_SLIDER_ENDPOINT = "/api/width-slider";` 与 `const ENDPOINT_METHOD = {` 五个键值。`lib/types/shared/endpointContract.d.ts` 已生成（39 行）。
+
+**⚠ 一处与预期不同的实测**：rollup **没有**把 `ENDPOINT_METHOD.readSettings` 折叠回字面量，产物里保留为属性访问（`lib/index.mjs:602` 等 5 处、`lib/client.js:3556/3565/4206/5988`）。值相同故行为等价，但**产物不再是「字面量比较」**——这是本批唯一进入产物的运行时代码形状变化，已由 F3 的 fetch 形状断言与「host 认每个方法」断言实证等价。
+
+**新增的对外契约事实（F3 钉住的）**：host 失败信封的 `error` 是 `{ code, message }` **对象**而非字符串；client 的 `callEndpoint` 只看 `response.ok`，非 2xx 抛 `endpoint <path> failed: HTTP <status>`（正文为空时无后缀）。
+
+---
+
+## 12. ⑨-4 实施规格（文档同步与升版）
+
+> **本节的实测数据采集于 `5b37023`（⑨-3 实施之前）。** ⑨-3 完成后会新增 `src/shared/endpointContract.ts` 与 `test/endpointContract.test.ts`（用例数随之增加）—— 实施 ⑨-4 时必须先重跑 `npx vitest run` 取**当时的**实际数字，不要照抄本节里「29 文件 / 292 用例」这类旧值。
+
+### 12.1 改动清单
+
+| # | 文件 | 动作 |
+|---|---|---|
+| E1 | `README.md:319-352` | 结构化重写「项目结构」树（见 §12.2 全文） |
+| E2 | `README.md:309`、`:271-283` | 测试计数改为实测值；「验证状态」表加 2.1.0 一行；`:283` 的「五个 client 服务」需处置（见 §12.3） |
+| E3 | `THIRD_PARTY_NOTICES.md:16`、`:18`、`:57`、`:59`、`:62` | 六处过期路径（见 §12.4） |
+| E4 | `docs/refactor-plan.md:1-48` | 在 §1 顶部加「本节是重构起点的基线」标注（见 §12.5） |
+| E5 | `package.json`、`README.md:374` | 版本号 `2.0.2` → `2.1.0`；新增 `### 2.1.0` 更新日志段（见 §12.6） |
+| G2 | — | **不做**。`label: 'Width Slider'` 的先决条件是确认宿主是否支持 label 走词典，**本仓库内没有证据**，无证据不改。 |
+| G3 | — | **不做**。`SETTINGS_DIALOG_SELECTOR` 的 `div` 前缀风险已在 §8.4 记录，本步无新证据。 |
+
+### 12.2 E1：README 结构树的新全文（替换 `README.md:319-352` 的整个代码块）
+
+```
+dsh-plugin-width-slider/
+├── src/
+│   ├── index.ts                     # Host 端入口：注入装配 + 端点注册
+│   ├── host/
+│   │   ├── api.ts                   # 五个端点的分发器（readSettings / writeSettings / wsGroupsRead / wsGroupsWrite / sessionDelete）
+│   │   ├── chinesePrompt.ts         # 中文强制注入（systemPrompt.section 的三态装卸）
+│   │   ├── dshHome.ts               # $DSH_HOME 解析
+│   │   ├── endpointChannel.ts       # /api 下 JSON 端点注册（connection.fetch.register）
+│   │   ├── jsonFile.ts              # JSON 读写、损坏文件的改名保留与回落
+│   │   ├── sessionDeleteService.ts  # 会话删除链（停任务、删目录、清投影缓存、工作区记账）
+│   │   ├── settingsStore.ts         # settings.json 的 per-apply store
+│   │   └── workspaceGroupsStore.ts  # workspace-groups.json 的 per-apply store
+│   ├── shared/
+│   │   ├── settings.ts              # 功能开关契约（host/client 唯一真源）
+│   │   ├── motionSettings.ts        # 动效总闸三态与四档风格
+│   │   ├── endpointContract.ts      # 端点路径、五个方法名与响应信封
+│   │   └── types.ts                 # Disposer 等最小共享类型
+│   ├── env.d.ts                     # 运行时模块类型桩
+│   └── client/
+│       ├── index.ts                 # Client 端入口：locale 注册 + 受控功能生命周期
+│       ├── sessionDelete.ts         # 会话删除菜单项与确认框
+│       ├── sidebarToolsMerge.ts     # 侧边栏工具并入
+│       ├── widthPrefs.ts            # 宽度偏好读写/发布与启动恢复
+│       ├── WidthSliderControl.tsx   # 宽度滑块组件（按下预览、rAF 拖动、释放惯性与持久化）
+│       ├── WidthSliderSettings.tsx  # 设置区块：功能总控页
+│       ├── workspaceTabs.tsx        # 兼容转发壳（真正的实现在 patches/wsTabs/）
+│       ├── core/                    # 跨功能基础设施
+│       │   ├── config.ts            # FeatureSettings 契约 + client 配置 store
+│       │   ├── domObserver.ts       # DOM 变更观察的统一封装
+│       │   ├── endpointChannel.ts   # /api 端点调用（POST { method, payload }）
+│       │   ├── features.ts          # 受控功能注册表
+│       │   ├── lang.ts              # 界面语言判定
+│       │   ├── locales.ts           # zh / en 文案
+│       │   ├── overlayState.ts      # 浮层状态
+│       │   ├── primitives.ts        # ui-primitives 的取用封装
+│       │   └── rpc.ts               # 设置读写的端点薄封装
+│       ├── features/                # 受控功能的装配层
+│       │   ├── motion/index.ts      # 动效引擎的装卸与槽位绑定
+│       │   ├── think/index.ts       # 思考块渲染器注册与样式注入
+│       │   └── width/index.ts       # 宽度启动恢复与手柄隐藏样式
+│       ├── official/                # 官方 DOM 与契约的适配层
+│       │   ├── chatDom.ts           # 对话区 DOM 锚点
+│       │   ├── menuInjection.ts     # 会话行菜单项注入
+│       │   └── settingsDom.ts       # 设置面板 DOM 锚点
+│       ├── patches/                 # 官方界面的补丁
+│       │   ├── settingsPanel/       # 面板补丁：弹窗窗口化 + 左侧导航滚动
+│       │   └── wsTabs/              # 工作区分页：页签栏、分组 store、树过滤
+│       ├── motion/                  # 入场动效引擎（对话/侧边栏/新建对话/设置面板）
+│       └── think/                   # 思考块渲染器
+├── test/                            # 单元测试（含 jsdom 动效用例）
+├── scripts/fix-dts-imports.mjs      # 构建后修正 d.ts 相对导入
+├── docs/                            # 重构计划、各批实施规格与留档（非运行时依赖）
+├── cordis.patch.yml                 # bundle patch：insert width-slider
+├── tsdown.config.ts
+├── tsconfig.json
+└── package.json
+```
+
+**同时必须修的两处**：`README.md:347` 的 `├── env.d.ts` 是错的（实际在 `src/env.d.ts`，已并入上面的树）；`:343` 的 `locales.ts` 实为 `core/locales.ts`（已在上面修正）。**注意 `src/client/think/thinkView.tsx` 仍在 `think/` 下，不要把它也挪走。**
+
+### 12.3 E2：测试计数与验证状态
+
+1. `README.md:309` 的「（22 个用例文件、228 项：……全部通过）」→ 改为**实施 ⑨-4 时 `npx vitest run` 的实测值**（⑨-3 之后应为 31 文件 / 300+ 项，**必须实测，不要推算**）。括号里的功能枚举也要按现状调整（删掉已下线的「界面中文化」等，补上「端点协议契约」「client 入口装配」「MOTION_CSS 快照」）。
+2. **`README.md:283` 的「五个 client 服务（`slots`/`locale`/`connection`/`sessions`/`workspaces`）」需要处置**：⑨-3 的 C4 删掉了 `inject` 里的 `'connection'`，现在是四项。但这一行是**「0.1.7-rc.2 内核适配已逐项核对」的历史记录**，写成四项会与当时的事实不符。**建议改法**：保留五个的名字但补一句括号说明 —— `（`connection` 已在 2.1.0 移除：client 侧零消费者，端点调用走原生 `fetch` 而非 `connection.rpc.call`）`。**不要缩写掉 `connection`，那会让读者以为从没声明过。**
+3. `README.md:271-283` 的「验证状态」表加一行：`| 端点契约集中化与入口服务收敛（2.1.0） | 已由本仓测试覆盖（端点契约测试 + client 入口装配用例）；**未在真实 DSH 进程里加载过** |`。**这一行必须写明未做进程内加载验证** —— 批次⑦⑧⑨ 都只做了 tsc/vitest/build 与产物核对，没有任何一步在真实 DSH 里跑过。
+
+### 12.4 E3：`THIRD_PARTY_NOTICES.md` 的六处
+
+| 行 | 现状 | 实际 |
+|---|---|---|
+| `:16` | `src/client/index.ts —— 对应上游 lib/parts/apply.part.js（装配：样式注入/assistant-step 渲染器注册）` | 样式注入与渲染器注册已移到 `src/client/features/width/index.ts` 与 `src/client/features/think/index.ts`；`src/client/index.ts` 现在只做装配协调 |
+| `:18` | `src/index.ts —— 对应上游 lib/index.js（PROMPT_TEXT 与注入方式）` | `PROMPT_TEXT` 已移到 `src/host/chinesePrompt.ts` |
+| `:57` | `src/client/motion/motion.ts` | **该文件已不存在**（已拆成 `motion/` 下的 13 个模块） |
+| `:59` | `src/client/motion/animate.ts` | **该文件已不存在**，对应物是 `src/client/motion/waapi.ts` |
+| `:62` | `src/client/locales.ts` | 实际是 `src/client/core/locales.ts` |
+| `:14`、`:58`、`:60`、`:61` | `src/client/think/thinkView.tsx`、`motion/settingsMotion.ts`、`motion/styles.ts`、`src/shared/motionSettings.ts` | **都还存在，不改** |
+
+**⚠ `:18` 的措辞要小心**：`src/index.ts` 仍然是 host 端入口、仍然负责「注入方式」（它调用 `chinesePrompt` 的 controller）。**只把 `PROMPT_TEXT` 的归属指出来，不要说 `src/index.ts` 不再对应上游。**
+
+**改法建议**：把「本地转写文件」这一列表从「一个文件对应一个上游文件」放宽为「本地文件（及它承载的上游对应物）」，逐条写清楚，例如 `src/client/motion/waapi.ts —— 对应上游 animate.ts（批次② 拆分后改名）`。**`motion.ts` 那一行不能简单删掉** —— 它是许可归属的凭证，必须说明它被拆到了哪里。
+
+### 12.5 E4：`docs/refactor-plan.md` 的 §1
+
+§1「现状实测」的整节（`:25-48` 及后续）是**重构起点 `823a98a` 的基线快照**（`src/` 26 文件 / 7686 行、`test/` 22 文件 / 3151 行、最大文件 `workspaceTabs.tsx` 1690 等），这些数字**作为历史基线是正确的，不要更新它们**（更新会让「重构究竟改了什么」失去参照）。
+
+**要做的只有一件**：在 `### 1.1 规模` 之前插入一行醒目的标注，例如：
+
+> **⚠ 本节是重构起点（`823a98a`）的实测值，用于对照「重构前后差异」。重构过程中文件已大量拆分，当前结构请看 [README 的项目结构](../README.md#项目结构)，不要拿本节的数字当现状。**
+
+`:39` 那句「（README 结构树与任务描述全部偏低，重构时以本表为准）」**要改**：README 结构树即将（E1 后）以实测为准，这句会变成误导。改为「（旧文档的行数与任务描述全部偏低，重构时以本表为准）」。
+
+### 12.6 E5：版本号与更新日志
+
+1. `package.json` 的 `"version": "2.0.2"` → `"2.1.0"`（**只改这一行**；`package-lock.json` 若存在同名 version 字段也需同步，先 grep 确认）。
+2. `README.md:374` 的 `## 更新日志` 下方的 `### 2.0.2` 之前插入 `### 2.1.0`。**内容要点（每条都要能落到具体文件，不要写空话）**：
+   - **端点协议集中化**：`/api/width-slider` 的路径与五个方法名原以字符串字面量散落在 host 与 client 八处，改一处漏一处既无编译期也无运行时提示；现在集中在 `src/shared/endpointContract.ts`，并由新增的端点契约测试钉住字面量与请求形状。
+   - **client 入口服务收敛**：`inject` 移除零消费者的 `connection`（client 侧的端点调用一直走原生 `fetch`，从不经过 `connection.rpc.call`）；host 侧的 `connection` / `webServer` 依赖不变，有必需性论证。
+   - **命名收敛**：`settingsMotion.ts` 里那个模块私有的 `PANEL_FRAMES`（起点 `opacity 0` / `scale 0.62`）改名为 `SETTINGS_PANEL_FRAMES`，以区别于引擎里同名的面板入场帧表（`motion/frames.ts` 的 `PANEL_FRAMES`，起点 `opacity 0.5` / `translate 0 6px`）——两者同名不同物，此前只靠注释区分。
+   - **删除恒 false 的菜单排除项**：`assignMenuItem.ts` 的 `excludeAttrs` 里有一个本插件旧版本自己的属性名，删掉后语义不变（排除表不需要包含自己的 `attr`，`menuInjection.ts` 的查找条件已覆盖）。
+   - **测试**：新增 `MOTION_CSS` 快照、client 入口装配端到端覆盖（E1–E15）、端点契约测试；测试规模从 22 文件 / 228 项增至**（填实测值）**。
+   - **文档**：README 结构树按当前实际的文件组织重写；第三方声明里六处已失效的文件路径更正。
+   - **⚠ 结尾必须加一句诚实交代**：`以上改动由 tsc、vitest 与构建产物核对验证；本版本未在真实 DSH 进程里加载过端到端验证。`
+
+### 12.7 不要做的事
+
+1. **不要动 `dsh-src/`**（上游源码副本）。
+2. **不要「顺手」更新 `docs/refactor-plan.md` 第 2 节以后各批的行号** —— 那是历史记录，E4 只加标注。
+3. **不要重写 README 里任何历史版本的更新日志条目**（包括 `:386` 里 2.0.1 条目的 `PANEL_FRAMES`）—— 它们是当时的记录。**但 §12.6 的 2.1.0 新条目必须说明这次改名**，读者从新条目能追到旧名，这就够了。
+4. **不要改 `README.md:267` 的 host 入口依赖表** —— 那是 host 侧，⑨-3 没动。
+5. **不要新增或删除 README 的章节结构**（只改内容，不重组目录）。
+6. **不要碰 `G2` / `G3`**（见 §12.1）。
+
+### 12.8 验收判据
+
+- `npx tsc -p tsconfig.test.json --noEmit` → exit 0（⑨-4 只改文档与 `package.json`，理论上不引入类型错误；跑它是为了证明「什么都没碰坏」）
+- `npx vitest run` → 全绿，且**用例数与 ⑨-3 结束时完全一致**（本步不增删测试）
+- `npm run build` → exit 0
+- **两个产物 `lib/index.mjs` 与 `lib/client.js` 必须逐字节不变** —— ⑨-4 不动 `src/`，这是本步最强也最该成立的判据。开工前备份到 `$env:TEMP\batch9-4-base\`。
+- **`git diff` 逐条审读**：预期只出现 `README.md`、`THIRD_PARTY_NOTICES.md`、`docs/refactor-plan.md`、`package.json`（以及可能的 `package-lock.json`）四个（或五个）文件。
+- **README 结构树里的每个路径都要实测存在**：用一条命令对树里出现的所有 `src/...` 路径逐个 `Test-Path`，把结果写进报告。**这是 E1 的核心验收，不能靠肉眼。**

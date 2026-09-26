@@ -354,6 +354,7 @@ src/
 6. `client/motion/` 不得 import 任何特性目录（切断 `settingsMotion.ts → previewState.ts`），跨特性状态经端口注入。
 7. 跨特性状态一律经端口注入——沿用现有 `MotionEngineOptions { getState, subscribe }`（`motion.ts:349-354`）与 `SettingsMotionOptions { enabled, subscribe }`（`settingsMotion.ts:76-81`）的注入风格，**这是本仓最好的既有设计，必须保留并推广**。
 8. 新增依赖边前先问：能不能放进 `core/` 或 `official/`。
+9. `client/features/*` **可以、也必须能** import `client/motion/`（**批次⑦ 补记**）：`features/motion/index.ts` 的职责就是消费 `motion/` 的引擎（`state` / `conversation` / `settingsMotion` / `styles` / `waapi`）。原文只在规则 6 里写了 motion 侧「禁 import 特性目录」，features 侧是表述缺口，不是意图缺口。
 
 **现有边需要切断的**：
 - `motion/settingsMotion.ts:23 → ../previewState.ts`：**批次④ 已切断**。实现为 `SettingsMotionOptions` 新增**必填** `isPreviewOpen: () => boolean`（`settingsMotion.ts:101`），由 `client/index.ts` 装配点注入 `core/overlayState.ts` 的 `isPreviewOpen`。命名取 `isPreviewOpen` 而非本计划原先建议的 `isInnerOverlayOpen`——后者与同文件既有的 `innerLayerOpen(panel)`（面板内 Menu / 嵌套 modal）语义撞车，而该端口替换的正是一处 `isPreviewOpen()` 调用；也未采用 `suppressEscape`，因为既有端口风格（`enabled`/`getState`/`subscribe`）都是「读状态」而非「做决策」。
@@ -373,7 +374,7 @@ src/
 | **4** | 抽 `official/chatDom.ts` 与 `core/domObserver.ts`；`motion/conversation.ts`、四个补丁模块的 Observer 统一。**已做**（`patches/wsTabs/scope.ts` 当时尚不存在，留批次⑥） | 6 → 10 | 无 | 中 |
 | **5** | 抽 `official/menuInjection.ts`，`patches/sessionDelete` 与 `patches/wsTabs/assignMenuItem` 共用 | 3 → 6 | 无 | 中 |
 | **6** | `workspaceTabs.tsx`（1661）拆成 `patches/wsTabs/` 8 个文件，分 3 次提交。**已做**（实为 4 次 —— 补测试单独一次） | 1 → 9 | 无 | **高（时序敏感，见 P7）** |
-| **7** | `client/index.ts` 抽 `core/features.ts` 功能注册表，4 个内联大函数外移，`motionStateOf` 移入 `motion/`，清 dead param 与过期类型 | 3 → 8 | 无 | 中 |
+| **7** | `client/index.ts` 抽 `core/features.ts` 功能注册表与 `core/rpc.ts`，4 个内联大函数外移（`features/{width,think,motion}/`），`motionStateOf` 移入 `motion/state.ts`，建 `shared/types.ts`，删 `RpcClientContext` 与两个未使用的 ctx 参数。**实施中** | 1 → 8（新建 7、改造 1） | 无 | 中 |
 | **8** | host 拆分：`jsonFile.ts`/`settingsStore.ts`/`workspaceGroupsStore.ts`/`chinesePrompt.ts`/`api.ts` | 1 → 7 | 无 | 低 |
 | **9** | 统一命名与导出面；`shared/dshHome.ts` 迁入 `host/`；同步 README 结构树、更新日志、第三方声明 | 全仓 | 无 | 低 |
 
@@ -389,7 +390,7 @@ src/
 
 **批次⑦ 的规格裁定**（只读调研已完成，因批次⑥ 尚未开工而暂缓实施；以下行号以 `0e6a38f` 工作树为实测口径，`src/client/index.ts` 实测 **393 行**，比本计划第 1 节的 385 行多 8 行）：
 
-- **Q1 `motionStateOf` 落点**：拆成纯函数放 `motion/state.ts`，签名收为 `motionStateOf(settings, blank)`；读会话账本 `ctx.sessions.list.getSnapshot()` 的部分留在装配层（`client/index.ts`），把 `blank` 作参数传入。理由与批次④ 切断 `motion/ → core/overlayState.ts` 同源——`motion/` 不该知道业务状态，只接受信号。模块级 `ledgerWarned`（`:136`）随 `motionStateOf` 迁移。
+- **Q1 `motionStateOf` 落点**：拆成纯函数放 `motion/state.ts`，签名收为 `motionStateOf(settings, blank)`；读会话账本 `ctx.sessions.list.getSnapshot()` 的部分留在装配层（`client/index.ts`），把 `blank` 作参数传入。理由与批次④ 切断 `motion/ → core/overlayState.ts` 同源——`motion/` 不该知道业务状态，只接受信号。模块级 `ledgerWarned`（`:136`）**不随纯函数迁移** —— 纯函数不读账本、不会失败，而告警属「读账本失败」分支（`:154-160` 的 catch），只能跟读账本方走。订正见下文「批次⑦ 的九项裁定」第 1 条。
 - **Q2 注册表是否保留「常驻安装」语义**：**保留**。`wsTabs`（`:337`）与 `toolsMerge`（`:339-342`）的 gate 实测是 `true` 恒真，真正的门控在各自模块内部（`workspaceTabs.tsx:390-391`、`sidebarToolsMerge.ts:255-260`）。**不得把它们改成真门控** —— `toolsMerge` 关闭时模块内只 `publish('')`，若改由入口跳过安装会连带跳过 `style.remove()`（`sidebarToolsMerge.ts:371`），属静默行为变更。
 - **Q3 `merge.sync()` 死导出面**：本批**不动**（改它会动 `lib/client.js` 字节，且属批次⑨ 的导出面收敛）。已在批次⑨ 待办里记一条。
 - **Q4 删 `RpcClientContext` 与去 ctx 参数**：**做**。`rpcReadSettings`（`:275`）与 `rpcWriteSettings`（`:287`）的 ctx 实测未使用；`RpcClientContext`（`:267-273`）里的 `connection.rpc.call` 仓内零调用（真路径是 `core/endpointChannel.ts` 的 `callEndpoint`），且 `ClientContext` 在 `src/env.d.ts:15-17` 本就是 `any` 桩。`apply` 签名改回 `ClientContext`，**返回值必须是 `void`**（`:293`；cordis client loader 契约 + `tsdown.config.ts:73-75` 的 `module.exports` 握手），清理全靠 5 条 `ctx.effect` 的 cleanup。
@@ -400,6 +401,35 @@ src/
 **批次⑦ 的行号偏移更正**（本计划第 1、2 节的 client 侧行号以批次① 前的工作树为准，经批次①③④ 后已整体偏移）：三处 `<style>` 实测 `:72-78`（hide-handles）/ `:96-102`（think-styles）/ `:196-202`（motion-styles）；上游冲突探测 `:252-263`；动效状态派生 `:138-176`；RPC 封装 `:275-289`；slot 名单实际出现 **3 次**（`:304` 的类型联合、`:330-347` 的 `sync` 调用序列、`:354` 的卸载数组），不只是计划说的 2 次；类型逃逸 6 处实测为 `:113` / `:114` / `:118` / `:148` / `:334` / `:337`。
 
 **另一处计划更正**：第 1.2 节末尾写「`src/index.ts`（host）仅间接覆盖」**不准确** —— `test/hostEndpoints.test.ts:17`（`typeof import('../src/index.ts')`）与 `:43`（`apply(baseCtx as never)`）是对 host 入口的**直接覆盖**，且覆盖 5 个 method 与损坏文件恢复路径。真正零测试覆盖的只有 `src/client/index.ts`。
+
+**批次⑦ 的九项裁定**（批次⑥ 完成后重启的只读调研，全文 10 节；行号以 `c93e738` 工作树为实测口径 —— `src/client/index.ts` 实测 **393 行** = 375 行有内容 + 18 空行，任务描述给的 17 个锚点**全部准确**，与前三批「行数普遍偏低」的历史偏差相反）：
+
+1. **`ledgerWarned` 落点（订正上文 Q1）**：**留装配层**。纯函数不读账本、不会失败，而告警属「读账本失败」分支（`:154-160` 的 catch），只能跟读账本方走。**不新建 `core/sessionLedger.ts`** —— `core/` 现有 7 个文件（`config`/`endpointChannel`/`lang`/`locales`/`overlayState`/`primitives`/`domObserver`）无一 import 宿主 ctx，让 core 持有 `ctx` 会破坏该层定位；且适配器本质就是装配。
+2. **三处 `ctx.sessions`（`:208`/`:235`/`:241`，Q1 未覆盖）经端口注入**：`features/motion/index.ts` 新增
+   ```ts
+   export interface MotionSessionsPort {
+     subscribe: (listener: () => void) => () => void
+     currentSessionId: () => string | undefined
+     isBlank: () => boolean
+   }
+   export function installMotionFeature(sessions: MotionSessionsPort): Disposer
+   ```
+   `:208` 与 `:241` 的两个 subscribe 合并为一个 `subscribe` 端口；`:235` 的 `getSnapshot().current` 走 `currentSessionId`；`motionStateOf` 的 blank 走 `isBlank`。装配层（`client/index.ts`）用一个带块注释的「会话账本适配器」（约 15 行，含 `ledgerWarned`）把 `ctx.sessions` 翻译成该端口。**未选**「`installMotionFeature(ctx)` 原样收 ctx」（与 Q1 同源理由冲突，且把宿主形状依赖扩散到 features 层），也**未选**只合并 subscribe 的最小改动（拆分不彻底，`:235` 仍会解构宿主形状）。
+3. **`core/features.ts` 导出面收窄**（订正 Q5 的「导出 `Slot`/`ensure`/`ensureSafe` 三者」）：只导出 `Disposer`、`Slot`、`UNINSTALL_ORDER`、`FeatureRegistry`、`createFeatureRegistry`。**不导出 `ensure`** —— 它是 `ensureSafe` 的内部实现，无独立语义；测试要验的重试语义（installer 抛错 → `installed` 保持 `undefined` → 下次 `sync` 重试）用 `ensureSafe` 就能测。
+4. **注册表封装 `installed` 记录与卸载序**：`disposeAll()` 内部用显式常量 `UNINSTALL_ORDER: readonly Slot[]`，**逐字保留现有次序**（`handle, think, resize, nav, sessionDel, wsTabs, motion, toolsMerge`）。这同时消掉 IC1 的「三处必须同名单、漏了卸载数组那一处会**静默**泄漏」风险（`:304` 类型联合 / `:330-347` 安装序 / `:354` 卸载数组收成「`Slot` 类型 + `UNINSTALL_ORDER` 常量 + 8 个 `ensureSafe` 调用」），且**零次序变化** —— 报告 R9 警告的「改成遍历 `installed` 会改变次序」因常量显式而不成立。**实测新发现（IC2）**：现有安装序与卸载序本就**不一致**（`motion` 与 `toolsMerge` 互换），常量化后这一事实被显式记录而非隐式存在。
+5. **`warnIfUpstreamPresent`（`:251-263`）落 `features/think/index.ts`**（不采纳报告的「留入口」倾向）：它是思考块的上游冲突探测，与 `installThinkRenderer` 同属思考块特性的两个出口；留入口会让入口保留一个 13 行实现函数，违背本批「入口只装配」的目标。E2 改为调用该导出。
+6. **本批判据强度 = 行为敏感批次**：`lib/index.mjs` 与开工前基线副本做 sha256 逐字节比对（本批不碰 host，应完全不变）；`lib/client.js` 做 `git diff --no-index -U0` hunk 归因 + 去空行/注释/region/`$N` 后缀的归一化多重集比对；`tsc` + `vitest` 全绿。
+7. **补第 5 节的分层规则**：`features/` **可以** import `motion/`（`features/motion/index.ts` 必然要 import `motion/{state,conversation,settingsMotion,styles,waapi}.ts`）。第 5 节只在 motion 侧写了「禁 import 任何特性目录」，features 侧是表述缺口而非意图缺口。
+8. **`installWidthFeature` 搬迁后保持无参** `(): Disposer`：它不注册槽位、不读设置、只用 `document` 与 `applySavedWidth()`；disposer 由注册表统一管理。**不得**在类型收紧时把它当成 dead param 清掉。
+9. **`declare module`（`:41-45`）与 `NS`（`:47`）移入 `core/locales.ts`**：`WidthSliderKey`（`core/locales.ts:1`）、`LocaleNamespaceMap.widthSlider: WidthSliderKey`、`NS = 'widthSlider'`、`:383` 的 `locale: NS` 四处同一名字空间，让前三处同址。入口已 import 该模块（`:23`），不新增依赖边。
+10. **不引入最小 ctx 接口（订正报告 R18）**：`src/env.d.ts:15-17` 的 `ClientContext = $TS_FIXME = any`，而 `RpcClientContext = ClientContext & { connection: { rpc: { call } } }` 在 TS 里 `any & X = any` ⇒ **现状本来就零类型保护**，删 `RpcClientContext` 不构成「净退化」。给 `features/*/index.ts` 定义最小本地接口是**新增抽象**，属本批范围外，**记批次⑨**（与 Q6、`inject` 里零消费者的 `connection` 同批）。
+11. **RPC 封装签名**：`rpcReadSettings(): Promise<unknown>`、`rpcWriteSettings(settings: unknown): Promise<void>`（两者现状的 `ctx` 参数实测未使用）。
+12. **`motionStateOf` 签名**：`motionStateOf(settings: FeatureSettings, blank: boolean): MotionEngineState`，落 `motion/state.ts`；`FeatureSettings` 取自 `shared/settings.ts`（`motion/ → shared/` 是既有边，`conversation.ts` 已 import `shared/motionSettings.ts`）。
+13. **三个 style id 内联字面量逐字保留**（`dsh-plugin-width-slider-hide-handles` / `-think-styles` / `-motion-styles`），不做常量归一 —— 不在第 8.2 节红线清单里，但改动零收益且增加归因成本。**不新建 `core/styleTag.ts`**：第 3 处 style 依赖「注入成功后若引擎抛错，catch 分支调 `cleanup()` 把 style 一并移除」，抽成返回值式原语会漏删（报告 R12），属真实行为陷阱。
+14. **Q3 理由订正**：`merge.sync()` 是「**生产代码零调用**」，但 `test/sidebarToolsMerge.test.ts` 有 8 处（`:86`、`:176`、`:179`、`:189`、`:199`、`:202`、`:215`、`:227`）。结论不变（仍是死导出面，批次⑨ 处理），理由据此订正。
+15. **`features/*/index.ts` 的 ctx 参数类型保持 `ClientContext`**（any 桩），不改写为本地接口（见第 10 条）。`:379` 的 `label: 'Width Slider'` 硬编码英文与并存的 `locale: NS` 看似矛盾，但宿主是否支持 label 走词典**无证据**，本批不动，记批次⑨。
+
+**批次⑦ 的行号微差更正**：报告实测 `:96-101`（上文写 `:96-102`）、style 注入实为 `:197-202`（上文写的 `:196-202` 里 `:196` 是 `try {`）。不影响实施。
 
 **批次⑤ 的三处裁定**（批次⑤ 已提交 `5700aa6`：新建 `official/menuInjection.ts`，`sessionDelete` 与 `workspaceTabs` 的菜单注入共用）：
 

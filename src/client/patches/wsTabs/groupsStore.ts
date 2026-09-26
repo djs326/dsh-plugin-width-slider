@@ -11,6 +11,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import { tt } from './messages.ts'
+import { ENDPOINT_METHOD } from '../../../shared/endpointContract.ts'
 
 export interface WsGroup {
   id: string
@@ -141,7 +142,7 @@ function persistGroups(): void {
     // 期间又改过：这次的快照已过期，跳过（更新的那一次会带着最新内容发出去）。
     if (seq !== writeSeq) return
     try {
-      const r = (await call('wsGroupsWrite', { groups: snapshot })) as { ok?: boolean } | null
+      const r = (await call(ENDPOINT_METHOD.wsGroupsWrite, { groups: snapshot })) as { ok?: boolean } | null
       if (!r || r.ok !== true) {
         console.warn('[width-slider] wsGroupsWrite rejected by host，下次启动将以本地缓存为准重试')
         markDirty()
@@ -182,7 +183,7 @@ export async function loadGroups(): Promise<void> {
     return
   }
   try {
-    const result = (await rpcCall('wsGroupsRead')) as { ok?: boolean; value?: { groups?: unknown } } | null
+    const result = (await rpcCall(ENDPOINT_METHOD.wsGroupsRead)) as { ok?: boolean; value?: { groups?: unknown } } | null
     // 读回期间用户已经建/改过页签：本地是更新的真源，这次远端结果不再赋值（否则刚建的
     // 页签会被旧列表在内存与缓存里一起覆盖掉，窗口＝RPC 往返）。收尾照常走完，并清掉
     // 上次的失败标记 —— 本地写入一律经过 commitGroups，revision 变化即代表它已经完成

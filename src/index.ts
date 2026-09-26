@@ -19,6 +19,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
+import { WIDTH_SLIDER_ENDPOINT } from './shared/endpointContract.ts'
 import { PROMPT_TEXT, createChinesePromptController, type PromptCtx } from './host/chinesePrompt.ts'
 import { createSettingsStore } from './host/settingsStore.ts'
 import { createWorkspaceGroupsStore } from './host/workspaceGroupsStore.ts'
@@ -61,7 +62,7 @@ export function apply(baseCtx: Context): void {
   // 写盘与热切换分开处理：文件落盘成功即 ok:true，热切换异常仅告警，
   // 避免"已落盘但返回失败"导致 client 重复提交。
   ctx.effect(
-    () => registerEndpointChannel(ctx, '/api/width-slider', createHostApi({
+    () => registerEndpointChannel(ctx, WIDTH_SLIDER_ENDPOINT, createHostApi({
       settings,
       groups,
       logger,

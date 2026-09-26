@@ -17,6 +17,7 @@
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { isZhInterface } from './core/lang.ts'
 import { callEndpoint } from './core/endpointChannel.ts'
+import { ENDPOINT_METHOD, WIDTH_SLIDER_ENDPOINT } from '../shared/endpointContract.ts'
 import { primitives } from './core/primitives.ts'
 import { observeBodyDebounced } from './core/domObserver.ts'
 import { findOpenMenu, injectMenuItem } from './official/menuInjection.ts'
@@ -87,7 +88,7 @@ function sessionsById(): Record<string, { title?: string; running?: boolean } | 
 
 async function rpcDelete(ctx: SessCtx, sessionId: string): Promise<string | null> {
   try {
-    const result = await callEndpoint('/api/width-slider', 'sessionDelete', { id: sessionId })
+    const result = await callEndpoint(WIDTH_SLIDER_ENDPOINT, ENDPOINT_METHOD.sessionDelete, { id: sessionId })
     if (result && typeof result === 'object' && (result as { ok?: boolean }).ok === true) return null
     const err = (result as { error?: { message?: string } } | null)?.error?.message
     return err ?? 'delete failed'

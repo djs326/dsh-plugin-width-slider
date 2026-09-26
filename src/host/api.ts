@@ -12,6 +12,7 @@ import type { SettingsStore } from './settingsStore.ts'
 import type { WorkspaceGroupsStore } from './workspaceGroupsStore.ts'
 import { normalizeGroups } from './workspaceGroupsStore.ts'
 import { mergeSettings, type FeatureSettings } from '../shared/settings.ts'
+import { ENDPOINT_METHOD } from '../shared/endpointContract.ts'
 import { deleteSessionById, type SessionDeleteCtx } from './sessionDeleteService.ts'
 
 export interface HostApiDeps {
@@ -28,10 +29,10 @@ export interface HostApiDeps {
 export function createHostApi(deps: HostApiDeps): EndpointHandler {
   return async (endpoint: string, payload: Record<string, unknown>): Promise<unknown> => {
     const body = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
-    if (endpoint === 'readSettings') {
+    if (endpoint === ENDPOINT_METHOD.readSettings) {
       return { ok: true, value: { settings: deps.settings.get() } }
     }
-    if (endpoint === 'writeSettings') {
+    if (endpoint === ENDPOINT_METHOD.writeSettings) {
       const next = mergeSettings(body.settings)
       try {
         deps.settings.commit(next)
@@ -43,10 +44,10 @@ export function createHostApi(deps: HostApiDeps): EndpointHandler {
       deps.onSettingsApplied(next)
       return { ok: true, value: {} }
     }
-    if (endpoint === 'wsGroupsRead') {
+    if (endpoint === ENDPOINT_METHOD.wsGroupsRead) {
       return { ok: true, value: { groups: deps.groups.get() } }
     }
-    if (endpoint === 'wsGroupsWrite') {
+    if (endpoint === ENDPOINT_METHOD.wsGroupsWrite) {
       // normalizeGroups 读的是 `raw.groups`（文件对象形状）；client 发来的 payload
       // 本身是 `{ groups: [...] }`，直接把数组传进去会得到空分组并「成功」落盘 ——
       // 页签重启后消失且不触发脏标记兜底。这里补上那层包装。
@@ -60,7 +61,7 @@ export function createHostApi(deps: HostApiDeps): EndpointHandler {
       }
       return { ok: true, value: {} }
     }
-    if (endpoint === 'sessionDelete') {
+    if (endpoint === ENDPOINT_METHOD.sessionDelete) {
       // v0.5.0 会话删除：永久删除（破坏性；client 端已完成二次确认）。
       const id = body.id
       if (typeof id !== 'string' || id.length === 0) {

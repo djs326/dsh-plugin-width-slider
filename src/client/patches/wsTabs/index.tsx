@@ -53,6 +53,7 @@ import {
 import { createPortal } from 'react-dom'
 import { getSettings, onSettingsChanged } from '../../core/config.ts'
 import { callEndpoint } from '../../core/endpointChannel.ts'
+import { WIDTH_SLIDER_ENDPOINT } from '../../../shared/endpointContract.ts'
 import { primitives } from '../../core/primitives.ts'
 import { TABS_CSS, TabStrip } from './TabStrip.tsx'
 import { ASSIGN_TAB_EVENT, WS_ASSIGN_MENU_ATTR, ensureWorkspaceAssignMenuItem } from './assignMenuItem.ts'
@@ -468,7 +469,7 @@ export function installWorkspaceTabs(ctx: WsTabsCtx): () => void {
     return () => {}
   }
   setRpcCall((method: string, payload?: Record<string, unknown>) =>
-    callEndpoint('/api/width-slider', method, payload || {}).catch(() => ({
+    callEndpoint(WIDTH_SLIDER_ENDPOINT, method, payload || {}).catch(() => ({
       ok: false,
       error: { code: 'no-rpc', message: tt('warn.noRpc') },
     })),

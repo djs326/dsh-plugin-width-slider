@@ -372,6 +372,8 @@ src/
 | **8** | host 拆分：`jsonFile.ts`/`settingsStore.ts`/`workspaceGroupsStore.ts`/`chinesePrompt.ts`/`api.ts` | 1 → 7 | 无 | 低 |
 | **9** | 统一命名与导出面；`shared/dshHome.ts` 迁入 `host/`；同步 README 结构树、更新日志、第三方声明 | 全仓 | 无 | 低 |
 
+**进度**：批次① 已完成并提交 `a241cac`（`core/` 与 `host/` 搬移，产物逐行 diff 仅 18 行注释差异，零代码差异）。批次 9 里「`shared/dshHome.ts` 迁入 `host/`」已在批次① 一并完成。
+
 **批次 6 与 7 是风险最高、也是价值最高的两批**：前者是全仓最大文件与最密集的隐式契约，后者是入口的职责剥离。建议这两批之间留出一次完整手工验证。
 
 **批次 9 之后**：可选补测试（第 10 节待定项 1）。

@@ -20,12 +20,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveDshHome } from './shared/dshHome.ts'
+import { resolveDshHome } from './host/dshHome.ts'
 import { DEFAULT_FEATURE_SETTINGS, mergeSettings, type FeatureSettings } from './shared/settings.ts'
 import { deleteSessionById, type SessionDeleteCtx } from './host/sessionDeleteService.ts'
 import { registerEndpointChannel } from './host/endpointChannel.ts'
 
-// ── $DSH_HOME 下本插件的功能开关存储（dshHome 见 src/shared/dshHome.ts）──
+// ── $DSH_HOME 下本插件的功能开关存储（dshHome 见 src/host/dshHome.ts）──
 
 const SETTINGS_DIR = join(resolveDshHome(), 'storages', 'dsh-plugin-width-slider')
 const SETTINGS_FILE = join(SETTINGS_DIR, 'settings.json')

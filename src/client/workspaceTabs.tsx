@@ -53,10 +53,10 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { isZhInterface } from './lang.ts'
-import { getSettings, onSettingsChanged } from './config.ts'
-import { callEndpoint } from './endpointChannel.ts'
-import { primitives } from './primitives.ts'
+import { isZhInterface } from './core/lang.ts'
+import { getSettings, onSettingsChanged } from './core/config.ts'
+import { callEndpoint } from './core/endpointChannel.ts'
+import { primitives } from './core/primitives.ts'
 
 /** 本插件对官方槽条目做的包裹标记（防重入 / 供卸载还原）。 */
 export const WS_TABS_MARK = '__widthSliderWsTabs'

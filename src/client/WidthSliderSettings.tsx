@@ -16,10 +16,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { WidthSliderControl } from './WidthSliderControl.tsx'
-import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './config.ts'
+import { applySettings, getSettings, onSettingsChanged, type FeatureSettings } from './core/config.ts'
 import { clearPanelRect } from './settingsPanelPatch.ts'
 import { DEFAULT_FEATURE_SETTINGS } from '../shared/settings.ts'
-import type { WidthSliderKey } from './locales.ts'
+import type { WidthSliderKey } from './core/locales.ts'
 import {
   MOTION_LOOK_PRESETS,
   isMotionLook,

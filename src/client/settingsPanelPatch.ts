@@ -32,8 +32,8 @@
 
 // ── 常量 ─────────────────────────────────────────────────────────────
 
-import { pickText } from './lang.ts'
-import { getSettings, onSettingsChanged } from './config.ts'
+import { pickText } from './core/lang.ts'
+import { getSettings, onSettingsChanged } from './core/config.ts'
 
 const DIALOG_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
 const RECT_KEY = 'dsh.conversation.settingsPanelWindow'

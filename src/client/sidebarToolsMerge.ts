@@ -34,7 +34,7 @@
  * transformed the previous placement is kept; the keyframes end with
  * `animationend`, not `transitionend`, hence that listener too.
  */
-import { onSettingsChanged } from './config.ts'
+import { onSettingsChanged } from './core/config.ts'
 
 /** The new-chat button whose row hosts the tools. */
 const NEW_SESSION = '[class*="_newSession"]'

@@ -113,7 +113,7 @@ export const isMotionLook = (value: unknown): value is MotionLookId =>
   typeof value === 'string' && (MOTION_LOOKS as readonly string[]).includes(value)
 
 /**
- * 四档风格（标签与说明在 locales.ts）：
+ * 四档风格（标签与说明在 src/client/core/locales.ts）：
  *
  * - `soft` 轻柔：只有透明度变化，位移与缩放都不做。系统「减少动态效果」
  *   打开时动画会降级成这个样子，所以它也是这套档位里最安全的一支；

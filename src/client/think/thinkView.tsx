@@ -22,8 +22,8 @@
  */
 
 import { Component, memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
-import { isZhInterface, pickText } from '../lang.ts'
-import { primitives } from '../primitives.ts'
+import { isZhInterface, pickText } from '../core/lang.ts'
+import { primitives } from '../core/primitives.ts'
 
 // ── 样式（取值对齐官方 ReasoningRow / AssistantMarkdown 的 CSS 模块）──
 export const THINK_STYLES = `
@@ -105,7 +105,7 @@ interface Primitives {
 
 let resolvedPrimitives: Primitives | null | undefined
 
-/** 解析一次并缓存 primitives 相关组件；缺失返回 null（读取、缓存与降级都在 primitives.ts）。 */
+/** 解析一次并缓存 primitives 相关组件；缺失返回 null（读取、缓存与降级都在 core/primitives.ts）。 */
 function resolvePrimitives(): Primitives | null {
   if (resolvedPrimitives !== undefined) return resolvedPrimitives
   const mod = primitives() as Primitives

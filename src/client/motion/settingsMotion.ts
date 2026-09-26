@@ -20,7 +20,7 @@
  * to change.
  */
 import { EASE_FADE, EASE_GLIDE, EASE_SPRING, prefersReducedMotion, replayEntrance, whenTransitionSettles } from './animate.ts'
-import { isPreviewOpen } from '../previewState.ts'
+import { isPreviewOpen } from '../core/overlayState.ts'
 
 /** Panel entrance class; its CSS declaration also carries the transition. */
 export const SETTINGS_PANEL_CLASS = 'dsu-settings-panel'

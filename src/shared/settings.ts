@@ -1,7 +1,7 @@
 /**
  * settings.ts — 功能开关契约（host 与 client 共享的唯一真源）。
  *
- * host（src/index.ts）与 client（src/client/config.ts）都从本文件 import，
+ * host（src/index.ts）与 client（src/client/core/config.ts）都从本文件 import，
  * 避免两端各自维护 DEFAULTS / mergeSettings 造成静默漂移。
  * 本文件无运行时依赖（纯类型 + 纯函数），tsdown 会分别打进两端 bundle。
  */

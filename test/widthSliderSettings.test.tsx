@@ -15,7 +15,7 @@ const cfg = vi.hoisted(() => ({
   listeners: new Set<(next: Record<string, unknown>) => void>(),
 }))
 
-vi.mock('../src/client/config.ts', () => ({
+vi.mock('../src/client/core/config.ts', () => ({
   getSettings: () => cfg.current,
   applySettings: (next: Record<string, unknown>) => {
     cfg.current = next

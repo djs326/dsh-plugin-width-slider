@@ -15,9 +15,9 @@
  * sessionDeleteService.ts）。文案随界面语言（zh/en，运行时取值）。
  */
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import { isZhInterface } from './lang.ts'
-import { callEndpoint } from './endpointChannel.ts'
-import { primitives } from './primitives.ts'
+import { isZhInterface } from './core/lang.ts'
+import { callEndpoint } from './core/endpointChannel.ts'
+import { primitives } from './core/primitives.ts'
 import { shakeElement } from './motion/animate.ts'
 
 interface SessCtx {
@@ -67,7 +67,7 @@ function tt(key: string): string {
   return isZhInterface() ? pair[0] : pair[1]
 }
 
-// primitives（Modal / IconTrashOutline16）走统一读取入口 src/client/primitives.ts：
+// primitives（Modal / IconTrashOutline16）走统一读取入口 src/client/core/primitives.ts：
 // 缓存、失败降级与告警都在那一处，这里不再自建一份。
 
 // ── 会话服务句柄（sessions list 供 title/running 展示与刷新）────────

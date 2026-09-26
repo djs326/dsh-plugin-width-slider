@@ -18,7 +18,7 @@
  * the group's single row.  Styles live in WidthSliderSettings.tsx (.dsws-*).
  */
 import { createPortal } from 'react-dom'
-import { setPreviewOpen } from './previewState.ts'
+import { setPreviewOpen } from './core/overlayState.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
